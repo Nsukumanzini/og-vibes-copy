@@ -5,7 +5,7 @@ import 'package:shimmer/shimmer.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'chat_detail_screen.dart';
-import 'my_campus_friends_screen.dart';
+import 'friend_requests_screen.dart';
 import 'package:og_vibes_student/widgets/vibe_scaffold.dart';
 
 class MessagesScreen extends StatefulWidget {
@@ -43,64 +43,77 @@ class _MessagesScreenState extends State<MessagesScreen> {
       return [];
     }
 
-    final raw = await Supabase.instance.client
-        .from('messages')
-        .select('id, sender_id, recipient_id, text, created_at')
-        .or('sender_id.eq.${user.id},recipient_id.eq.${user.id}')
-        .order('created_at', ascending: false) as List<dynamic>?;
+    try {
+      final response = await Supabase.instance.client
+          .from('messages')
+          .select('id, sender_id, recipient_id, text, is_read, created_at')
+          .or('sender_id.eq.${user.id},recipient_id.eq.${user.id}')
+          .order('created_at', ascending: false);
 
-    final messages = List<Map<String, dynamic>>.from(raw ?? []);
-    final peerIds = <String>{};
-    final conversationMap = <String, Map<String, dynamic>>{};
+      final raw = response;
+      final messages = List<Map<String, dynamic>>.from(raw.whereType<Map>());
+      final peerIds = <String>{};
+      final conversationMap = <String, Map<String, dynamic>>{};
 
-    for (final message in messages) {
-      final senderId = (message['sender_id'] as String?)?.trim() ?? '';
-      final recipientId = (message['recipient_id'] as String?)?.trim() ?? '';
-      if (senderId.isEmpty || recipientId.isEmpty) continue;
+      for (final message in messages) {
+        final senderId = (message['sender_id'] as String?)?.trim() ?? '';
+        final recipientId = (message['recipient_id'] as String?)?.trim() ?? '';
+        if (senderId.isEmpty || recipientId.isEmpty) continue;
 
-      final peerId = senderId == user.id ? recipientId : senderId;
-      if (peerId.isEmpty) continue;
+        final peerId = senderId == user.id ? recipientId : senderId;
+        if (peerId.isEmpty) continue;
 
-      if (!conversationMap.containsKey(peerId)) {
-        conversationMap[peerId] = {
-          'id': peerId,
-          'name': peerId,
-          'type': 'Friend',
-          'lastMessage': message['text'] as String? ?? 'Sent an attachment',
-          'unread': 0,
-          'time': _formatTime(message['created_at']),
-          'avatarType': 'letter',
-          'avatarText': peerId.isNotEmpty ? peerId[0].toUpperCase() : '?',
-          'avatarColor': const Color(0xFF2E7D32),
-          'isOnline': false,
-        };
-        peerIds.add(peerId);
+        final isIncoming = recipientId == user.id;
+        final isUnread = isIncoming && message['is_read'] != true;
+
+        if (!conversationMap.containsKey(peerId)) {
+          conversationMap[peerId] = {
+            'id': peerId,
+            'name': peerId,
+            'type': 'Friend',
+            'lastMessage': message['text'] as String? ?? 'Sent an attachment',
+            'unread': isUnread ? 1 : 0,
+            'time': _formatTime(message['created_at']),
+            'avatarType': 'letter',
+            'avatarText': peerId.isNotEmpty ? peerId[0].toUpperCase() : '?',
+            'avatarColor': const Color(0xFF2E7D32),
+            'isOnline': false,
+          };
+          peerIds.add(peerId);
+        } else if (isUnread) {
+          conversationMap[peerId]!['unread'] = (conversationMap[peerId]!['unread'] as int) + 1;
+        }
       }
-    }
 
-    if (peerIds.isNotEmpty) {
-      final profileRaw = await Supabase.instance.client
-          .from('profiles')
-          .select('id, name, surname, photo_url')
-          .inFilter('id', peerIds.toList()) as List<dynamic>?;
+      if (peerIds.isNotEmpty) {
+        final profileResponse = await Supabase.instance.client
+            .from('profiles')
+            .select('id, name, surname, photo_url')
+            .inFilter('id', peerIds.toList());
+        final profileRaw = profileResponse;
 
-      for (final profile in profileRaw ?? []) {
-        final id = (profile['id'] as String?)?.trim();
-        if (id == null || !conversationMap.containsKey(id)) continue;
+        for (final profile in profileRaw.whereType<Map>()) {
+          final id = (profile['id'] as String?)?.trim();
+          if (id == null || !conversationMap.containsKey(id)) continue;
 
-        final displayName = [profile['name'], profile['surname']]
-            .whereType<String>()
-            .where((element) => element.trim().isNotEmpty)
-            .join(' ')
-            .trim();
-        final chat = conversationMap[id]!;
-        chat['name'] = displayName.isEmpty ? id : displayName;
-        chat['avatarType'] = profile['photo_url'] != null ? 'image' : 'letter';
-        chat['avatarText'] = displayName.isEmpty ? id[0].toUpperCase() : displayName[0].toUpperCase();
+          final displayName = [profile['name'], profile['surname']]
+              .whereType<String>()
+              .where((element) => element.trim().isNotEmpty)
+              .join(' ')
+              .trim();
+          final chat = conversationMap[id]!;
+          chat['name'] = displayName.isEmpty ? id : displayName;
+          chat['avatarType'] = profile['photo_url'] != null ? 'image' : 'letter';
+          chat['avatarText'] = displayName.isEmpty ? id[0].toUpperCase() : displayName[0].toUpperCase();
+        }
       }
-    }
 
-    return conversationMap.values.toList();
+      return conversationMap.values.toList();
+    } catch (error, stackTrace) {
+      debugPrint('Messages load error: $error');
+      debugPrint('$stackTrace');
+      return [];
+    }
   }
 
   String _formatTime(dynamic createdAt) {
@@ -124,7 +137,7 @@ class _MessagesScreenState extends State<MessagesScreen> {
         onPressed: () {
           Navigator.of(context).push(
             MaterialPageRoute(
-              builder: (_) => const MyCampusFriendsScreen(),
+              builder: (_) => const FriendRequestsScreen(),
             ),
           );
         },

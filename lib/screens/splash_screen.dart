@@ -104,11 +104,17 @@ class _SplashScreenState extends State<SplashScreen>
           ),
         ),
         child: SafeArea(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Spacer(),
-              FadeTransition(
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              return SingleChildScrollView(
+                physics: const ClampingScrollPhysics(),
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(minHeight: constraints.maxHeight),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      SizedBox(height: constraints.maxHeight * 0.08),
+                      FadeTransition(
                 opacity: _logoEntranceOpacity,
                 child: ScaleTransition(
                   scale: _logoEntranceScale,
@@ -152,12 +158,12 @@ class _SplashScreenState extends State<SplashScreen>
                   letterSpacing: 0.8,
                 ),
               ),
-              const Spacer(),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 32.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
+                      const Spacer(flex: 1),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 32.0),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
                     LinearProgressIndicator(
                       minHeight: 6,
                       backgroundColor: Colors.white24,
@@ -201,9 +207,13 @@ class _SplashScreenState extends State<SplashScreen>
                     ),
                   ],
                 ),
-              ),
-              const SizedBox(height: 32),
-            ],
+                      ),
+                      const SizedBox(height: 32),
+                    ],
+                  ),
+                ),
+              );
+            },
           ),
         ),
       ),

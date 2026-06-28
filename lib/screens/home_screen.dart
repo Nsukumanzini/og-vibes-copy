@@ -51,6 +51,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   bool _isLoadingPosts = true;
   List<Map<String, dynamic>> _posts = [];
+  String? _feedError;
   StreamSubscription<List<Map<String, dynamic>>>? _postSubscription;
   StreamSubscription<List<Map<String, dynamic>>>? _likesSubscription;
   StreamSubscription<List<Map<String, dynamic>>>? _commentsSubscription;
@@ -69,27 +70,42 @@ class _HomeScreenState extends State<HomeScreen> {
       _postLimit = 10;
       setState(() {
         _isLoadingPosts = true;
+        _feedError = null;
+      });
+    } else {
+      setState(() {
+        _feedError = null;
       });
     }
 
     try {
-      final data = await Supabase.instance.client
+      final response = await Supabase.instance.client
           .from('posts')
-          .select('*, profiles(name, surname, nickname, photo_url, campus, department), comments(id)')
+          .select(
+            '*, profiles!posts_author_id_fkey(name, surname, nickname, photo_url, campus, department)',
+          )
           .eq('is_deleted', false)
           .order('created_at', ascending: false)
           .limit(_postLimit);
 
+      final rows = <Map<String, dynamic>>[];
+      for (final item in response) {
+        rows.add(Map<String, dynamic>.from(item));
+      }
+
       if (!mounted) return;
 
       setState(() {
-        _posts = List<Map<String, dynamic>>.from(data as List<dynamic>? ?? []);
+        _posts = rows;
         _isLoadingPosts = false;
       });
-    } catch (e) {
+    } catch (e, st) {
+      debugPrint('Feed load error: $e');
+      debugPrint('$st');
       if (!mounted) return;
       setState(() {
         _isLoadingPosts = false;
+        _feedError = e.toString();
       });
     }
   }
@@ -231,6 +247,8 @@ class _HomeScreenState extends State<HomeScreen> {
                 _buildFeedSliverAppBar(),
                 if (_isLoadingPosts)
                   _buildLoadingSliver()
+                else if (_feedError != null)
+                  _buildErrorSliver(_feedError)
                 else if (_posts.isEmpty)
                   _buildEmptyStateSliver()
                 else

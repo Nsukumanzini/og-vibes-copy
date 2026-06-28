@@ -1,4 +1,6 @@
-﻿import 'package:flutter/material.dart';
+﻿import 'dart:async';
+
+import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'package:og_vibes_student/widgets/vibe_scaffold.dart';
@@ -51,14 +53,15 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
     });
 
     try {
-      final raw = await Supabase.instance.client
+      final response = await Supabase.instance.client
           .from('messages')
           .select('id, sender_id, recipient_id, text, created_at')
           .or('and(sender_id.eq.${user.id},recipient_id.eq.${widget.chatId}),and(sender_id.eq.${widget.chatId},recipient_id.eq.${user.id})')
-          .order('created_at', ascending: true) as List<dynamic>?;
+          .order('created_at', ascending: true);
 
+      final raw = response;
       final loadedMessages = <Map<String, dynamic>>[];
-      for (final item in raw ?? []) {
+      for (final item in raw.whereType<Map>()) {
         final senderId = (item['sender_id'] as String?)?.trim() ?? '';
         final recipientId = (item['recipient_id'] as String?)?.trim() ?? '';
         if (senderId.isEmpty || recipientId.isEmpty) continue;
@@ -83,12 +86,29 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
           ..addAll(loadedMessages);
         _isLoading = false;
       });
-    } catch (error) {
+
+      unawaited(_markIncomingMessagesAsRead(user.id));
+    } catch (error, stackTrace) {
+      debugPrint('Chat load error: $error');
+      debugPrint('$stackTrace');
       if (!mounted) return;
       setState(() {
         _isLoading = false;
       });
-      _showSnack('Failed to load chat: $error');
+      _showSnack('Failed to load chat.');
+    }
+  }
+
+  Future<void> _markIncomingMessagesAsRead(String currentUserId) async {
+    try {
+      await Supabase.instance.client
+          .from('messages')
+          .update({'is_read': true})
+          .eq('sender_id', widget.chatId)
+          .eq('recipient_id', currentUserId)
+          .eq('is_read', false);
+    } catch (error) {
+      debugPrint('Failed to mark messages as read: $error');
     }
   }
 

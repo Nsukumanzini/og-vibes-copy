@@ -288,21 +288,18 @@ class _PortalScreenState extends State<PortalScreen> {
         mainAxisSize: MainAxisSize.min,
         children: [
           FloatingActionButton.small(
-            heroTag: 'zoomInFab',
             backgroundColor: Colors.black.withValues(alpha: 0.7),
             onPressed: () => _runZoom('1.1'),
             child: const Icon(Icons.add, color: Colors.white),
           ),
           const SizedBox(height: 12),
           FloatingActionButton.small(
-            heroTag: 'zoomOutFab',
             backgroundColor: Colors.black.withValues(alpha: 0.7),
             onPressed: () => _runZoom('1.0'),
             child: const Icon(Icons.remove, color: Colors.white),
           ),
           const SizedBox(height: 12),
           FloatingActionButton(
-            heroTag: 'keyFab',
             backgroundColor: const Color(0xFFFFC857),
             onPressed: _copyStudentNumber,
             child: const Icon(Icons.vpn_key_rounded, color: Colors.black87),

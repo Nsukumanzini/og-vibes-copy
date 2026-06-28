@@ -49,6 +49,16 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
   }
 
 
+  Future<String> _storageUrlFor(String fileName) async {
+    try {
+      return await Supabase.instance.client.storage
+          .from('posts')
+          .createSignedUrl(fileName, 60 * 60 * 24 * 7);
+    } catch (_) {
+      return Supabase.instance.client.storage.from('posts').getPublicUrl(fileName);
+    }
+  }
+
   Future<void> _submitPost() async {
     if (!_formKey.currentState!.validate()) return;
 
@@ -76,20 +86,18 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
         final safeName = attachment.name
             .replaceAll(RegExp(r'[^A-Za-z0-9._-]'), '_');
         final fileName =
-    '${user.id}/${DateTime.now().millisecondsSinceEpoch}_$safeName';
+            '${user.id}/${DateTime.now().millisecondsSinceEpoch}_$safeName';
 
         await Supabase.instance.client.storage
             .from('posts')
             .uploadBinary(fileName, attachment.bytes!);
 
-        final signedUrl = await Supabase.instance.client.storage
-            .from('posts')
-            .createSignedUrl(fileName, 60 * 60 * 24 * 365);
+        final storageUrl = await _storageUrlFor(fileName);
 
         if (attachment.type == _AttachmentType.image) {
-          mediaUrls.add(signedUrl);
+          mediaUrls.add(storageUrl);
         } else {
-          documentUrls.add(signedUrl);
+          documentUrls.add(storageUrl);
         }
       }
 
