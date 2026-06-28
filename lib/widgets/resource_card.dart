@@ -1,12 +1,16 @@
-import 'dart:io';
+import 'dart:io' as io;
 import 'dart:math';
 
 import 'package:confetti/confetti.dart';
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:liquid_progress_indicator_v2/liquid_progress_indicator.dart';
+import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:url_launcher/url_launcher.dart';
+import 'package:og_vibes_student/src/platform_file.dart' as platform_file;
 
 class ResourceCard extends StatefulWidget {
   const ResourceCard({
@@ -27,8 +31,8 @@ class ResourceCard extends StatefulWidget {
   final String memoUrl;
   final double sizeMb;
   final String? description;
-  final ValueChanged<File>? onSavedToBackpack;
-  final ValueChanged<File>? onOpenFile;
+  final ValueChanged<io.File>? onSavedToBackpack;
+  final ValueChanged<io.File>? onOpenFile;
 
   @override
   State<ResourceCard> createState() => _ResourceCardState();
@@ -55,6 +59,11 @@ class _ResourceCardState extends State<ResourceCard> {
 
   Future<void> _downloadFile() async {
     if (_isDownloading) return;
+    if (kIsWeb) {
+      await _downloadFileWeb();
+      return;
+    }
+
     if (!await _ensurePermissions()) return;
 
     setState(() {
@@ -70,7 +79,7 @@ class _ResourceCardState extends State<ResourceCard> {
       );
       final modeLabel = _isMemo ? 'memo' : 'qp';
       final filename = '${widget.year}_${sanitizedSubject}_$modeLabel.pdf';
-      final savePath = '${dir.path}${Platform.pathSeparator}$filename';
+      final savePath = p.join(dir.path, filename);
 
       await _dio.download(
         _getFileUrl(),
@@ -91,7 +100,10 @@ class _ResourceCardState extends State<ResourceCard> {
         _localPath = savePath;
       });
 
-      widget.onSavedToBackpack?.call(File(savePath));
+      final savedFile = platform_file.fileFromPath(savePath);
+      if (savedFile != null) {
+        widget.onSavedToBackpack?.call(savedFile);
+      }
       _confettiController.play();
       ScaffoldMessenger.of(
         context,
@@ -109,7 +121,7 @@ class _ResourceCardState extends State<ResourceCard> {
   }
 
   Future<bool> _ensurePermissions() async {
-    if (Platform.isIOS) {
+    if (io.Platform.isIOS) {
       final photosStatus = await Permission.photos.request();
       if (photosStatus.isGranted) return true;
     } else {
@@ -128,8 +140,59 @@ class _ResourceCardState extends State<ResourceCard> {
 
   void _openLocalFile() {
     if (_localPath == null) return;
-    final file = File(_localPath!);
-    widget.onOpenFile?.call(file);
+    final file = platform_file.fileFromPath(_localPath!);
+    if (file != null) {
+      widget.onOpenFile?.call(file);
+    }
+  }
+
+  /// Web download: Opens the file URL in a new browser tab.
+  /// Browser will handle the download via native download mechanism.
+  Future<void> _downloadFileWeb() async {
+    setState(() {
+      _isDownloading = true;
+      _progress = 0.5;
+    });
+
+    try {
+      final fileUrl = _getFileUrl();
+      final uri = Uri.parse(fileUrl);
+
+      // Verify URL is valid
+      if (fileUrl.isEmpty) {
+        throw 'File URL is empty';
+      }
+
+      // Launch in external browser/tab
+      if (await canLaunchUrl(uri)) {
+        await launchUrl(uri, mode: LaunchMode.externalApplication);
+        _confettiController.play();
+        if (mounted) {
+          setState(() {
+            _isDownloading = false;
+            _progress = 1;
+          });
+        }
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Opening download in your browser...'),
+            ),
+          );
+        }
+      } else {
+        throw 'Cannot open file URL';
+      }
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _isDownloading = false;
+        _progress = 0;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Download failed: $error')),
+      );
+    }
   }
 
   @override
