@@ -117,7 +117,7 @@ class _QuizScreenState extends State<QuizScreen> {
 
     return ListView.separated(
       itemCount: _quizzes.length,
-      separatorBuilder: (_, __) => const SizedBox(height: 12),
+      separatorBuilder: (_, _) => const SizedBox(height: 12),
       itemBuilder: (context, index) {
         final quiz = _quizzes[index];
         return Card(

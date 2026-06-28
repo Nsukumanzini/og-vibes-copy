@@ -273,7 +273,7 @@ class _TimetableScreenState extends State<TimetableScreen> {
               : ListView.separated(
                   padding: const EdgeInsets.fromLTRB(18, 12, 18, 100),
                   itemCount: _filteredTimetables.length,
-                  separatorBuilder: (_, __) => const SizedBox(height: 12),
+                  separatorBuilder: (_, _) => const SizedBox(height: 12),
                   itemBuilder: (context, index) {
                     final item = _filteredTimetables[index];
                     return _TimetableCard(item: item, onTap: () => _openTimetable(item));

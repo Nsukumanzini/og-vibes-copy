@@ -297,22 +297,10 @@ class _FriendRequestsScreenState extends State<FriendRequestsScreen> with Single
     if (currentUserId == null) return;
 
     try {
-      final now = DateTime.now().toUtc().toIso8601String();
-      await Supabase.instance.client.from('friend_requests').update({
-        'status': 'accepted',
-        'updated_at': now,
-      }).eq('id', requestId);
-
-      await Supabase.instance.client.from('friendships').insert({
-        'user_id': currentUserId,
-        'friend_id': senderId,
-        'created_at': now,
-      });
-      await Supabase.instance.client.from('friendships').insert({
-        'user_id': senderId,
-        'friend_id': currentUserId,
-        'created_at': now,
-      });
+      await Supabase.instance.client.rpc(
+        'accept_friend_request',
+        params: {'request_id': requestId},
+      );
 
       if (!mounted) return;
       final acceptedRequest = _incoming.firstWhere(
@@ -586,7 +574,7 @@ class _FriendRequestsScreenState extends State<FriendRequestsScreen> with Single
             child: ListView.separated(
               padding: EdgeInsets.zero,
               itemCount: matches.length,
-              separatorBuilder: (_, __) => const SizedBox(height: 12),
+              separatorBuilder: (_, _) => const SizedBox(height: 12),
               itemBuilder: (context, index) {
                 final student = matches[index];
                 final profileId = student['id'].toString();
@@ -632,7 +620,7 @@ class _FriendRequestsScreenState extends State<FriendRequestsScreen> with Single
             child: ListView.separated(
               padding: EdgeInsets.zero,
               itemCount: requests.length,
-              separatorBuilder: (_, __) => const SizedBox(height: 12),
+              separatorBuilder: (_, _) => const SizedBox(height: 12),
               itemBuilder: (context, index) {
                 final request = requests[index];
                 return _RequestCard(
@@ -655,7 +643,7 @@ class _FriendRequestsScreenState extends State<FriendRequestsScreen> with Single
             child: ListView.separated(
               padding: EdgeInsets.zero,
               itemCount: friends.length,
-              separatorBuilder: (_, __) => const SizedBox(height: 12),
+              separatorBuilder: (_, _) => const SizedBox(height: 12),
               itemBuilder: (context, index) {
                 final friend = friends[index];
                 return _FriendCard(

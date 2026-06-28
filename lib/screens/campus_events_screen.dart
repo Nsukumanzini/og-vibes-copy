@@ -44,8 +44,8 @@ class _CampusEventsScreenState extends State<CampusEventsScreen> {
       appBar: AppBar(title: const Text('Events')),
       floatingActionButton: FloatingActionButton(
         onPressed: () => _showCreateEventSheet(context),
-        child: const Icon(Icons.add),
         tooltip: 'Create Event',
+        child: const Icon(Icons.add),
       ),
       body: FutureBuilder<Map<String, dynamic>>(
         future: _eventFuture,

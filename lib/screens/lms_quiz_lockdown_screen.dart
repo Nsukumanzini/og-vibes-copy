@@ -50,7 +50,7 @@ class _LmsQuizLockdownScreenState extends State<LmsQuizLockdownScreen> with Widg
       barrierDismissible: false,
       barrierLabel: 'Violation',
       transitionDuration: const Duration(milliseconds: 200),
-      pageBuilder: (context, _, __) {
+      pageBuilder: (context, _, _) {
         return Scaffold(
           backgroundColor: const Color(0xFF7F1D1D),
           body: SafeArea(

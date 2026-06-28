@@ -35,15 +35,15 @@ class _CommentSheetState extends State<CommentSheet> {
     final user = Supabase.instance.client.auth.currentUser;
     if (user == null) return;
     try {
-        final data = await Supabase.instance.client
+      final data = await Supabase.instance.client
           .from('profiles')
-          .select('name, avatar_url')
+          .select('name, photo_url')
           .eq('id', user.id)
           .single();
-        final map = data as Map<String, dynamic>?;
+      final map = data as Map<String, dynamic>?;
       setState(() {
         _userName = map?['name'] as String? ?? user.email ?? 'OG Vibester';
-        _userAvatar = map?['avatar_url'] as String?;
+        _userAvatar = map?['photo_url'] as String?;
       });
     } catch (_) {
       // ignore errors, fall back to auth defaults
@@ -267,7 +267,7 @@ class _CommentSheetState extends State<CommentSheet> {
     try {
       final res = await Supabase.instance.client
           .from('comments')
-          .select('*, profiles(name, surname, nickname, photo_url)')
+          .select('*, profiles!comments_author_id_fkey(name, surname, nickname, photo_url)')
           .eq('post_id', widget.postId)
           .order('created_at', ascending: true);
 

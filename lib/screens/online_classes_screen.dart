@@ -319,7 +319,7 @@ class _OnlineClassesScreenState extends State<OnlineClassesScreen>
     return ListView.separated(
       padding: const EdgeInsets.fromLTRB(16, 6, 16, 110),
       itemCount: sessions.length,
-      separatorBuilder: (_, __) => const SizedBox(height: 12),
+      separatorBuilder: (_, _) => const SizedBox(height: 12),
       itemBuilder: (context, index) {
         final session = sessions[index];
         return _buildLiveCard(session);
@@ -336,7 +336,7 @@ class _OnlineClassesScreenState extends State<OnlineClassesScreen>
     return ListView.separated(
       padding: const EdgeInsets.fromLTRB(16, 6, 16, 110),
       itemCount: sessions.length,
-      separatorBuilder: (_, __) => const SizedBox(height: 12),
+      separatorBuilder: (_, _) => const SizedBox(height: 12),
       itemBuilder: (context, index) {
         final session = sessions[index];
         return _buildUpcomingCard(session);
@@ -353,7 +353,7 @@ class _OnlineClassesScreenState extends State<OnlineClassesScreen>
     return ListView.separated(
       padding: const EdgeInsets.fromLTRB(16, 6, 16, 110),
       itemCount: sessions.length,
-      separatorBuilder: (_, __) => const SizedBox(height: 12),
+      separatorBuilder: (_, _) => const SizedBox(height: 12),
       itemBuilder: (context, index) {
         final session = sessions[index];
         return _buildRecordingCard(session);

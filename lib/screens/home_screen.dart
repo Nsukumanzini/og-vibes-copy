@@ -18,7 +18,7 @@ import 'events_screen.dart';
 import 'lost_and_found_screen.dart';
 import 'messages_screen.dart';
 import 'document_wallet_screen.dart';
-import 'my_campus_friends_screen.dart';
+import 'friend_requests_screen.dart';
 import 'assignment_submission_screen.dart';
 import 'assessments_calendar_screen.dart';
 import 'portal_screen.dart';
@@ -593,7 +593,7 @@ class _HomeScreenState extends State<HomeScreen> {
         icon: Icons.person_search_rounded,
         color: Colors.deepPurpleAccent,
         gradientColors: const [Color(0xFF6A1B9A), Color(0xFF8E24AA)],
-        onTap: (context) => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const MyCampusFriendsScreen())),
+        onTap: (context) => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const FriendRequestsScreen())),
       ),
       _HubCardInfo(
         title: 'Marketplace',
