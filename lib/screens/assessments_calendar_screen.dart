@@ -1,6 +1,10 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:shimmer/shimmer.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
+import 'package:og_vibes_student/models/assessment_item.dart';
 import 'package:og_vibes_student/widgets/vibe_scaffold.dart';
 
 class AssessmentsCalendarScreen extends StatefulWidget {
@@ -12,89 +16,168 @@ class AssessmentsCalendarScreen extends StatefulWidget {
 }
 
 class _AssessmentsCalendarScreenState extends State<AssessmentsCalendarScreen> {
-  static const List<_AssessmentItem> _items = <_AssessmentItem>[
-    _AssessmentItem(
-      title: 'Computer Practice N4 - ISAT Practical',
-      date: '18 April 2026, 09:00 AM',
-      venue: 'IT Lab 2',
-      type: 'Practical',
-      color: Color(0xFF8E24AA),
-      icon: Icons.computer_rounded,
-    ),
-    _AssessmentItem(
-      title: 'Entrepreneurship N4 - Open Book Test',
-      date: '22 April 2026, 11:30 AM',
-      venue: 'Hall B',
-      type: 'Test',
-      color: Color(0xFFC62828),
-      icon: Icons.quiz_rounded,
-    ),
-    _AssessmentItem(
-      title: 'Mathematics N4 - Assignment 2 Due',
-      date: '25 April 2026, 23:59 PM',
-      venue: 'Submit on App',
-      type: 'Assignment',
-      color: Color(0xFF1565C0),
-      icon: Icons.assignment_rounded,
-    ),
-  ];
-
-  late Future<void> _initialLoad;
+  final List<AssessmentItem> _items = <AssessmentItem>[];
+  bool _isLoading = true;
+  String? _errorMessage;
+  StreamSubscription<List<Map<String, dynamic>>>? _assessmentSubscription;
 
   @override
   void initState() {
     super.initState();
-    _initialLoad = Future<void>.delayed(const Duration(milliseconds: 700));
+    _loadAssessments();
+    _listenForChanges();
+  }
+
+  @override
+  void dispose() {
+    _assessmentSubscription?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _loadAssessments() async {
+    final user = Supabase.instance.client.auth.currentUser;
+    if (user == null) {
+      if (!mounted) return;
+      setState(() {
+        _isLoading = false;
+        _errorMessage = 'You must be signed in to view your assessments.';
+      });
+      return;
+    }
+
+    if (!mounted) return;
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
+
+    try {
+      final quizzes = await Supabase.instance.client
+          .from('quizzes')
+          .select('id, title, description, lecturer_name, quiz_date, duration_minutes')
+          .eq('published', true)
+          .order('quiz_date', ascending: true);
+
+      final submissions = await Supabase.instance.client
+          .from('assignment_submissions')
+          .select('id, title, subject, due_date, status')
+          .eq('user_id', user.id)
+          .order('due_date', ascending: true);
+
+      final quizItems = (quizzes as List<dynamic>? ?? [])
+          .map((row) => AssessmentItem.fromQuizRow(Map<String, dynamic>.from(row as Map<String, dynamic>)))
+          .toList();
+
+      final submissionItems = (submissions as List<dynamic>? ?? [])
+          .map((row) => AssessmentItem.fromSubmissionRow(Map<String, dynamic>.from(row as Map<String, dynamic>)))
+          .toList();
+
+      if (!mounted) return;
+      setState(() {
+        _items
+          ..clear()
+          ..addAll([...quizItems, ...submissionItems]);
+        _isLoading = false;
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _isLoading = false;
+        _errorMessage = error.toString();
+      });
+    }
+  }
+
+  void _listenForChanges() {
+    _assessmentSubscription = Supabase.instance.client
+        .from('quizzes')
+        .stream(primaryKey: ['id'])
+        .listen((_) {
+          if (!mounted) return;
+          unawaited(_loadAssessments());
+        }, onError: (error) {
+          if (!mounted) return;
+          setState(() {
+            _errorMessage = error.toString();
+          });
+        });
   }
 
   @override
   Widget build(BuildContext context) {
     return VibeScaffold(
       appBar: AppBar(title: const Text('Assessments Calendar')),
-      body: FutureBuilder<void>(
-        future: _initialLoad,
-        builder: (BuildContext context, AsyncSnapshot<void> snapshot) {
-          if (snapshot.connectionState != ConnectionState.done) {
-            return _buildLoadingState();
-          }
+      body: _isLoading && _items.isEmpty
+          ? _buildLoadingState()
+          : _buildContent(),
+    );
+  }
 
-          return Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+  Widget _buildContent() {
+    if (_errorMessage != null && _items.isEmpty) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
             children: <Widget>[
-              const Padding(
-                padding: EdgeInsets.fromLTRB(16, 16, 16, 8),
-                child: Text(
-                  'My Upcoming Assessments',
-                  style: TextStyle(
-                    fontSize: 21,
-                    fontWeight: FontWeight.w800,
-                    color: Color(0xFF102027),
-                  ),
-                ),
+              const Icon(Icons.error_outline, size: 48, color: Colors.redAccent),
+              const SizedBox(height: 12),
+              const Text(
+                'Unable to load your assessments right now.',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
               ),
-              Expanded(
-                child: ListView.builder(
-                  padding: const EdgeInsets.fromLTRB(16, 6, 16, 100),
-                  itemCount: _items.length,
-                  itemBuilder: (BuildContext context, int index) {
-                    return _TimelineCard(
-                      item: _items[index],
-                      isLast: index == _items.length - 1,
-                      onReminderTap: () {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text('Calendar reminder saved!'),
-                          ),
-                        );
-                      },
-                    );
-                  },
-                ),
+              const SizedBox(height: 8),
+              Text(_errorMessage!, textAlign: TextAlign.center),
+              const SizedBox(height: 16),
+              ElevatedButton(
+                onPressed: _loadAssessments,
+                child: const Text('Retry'),
               ),
             ],
-          );
-        },
-      ),
+          ),
+        ),
+      );
+    }
+
+    if (_items.isEmpty) {
+      return const Center(
+        child: Text('No assessments are available yet.'),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        const Padding(
+          padding: EdgeInsets.fromLTRB(16, 16, 16, 8),
+          child: Text(
+            'My Upcoming Assessments',
+            style: TextStyle(
+              fontSize: 21,
+              fontWeight: FontWeight.w800,
+              color: Color(0xFF102027),
+            ),
+          ),
+        ),
+        Expanded(
+          child: ListView.builder(
+            padding: const EdgeInsets.fromLTRB(16, 6, 16, 100),
+            itemCount: _items.length,
+            itemBuilder: (BuildContext context, int index) {
+              return _TimelineCard(
+                item: _items[index],
+                isLast: index == _items.length - 1,
+                onReminderTap: () {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Calendar reminder saved!')),
+                  );
+                },
+              );
+            },
+          ),
+        ),
+      ],
     );
   }
 
@@ -147,7 +230,7 @@ class _TimelineCard extends StatelessWidget {
     required this.isLast,
   });
 
-  final _AssessmentItem item;
+  final AssessmentItem item;
   final VoidCallback onReminderTap;
   final bool isLast;
 
@@ -273,20 +356,3 @@ class _TimelineCard extends StatelessWidget {
   }
 }
 
-class _AssessmentItem {
-  const _AssessmentItem({
-    required this.title,
-    required this.date,
-    required this.venue,
-    required this.type,
-    required this.color,
-    required this.icon,
-  });
-
-  final String title;
-  final String date;
-  final String venue;
-  final String type;
-  final Color color;
-  final IconData icon;
-}

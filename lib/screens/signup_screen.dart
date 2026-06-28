@@ -65,7 +65,7 @@ class _SignupScreenState extends State<SignupScreen>
   // Phone verification removed
 
   // Add other variables and methods as needed
-  late final AnimationController _pulseController;
+  AnimationController? _pulseController;
   // --- Data Options ---
   static const _campusOptions = [
     'Balfour',
@@ -93,14 +93,16 @@ class _SignupScreenState extends State<SignupScreen>
   String? _deviceLocale;
 
   final AuthService _authService = AuthService();
-  late final ConfettiController _confettiController;
+  final ConfettiController _confettiController = ConfettiController(
+    duration: const Duration(seconds: 3),
+  );
 
   // Focus Nodes
-  late final FocusNode _nameFocusNode;
-  late final FocusNode _surnameFocusNode;
-  late final FocusNode _emailFocusNode;
-  late final FocusNode _passwordFocusNode;
-  late final FocusNode _confirmPasswordFocusNode;
+  final FocusNode _nameFocusNode = FocusNode();
+  final FocusNode _surnameFocusNode = FocusNode();
+  final FocusNode _emailFocusNode = FocusNode();
+  final FocusNode _passwordFocusNode = FocusNode();
+  final FocusNode _confirmPasswordFocusNode = FocusNode();
 
   // Shake Controllers
   final ShakeController _nameShakeController = ShakeController();
@@ -116,21 +118,14 @@ class _SignupScreenState extends State<SignupScreen>
 
   @override
   void initState() {
+    super.initState();
     _pulseController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 1200),
       lowerBound: 0.95,
       upperBound: 1.05,
-    )..repeat(reverse: true);
-    super.initState();
-    _confettiController = ConfettiController(
-      duration: const Duration(seconds: 3),
     );
-    _nameFocusNode = FocusNode();
-    _surnameFocusNode = FocusNode();
-    _emailFocusNode = FocusNode();
-    _passwordFocusNode = FocusNode();
-    _confirmPasswordFocusNode = FocusNode();
+    _pulseController?.repeat(reverse: true);
     _emailController.addListener(_validateEmail);
     _populateDeviceContext();
   }
@@ -151,7 +146,7 @@ class _SignupScreenState extends State<SignupScreen>
 
   @override
   void dispose() {
-    _pulseController.dispose();
+    _pulseController?.dispose();
     _emailController.removeListener(_validateEmail);
     _nameFocusNode.dispose();
     _surnameFocusNode.dispose();
@@ -1248,12 +1243,17 @@ class _SignupScreenState extends State<SignupScreen>
       if (user != null) {
         Future.microtask(() => _maybeUploadProfileImage(user));
       }
-    } catch (e) {
+    } catch (e, st) {
       _closeMintingDialog();
-      ScaffoldMessenger.of(
-        // ignore: use_build_context_synchronously
-        context,
-      ).showSnackBar(SnackBar(content: Text(e.toString())));
+      // Print full stack to browser console for debugging
+      // ignore: avoid_print
+      print('Signup error: $e');
+      // ignore: avoid_print
+      print(st);
+      final message = '$e\nSee console for stack trace.';
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+      }
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -1706,8 +1706,9 @@ class ShakeWidget extends StatefulWidget {
 
 class _ShakeWidgetState extends State<ShakeWidget>
     with SingleTickerProviderStateMixin {
-  late final AnimationController _controller;
-  late final Animation<double> _offsetAnimation;
+  AnimationController? _controller;
+  Animation<double>? _offsetAnimation;
+
   @override
   void initState() {
     super.initState();
@@ -1719,20 +1720,20 @@ class _ShakeWidgetState extends State<ShakeWidget>
       TweenSequenceItem(tween: Tween(begin: 0.0, end: 10.0), weight: 1),
       TweenSequenceItem(tween: Tween(begin: 10.0, end: -10.0), weight: 1),
       TweenSequenceItem(tween: Tween(begin: -10.0, end: 0.0), weight: 1),
-    ]).animate(CurvedAnimation(parent: _controller, curve: Curves.easeInOut));
-    widget.controller._listener = () => _controller.forward(from: 0);
+    ]).animate(CurvedAnimation(parent: _controller!, curve: Curves.easeInOut));
+    widget.controller._listener = () => _controller?.forward(from: 0);
   }
 
   @override
   void dispose() {
-    _controller.dispose();
+    _controller?.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     return Transform.translate(
-      offset: Offset(_offsetAnimation.value, 0),
+      offset: Offset(_offsetAnimation?.value ?? 0, 0),
       child: widget.child,
     );
   }

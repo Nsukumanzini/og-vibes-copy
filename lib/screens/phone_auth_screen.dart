@@ -23,8 +23,8 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
 
   Future<void> _verifyPhone() async {
     setState(() => _isLoading = true);
+    final messenger = ScaffoldMessenger.of(context);
     try {
-      final messenger = ScaffoldMessenger.of(context);
       await Supabase.instance.client.auth.signInWithOtp(
         phone: _phoneController.text.trim(),
       );
@@ -37,7 +37,7 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
       );
     } catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
+      messenger.showSnackBar(
         SnackBar(content: Text('Verification failed: $error')),
       );
     } finally {

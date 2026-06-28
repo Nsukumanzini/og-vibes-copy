@@ -125,7 +125,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     required VoidCallback onTap,
   }) {
     return Card(
-      color: Colors.white.withOpacity(0.08),
+      color: Colors.white.withValues(alpha: 0.08),
       margin: const EdgeInsets.only(bottom: 12),
       child: ListTile(
         leading: Icon(icon, color: Colors.white70),

@@ -1,15 +1,99 @@
-﻿import 'package:flutter/material.dart';
+﻿import 'dart:async';
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 import 'screens/splash_screen.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  runApp(const OgVibesApp());
+  
+  await _loadDotEnv();
+
+  final supabaseUrl = _getEnvValue('SUPABASE_URL');
+  final supabaseAnonKey = _getEnvValue('SUPABASE_ANON_KEY');
+  // ignore: avoid_print
+  print('Loaded env: SUPABASE_URL=${supabaseUrl.isEmpty ? "NOT SET" : "set"}, SUPABASE_ANON_KEY=${supabaseAnonKey.isEmpty ? "NOT SET" : "set"}, dotenvInitialized=${dotenv.isInitialized}');
+
+  // Initialize Supabase early so screens and services can safely use it.
+  try {
+    if (supabaseUrl.isNotEmpty && supabaseAnonKey.isNotEmpty) {
+      await Supabase.initialize(url: supabaseUrl, anonKey: supabaseAnonKey);
+      // ignore: avoid_print
+      print('✓ Supabase initialized successfully.');
+    } else {
+      // ignore: avoid_print
+      print('⚠ Supabase keys not provided. For web, build with: flutter run -d edge --dart-define=SUPABASE_URL=... --dart-define=SUPABASE_ANON_KEY=...');
+    }
+  } catch (e, st) {
+    // ignore: avoid_print
+    print('Supabase initialization failed in main: $e');
+    // ignore: avoid_print
+    print(st);
+  }
+
+  // Global error handling to capture runtime exceptions in web console.
+  FlutterError.onError = (details) {
+    FlutterError.presentError(details);
+    // Print to console so browser DevTools will show the stack trace.
+    // ignore: avoid_print
+    print('FlutterError: ${details.exceptionAsString()}');
+    // ignore: avoid_print
+    print(details.stack);
+  };
+
+  runApp(const MyApp());
 }
 
-class OgVibesApp extends StatelessWidget {
-  const OgVibesApp({super.key});
+String _getEnvValue(String key) {
+  if (dotenv.isInitialized) {
+    final value = dotenv.env[key];
+    if (value != null && value.isNotEmpty) {
+      return value;
+    }
+  }
+  return String.fromEnvironment(key);
+}
+
+Future<void> _loadDotEnv() async {
+  const envPaths = ['assets/env.local'];
+  for (final envFile in envPaths) {
+    try {
+      final envContent = await rootBundle.loadString(envFile);
+      // ignore: avoid_print
+      print('Loaded $envFile asset content length: ${envContent.length}');
+      dotenv.loadFromString(envString: envContent);
+      // ignore: avoid_print
+      print('Loaded env from asset file: $envFile');
+      return;
+    } catch (e) {
+      // ignore: avoid_print
+      print('Could not load asset $envFile: $e');
+    }
+  }
+
+  const dotenvPaths = ['assets/env.local'];
+  for (final envFile in dotenvPaths) {
+    try {
+      await dotenv.load(fileName: envFile);
+      // ignore: avoid_print
+      print('Loaded $envFile via flutter_dotenv.');
+      return;
+    } catch (e) {
+      // ignore: avoid_print
+      print('Could not load $envFile with flutter_dotenv: $e');
+    }
+  }
+
+  // ignore: avoid_print
+  print('No dotenv file loaded. Using compile-time defines if provided.');
+}
+
+
+class MyApp extends StatelessWidget {
+  const MyApp({super.key});
 
   @override
   Widget build(BuildContext context) {

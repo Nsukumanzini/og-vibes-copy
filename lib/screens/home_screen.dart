@@ -1,5 +1,7 @@
 // ignore_for_file: unused_element_parameter
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_staggered_animations/flutter_staggered_animations.dart';
@@ -49,6 +51,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   bool _isLoadingPosts = true;
   List<Map<String, dynamic>> _posts = [];
+  StreamSubscription<List<Map<String, dynamic>>>? _postSubscription;
 
   @override
   void initState() {
@@ -56,6 +59,7 @@ class _HomeScreenState extends State<HomeScreen> {
     _scrollController = ScrollController();
     _scrollController.addListener(_handleScroll);
     _loadPosts();
+    _listenForPosts();
   }
 
   Future<void> _loadPosts({bool reset = false}) async {
@@ -90,6 +94,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   void dispose() {
+    _postSubscription?.cancel();
     _scrollController.removeListener(_handleScroll);
     _scrollController.dispose();
     super.dispose();
@@ -97,6 +102,26 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<void> _refreshFeed() async {
     await _loadPosts(reset: true);
+  }
+
+  void _listenForPosts() {
+    _postSubscription = Supabase.instance.client
+        .from('posts')
+        .stream(primaryKey: ['id'])
+        .listen((rows) {
+          if (!mounted) return;
+          setState(() {
+            _posts = rows
+                .map((row) => Map<String, dynamic>.from(row))
+                .toList();
+            _isLoadingPosts = false;
+          });
+        }, onError: (_) {
+          if (!mounted) return;
+          setState(() {
+            _isLoadingPosts = false;
+          });
+        });
   }
 
   Future<void> _handleScroll() async {
@@ -611,7 +636,14 @@ class _HomeScreenState extends State<HomeScreen> {
                 padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 14),
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
               ),
-              onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const CreatePostScreen())),
+              onPressed: () async {
+                final result = await Navigator.of(context).push<bool>(
+                  MaterialPageRoute(builder: (_) => const CreatePostScreen()),
+                );
+                if (result == true) {
+                  await _refreshFeed();
+                }
+              },
             ),
           ],
         ),
@@ -666,7 +698,14 @@ class _HomeScreenState extends State<HomeScreen> {
       child: FloatingActionButton.extended(
         elevation: 6,
         backgroundColor: Theme.of(context).primaryColor,
-        onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const CreatePostScreen())),
+        onPressed: () async {
+          final result = await Navigator.of(context).push<bool>(
+            MaterialPageRoute(builder: (_) => const CreatePostScreen()),
+          );
+          if (result == true) {
+            await _refreshFeed();
+          }
+        },
         icon: const Icon(Icons.add, color: Colors.white),
         label: const Text('Post Vibe', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
       ),

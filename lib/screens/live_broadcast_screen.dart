@@ -1,6 +1,7 @@
-// ignore_for_file: unused_field
+﻿// ignore_for_file: unused_field
 
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 class LiveBroadcastScreen extends StatefulWidget {
   const LiveBroadcastScreen({super.key});
@@ -18,27 +19,9 @@ class _LiveBroadcastScreenState extends State<LiveBroadcastScreen>
   late final AnimationController _pulseController;
   final TextEditingController _chatController = TextEditingController();
   final TextEditingController _notesController = TextEditingController();
-
-  final List<_ChatMessage> _messages = const [
-    _ChatMessage(
-      author: 'Sipho N',
-      message: 'Sir, can you re-explain step 2?',
-      tint: Color(0xFFF8FAFC),
-      accent: Color(0xFF1D4ED8),
-    ),
-    _ChatMessage(
-      author: 'Lerato M',
-      message: 'I think the derivative of 2x is just 2.',
-      tint: Color(0xFFF8FAFC),
-      accent: Color(0xFF0F766E),
-    ),
-    _ChatMessage(
-      author: 'Mr. Nkosi (Lecturer) 🛡️',
-      message: 'Correct Lerato. Sipho, I will go over it again now.',
-      tint: Color(0xFFEFF6FF),
-      accent: Color(0xFF0A192F),
-    ),
-  ];
+  final List<_LiveQuestion> _questions = [];
+  bool _isLoading = true;
+  bool _isSending = false;
 
   @override
   void initState() {
@@ -49,6 +32,7 @@ class _LiveBroadcastScreenState extends State<LiveBroadcastScreen>
       lowerBound: 0.8,
       upperBound: 1.05,
     )..repeat(reverse: true);
+    _loadQuestions();
   }
 
   @override
@@ -57,6 +41,113 @@ class _LiveBroadcastScreenState extends State<LiveBroadcastScreen>
     _chatController.dispose();
     _notesController.dispose();
     super.dispose();
+  }
+
+  Future<void> _loadQuestions() async {
+    setState(() {
+      _isLoading = true;
+    });
+
+    final user = Supabase.instance.client.auth.currentUser;
+    if (user == null) {
+      if (!mounted) return;
+      setState(() {
+        _questions.clear();
+        _isLoading = false;
+      });
+      return;
+    }
+
+    try {
+      final raw = await Supabase.instance.client
+          .from('live_questions')
+          .select('id, author_id, question, created_at')
+          .order('created_at', ascending: true) as List<dynamic>?;
+
+      final loadedQuestions = <_LiveQuestion>[];
+      for (final item in raw ?? []) {
+        final authorId = (item['author_id'] as String?)?.trim() ?? '';
+        loadedQuestions.add(_LiveQuestion(
+          id: item['id'].toString(),
+          author: authorId == user.id ? 'You' : authorId.isNotEmpty ? authorId : 'Guest',
+          message: item['question'] as String? ?? '',
+          createdAt: item['created_at'] is DateTime
+              ? item['created_at'] as DateTime
+              : DateTime.tryParse(item['created_at']?.toString() ?? '') ?? DateTime.now(),
+        ));
+      }
+
+      if (!mounted) return;
+      setState(() {
+        _questions
+          ..clear()
+          ..addAll(loadedQuestions);
+        _isLoading = false;
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _isLoading = false;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Unable to load live Q&A: $error')),
+      );
+    }
+  }
+
+  Future<void> _sendQuestion() async {
+    final questionText = _chatController.text.trim();
+    if (questionText.isEmpty) return;
+
+    final user = Supabase.instance.client.auth.currentUser;
+    if (user == null) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please sign in to ask a question.')),
+      );
+      return;
+    }
+
+    setState(() {
+      _isSending = true;
+    });
+
+    try {
+      final response = await Supabase.instance.client.from('live_questions').insert({
+        'author_id': user.id,
+        'question': questionText,
+      }).select() as List<dynamic>?;
+
+      final inserted = List<Map<String, dynamic>>.from(response ?? []);
+      final createdAt = inserted.isNotEmpty && inserted.first['created_at'] != null
+          ? (inserted.first['created_at'] is DateTime
+              ? inserted.first['created_at'] as DateTime
+              : DateTime.tryParse(inserted.first['created_at'].toString()) ?? DateTime.now())
+          : DateTime.now();
+
+      final newQuestion = _LiveQuestion(
+        id: inserted.isNotEmpty ? inserted.first['id'].toString() : DateTime.now().millisecondsSinceEpoch.toString(),
+        author: 'You',
+        message: questionText,
+        createdAt: createdAt,
+      );
+
+      if (!mounted) return;
+      setState(() {
+        _questions.add(newQuestion);
+        _chatController.clear();
+      });
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to post question: $error')),
+      );
+    }
+
+    if (!mounted) return;
+    setState(() {
+      _isSending = false;
+    });
   }
 
   @override
@@ -111,7 +202,10 @@ class _LiveBroadcastScreenState extends State<LiveBroadcastScreen>
                     children: [
                       _LiveQATab(
                         chatController: _chatController,
-                        messages: _messages,
+                        questions: _questions,
+                        isLoading: _isLoading,
+                        isSending: _isSending,
+                        onSend: _sendQuestion,
                       ),
                       _ClassNotesTab(notesController: _notesController),
                       const _ResourcesTab(),
@@ -341,10 +435,19 @@ class _SessionContextCard extends StatelessWidget {
 }
 
 class _LiveQATab extends StatelessWidget {
-  const _LiveQATab({required this.chatController, required this.messages});
+  const _LiveQATab({
+    required this.chatController,
+    required this.questions,
+    required this.isLoading,
+    required this.isSending,
+    required this.onSend,
+  });
 
   final TextEditingController chatController;
-  final List<_ChatMessage> messages;
+  final List<_LiveQuestion> questions;
+  final bool isLoading;
+  final bool isSending;
+  final Future<void> Function() onSend;
 
   @override
   Widget build(BuildContext context) {
@@ -357,15 +460,24 @@ class _LiveQATab extends StatelessWidget {
       child: Column(
         children: [
           Expanded(
-            child: ListView.separated(
-              padding: const EdgeInsets.all(14),
-              itemBuilder: (context, index) {
-                final message = messages[index];
-                return _ChatBubble(message: message);
-              },
-              separatorBuilder: (_, _) => const SizedBox(height: 10),
-              itemCount: messages.length,
-            ),
+            child: isLoading
+                ? const Center(child: CircularProgressIndicator())
+                : questions.isEmpty
+                    ? const Center(
+                        child: Text(
+                          'No questions yet. Ask one above.',
+                          style: TextStyle(color: Color(0xFF5B677A)),
+                        ),
+                      )
+                    : ListView.separated(
+                        padding: const EdgeInsets.all(14),
+                        itemBuilder: (context, index) {
+                          final question = questions[index];
+                          return _ChatBubble(message: question);
+                        },
+                        separatorBuilder: (_, _) => const SizedBox(height: 10),
+                        itemCount: questions.length,
+                      ),
           ),
           Container(
             padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
@@ -387,13 +499,11 @@ class _LiveQATab extends StatelessWidget {
                       ),
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
-                        borderSide:
-                            const BorderSide(color: Color(0xFFD7DEE8)),
+                        borderSide: const BorderSide(color: Color(0xFFD7DEE8)),
                       ),
                       enabledBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
-                        borderSide:
-                            const BorderSide(color: Color(0xFFD7DEE8)),
+                        borderSide: const BorderSide(color: Color(0xFFD7DEE8)),
                       ),
                     ),
                   ),
@@ -405,14 +515,17 @@ class _LiveQATab extends StatelessWidget {
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: IconButton(
-                    onPressed: () {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text('Question queued for lecturer review.'),
-                        ),
-                      );
-                    },
-                    icon: const Icon(Icons.send_rounded, color: Colors.white),
+                    onPressed: isSending ? null : onSend,
+                    icon: isSending
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                            ),
+                          )
+                        : const Icon(Icons.send_rounded, color: Colors.white),
                   ),
                 ),
               ],
@@ -427,14 +540,14 @@ class _LiveQATab extends StatelessWidget {
 class _ChatBubble extends StatelessWidget {
   const _ChatBubble({required this.message});
 
-  final _ChatMessage message;
+  final _LiveQuestion message;
 
   @override
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: message.tint,
+        color: Colors.white,
         borderRadius: BorderRadius.circular(14),
         border: Border.all(color: const Color(0xFFE2E8F0)),
       ),
@@ -444,7 +557,7 @@ class _ChatBubble extends StatelessWidget {
           Text(
             message.author,
             style: TextStyle(
-              color: message.accent,
+              color: const Color(0xFF0A192F),
               fontWeight: FontWeight.w800,
             ),
           ),
@@ -456,6 +569,11 @@ class _ChatBubble extends StatelessWidget {
               height: 1.35,
               fontWeight: FontWeight.w500,
             ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            message.formattedTime,
+            style: const TextStyle(fontSize: 11, color: Color(0xFF6B7280)),
           ),
         ],
       ),
@@ -564,16 +682,29 @@ class _ResourcesTab extends StatelessWidget {
   }
 }
 
-class _ChatMessage {
-  const _ChatMessage({
+class _LiveQuestion {
+  _LiveQuestion({
+    required this.id,
     required this.author,
     required this.message,
-    required this.tint,
-    required this.accent,
+    required this.createdAt,
   });
 
+  final String id;
   final String author;
   final String message;
-  final Color tint;
-  final Color accent;
+  final DateTime createdAt;
+
+  String get formattedTime {
+    final now = DateTime.now();
+    final diff = now.difference(createdAt);
+    if (diff.inMinutes < 1) {
+      return 'Just now';
+    } else if (diff.inHours < 1) {
+      return '${diff.inMinutes}m ago';
+    } else if (diff.inDays < 1) {
+      return '${diff.inHours}h ago';
+    }
+    return '${createdAt.day}/${createdAt.month}/${createdAt.year}';
+  }
 }

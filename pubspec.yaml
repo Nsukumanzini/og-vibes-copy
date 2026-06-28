@@ -79,6 +79,7 @@ dependencies:
   percent_indicator: ^4.2.3
   syncfusion_flutter_pdfviewer: ^31.1.21
   path: ^1.9.1
+  flutter_dotenv: ^6.0.1
 
 
 dependency_overrides:
@@ -108,6 +109,7 @@ flutter:
 
   assets:
     - assets/images/
+    - assets/env.local
 
   fonts:
     - family: NotoSans

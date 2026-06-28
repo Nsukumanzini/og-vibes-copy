@@ -3,6 +3,8 @@ import 'dart:typed_data';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+
 import 'package:og_vibes_student/widgets/vibe_scaffold.dart';
 
 enum _AttachmentType { image, document }
@@ -50,17 +52,72 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
   Future<void> _submitPost() async {
     if (!_formKey.currentState!.validate()) return;
 
+    final user = Supabase.instance.client.auth.currentUser;
+    if (user == null) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please sign in before posting.')),
+      );
+      return;
+    }
+
     setState(() => _isSubmitting = true);
-    await Future<void>.delayed(const Duration(milliseconds: 900));
-    if (!mounted) return;
 
-    setState(() => _isSubmitting = false);
+    try {
+      final content = _contentController.text.trim();
+      final mediaUrls = <String>[];
+      final documentUrls = <String>[];
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Your post has been created on the news feed.')),
-    );
+      for (final attachment in _attachments) {
+        if (attachment.bytes == null || attachment.bytes!.isEmpty) {
+          continue;
+        }
 
-    Navigator.of(context).pop();
+        final safeName = attachment.name
+            .replaceAll(RegExp(r'[^A-Za-z0-9._-]'), '_');
+        final fileName =
+            'posts/${user.id}/${DateTime.now().millisecondsSinceEpoch}_$safeName';
+
+        await Supabase.instance.client.storage
+            .from('posts')
+            .uploadBinary(fileName, attachment.bytes!);
+
+        final signedUrl = await Supabase.instance.client.storage
+            .from('posts')
+            .createSignedUrl(fileName, 60 * 60 * 24 * 365);
+
+        if (attachment.type == _AttachmentType.image) {
+          mediaUrls.add(signedUrl);
+        } else {
+          documentUrls.add(signedUrl);
+        }
+      }
+
+      await Supabase.instance.client.from('posts').insert({
+        'user_id': user.id,
+        'content': content,
+        'images': mediaUrls,
+        'documents': documentUrls,
+        'tags': _selectedTags,
+        'is_deleted': false,
+        'is_anonymous': false,
+        'created_at': DateTime.now().toIso8601String(),
+      });
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Your post is now live on the news feed.')),
+      );
+      Navigator.of(context).pop(true);
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Unable to publish post: $error')),
+      );
+    } finally {
+      if (!mounted) return;
+      setState(() => _isSubmitting = false);
+    }
   }
 
   void _addTag() {
@@ -209,8 +266,9 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
             keyboardType: TextInputType.multiline,
             maxLines: 6,
             validator: (value) {
-              if (value == null || value.trim().isEmpty) {
-                return 'Please add content before posting.';
+              final hasText = (value ?? '').trim().isNotEmpty;
+              if (!hasText && _attachments.isEmpty) {
+                return 'Please add content or at least one attachment before posting.';
               }
               return null;
             },

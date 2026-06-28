@@ -10,8 +10,8 @@ void main() {
     WidgetsFlutterBinding.ensureInitialized();
   });
 
-  testWidgets('OgVibesApp renders material root', (tester) async {
-    await tester.pumpWidget(const OgVibesApp());
+  testWidgets('MyApp renders material root', (tester) async {
+    await tester.pumpWidget(const MyApp());
 
     expect(find.byType(MaterialApp), findsOneWidget);
   });

@@ -2,11 +2,9 @@
 import 'dart:math';
 import 'dart:ui';
 
-import 'dart:async';
-import 'dart:math';
-import 'dart:ui';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -214,11 +212,28 @@ class _SplashScreenState extends State<SplashScreen>
 
   Future<void> _initApp() async {
     try {
-      await Supabase.initialize(
-        url: 'YOUR_SUPABASE_URL',
-        anonKey: 'YOUR_SUPABASE_ANON_KEY',
-      ).timeout(const Duration(seconds: 8));
+      var supabaseUrl = dotenv.isInitialized ? dotenv.env['SUPABASE_URL'] : null;
+      var supabaseAnonKey = dotenv.isInitialized ? dotenv.env['SUPABASE_ANON_KEY'] : null;
+      
+      // Fallback: try String.fromEnvironment (set via --dart-define at build time)
+      if (supabaseUrl == null || supabaseUrl.isEmpty) {
+        supabaseUrl = const String.fromEnvironment('SUPABASE_URL');
+      }
+      if (supabaseAnonKey == null || supabaseAnonKey.isEmpty) {
+        supabaseAnonKey = const String.fromEnvironment('SUPABASE_ANON_KEY');
+      }
+      
+      // Log for debugging
+      // ignore: avoid_print
+      print('Supabase URL: ${supabaseUrl.isNotEmpty == true ? "set" : "NOT SET"}');
+      // ignore: avoid_print
+      print('Supabase Key: ${supabaseAnonKey.isNotEmpty == true ? "set" : "NOT SET"}');
+      
+      if (supabaseUrl.isEmpty || supabaseAnonKey.isEmpty) {
+        throw Exception('Supabase credentials not found. Set SUPABASE_URL and SUPABASE_ANON_KEY.');
+      }
 
+      // Supabase should already be initialized in main; guard against double-init.
       final session = Supabase.instance.client.auth.currentSession;
       final user = session?.user;
 
@@ -234,7 +249,9 @@ class _SplashScreenState extends State<SplashScreen>
       } else {
         await _navigateTo(const LandingScreen());
       }
-    } catch (_) {
+    } catch (e) {
+      // ignore: avoid_print
+      print('Init error: $e');
       if (!mounted) return;
       setState(() {
         _loadingText = 'Loading...';

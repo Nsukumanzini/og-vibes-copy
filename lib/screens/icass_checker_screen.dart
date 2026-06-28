@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'package:og_vibes_student/widgets/vibe_scaffold.dart';
 
@@ -10,34 +11,60 @@ class IcassCheckerScreen extends StatefulWidget {
 }
 
 class _IcassCheckerScreenState extends State<IcassCheckerScreen> {
-  // Mock student ICASS data structure. Replace with Firestore fetch in integration.
-  // Map<subjectCode, {title, lecturer, marks: {Test1: value?, Assignment1: value?, Test2:..., ISAT:, InternalExam:}}>
-  final Map<String, Map<String, dynamic>> _studentIcass = {
-    'MATH_N4': {
-      'title': 'Mathematics N4',
-      'lecturer': 'Dr. Smith',
-      'marks': {
-        'Test 1': 72.0,
-        'Assignment 1': 65.0,
-        'Test 2': null,
-        'Assignment 2': null,
-        'ISAT': null,
-        'Internal Exam': 68.0,
+  bool _isLoading = true;
+  String? _errorMessage;
+  final List<IcassItem> _items = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _loadIcass();
+  }
+
+  Future<void> _loadIcass() async {
+    final user = Supabase.instance.client.auth.currentUser;
+    if (user == null) {
+      setState(() {
+        _isLoading = false;
+        _errorMessage = 'Please sign in to view your ICASS marks.';
+      });
+      return;
+    }
+
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
+
+    try {
+      final response = await Supabase.instance.client
+          .from('icass_marks')
+          .select('id, subject_name, lecturer_name, component_name, component_score, student_id, created_at')
+          .eq('student_id', user.id)
+          .order('created_at', ascending: false);
+
+      final rows = List<Map<String, dynamic>>.from(response as List<dynamic>? ?? []);
+      final grouped = <String, List<IcassItem>>{};
+      for (final row in rows) {
+        final item = IcassItem.fromSupabaseRow(row);
+        grouped.putIfAbsent(item.subjectName, () => []).add(item);
       }
-    },
-    'CP_N4': {
-      'title': 'Computer Practice N4',
-      'lecturer': 'Prof. Johnson',
-      'marks': {
-        'Test 1': 80.0,
-        'Assignment 1': 75.0,
-        'Test 2': 70.0,
-        'Assignment 2': 78.0,
-        'ISAT': null,
-        'Internal Exam': null,
-      }
-    },
-  };
+
+      if (!mounted) return;
+      setState(() {
+        _items
+          ..clear()
+          ..addAll(grouped.entries.expand((entry) => entry.value).toList());
+        _isLoading = false;
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _isLoading = false;
+        _errorMessage = error.toString();
+      });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -67,11 +94,11 @@ class _IcassCheckerScreenState extends State<IcassCheckerScreen> {
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
-        boxShadow: <BoxShadow>[
+        boxShadow: const [
           BoxShadow(
-            color: Colors.black.withOpacity(0.08),
+            color: Color.fromRGBO(0, 0, 0, 0.08),
             blurRadius: 14,
-            offset: const Offset(0, 6),
+            offset: Offset(0, 6),
           ),
         ],
       ),
@@ -88,7 +115,7 @@ class _IcassCheckerScreenState extends State<IcassCheckerScreen> {
           ),
           SizedBox(height: 6),
           Text(
-            'Tap a subject to view detailed ICASS marks provided by your lecturer.',
+            'Your marks are loaded from the college system and grouped by subject.',
             style: TextStyle(
               color: Color(0xFFE3F2FD),
               fontWeight: FontWeight.w600,
@@ -100,33 +127,88 @@ class _IcassCheckerScreenState extends State<IcassCheckerScreen> {
   }
 
   Widget _buildSubjectsList() {
-    final keys = _studentIcass.keys.toList();
-    if (keys.isEmpty) {
+    if (_isLoading) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    if (_errorMessage != null) {
+      return Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.error_outline, size: 42, color: Colors.redAccent),
+            const SizedBox(height: 12),
+            Text(_errorMessage!),
+            const SizedBox(height: 12),
+            ElevatedButton(onPressed: _loadIcass, child: const Text('Retry')),
+          ],
+        ),
+      );
+    }
+
+    final grouped = <String, List<IcassItem>>{};
+    for (final item in _items) {
+      grouped.putIfAbsent(item.subjectName, () => []).add(item);
+    }
+
+    final subjects = grouped.entries.toList();
+    if (subjects.isEmpty) {
       return const Center(child: Text('No ICASS records available yet.'));
     }
+
     return ListView.separated(
-      itemCount: keys.length,
-      separatorBuilder: (_, __) => const SizedBox(height: 12),
+      itemCount: subjects.length,
+      separatorBuilder: (_, _) => const SizedBox(height: 12),
       itemBuilder: (context, index) {
-        final key = keys[index];
-        final subj = _studentIcass[key]!;
-        final marks = Map<String, double?>.from(subj['marks'] as Map);
+        final entry = subjects[index];
+        final subjectName = entry.key;
+        final items = entry.value;
+        final marks = <String, double?>{};
+        for (final item in items) {
+          marks[item.componentName] = item.componentScore;
+        }
         final icassPercent = _computeIcassPercentage(marks);
+        final lecturerName = items.first.lecturerName;
+
         return Card(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          child: ListTile(
-            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-            title: Text(subj['title'], style: const TextStyle(fontWeight: FontWeight.w800)),
-            subtitle: Text('Lecturer: ${subj['lecturer']}'),
-            trailing: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.end,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('${icassPercent.toStringAsFixed(1)}%', style: const TextStyle(fontWeight: FontWeight.w700)),
-                const SizedBox(height: 6),
-                FilledButton(
-                  onPressed: () => _openSubjectDetails(context, key, subj),
-                  child: const Text('View'),
+                Row(
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(subjectName, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
+                          const SizedBox(height: 4),
+                          Text('Lecturer: $lecturerName', style: const TextStyle(color: Colors.black54)),
+                        ],
+                      ),
+                    ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFE3F2FD),
+                        borderRadius: BorderRadius.circular(999),
+                      ),
+                      child: Text(
+                        '${icassPercent.toStringAsFixed(1)}%',
+                        style: const TextStyle(fontWeight: FontWeight.w700, color: Color(0xFF1565C0)),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    onPressed: () => _openSubjectDetails(context, subjectName, lecturerName, marks),
+                    child: const Text('View details'),
+                  ),
                 ),
               ],
             ),
@@ -137,20 +219,18 @@ class _IcassCheckerScreenState extends State<IcassCheckerScreen> {
   }
 
   double _computeIcassPercentage(Map<String, double?> marks) {
-    // Average of available components. Future: use configured weights per subject.
     final values = marks.values.where((v) => v != null).map((v) => v!).toList();
     if (values.isEmpty) return 0.0;
     final sum = values.reduce((a, b) => a + b);
     return sum / values.length;
   }
 
-  void _openSubjectDetails(BuildContext context, String code, Map<String, dynamic> subj) {
-    final marks = Map<String, double?>.from(subj['marks'] as Map);
+  void _openSubjectDetails(BuildContext context, String subjectName, String lecturerName, Map<String, double?> marks) {
     final icassPercent = _computeIcassPercentage(marks);
     final requiredExam = ((40 - (0.4 * icassPercent)) / 0.6).clamp(0, 100);
     Navigator.of(context).push(MaterialPageRoute(builder: (_) {
       return Scaffold(
-        appBar: AppBar(title: Text(subj['title'])),
+        appBar: AppBar(title: Text(subjectName)),
         body: Padding(
           padding: const EdgeInsets.all(16.0),
           child: Column(
@@ -162,7 +242,7 @@ class _IcassCheckerScreenState extends State<IcassCheckerScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text('Lecturer: ${subj['lecturer']}', style: const TextStyle(fontWeight: FontWeight.w700)),
+                      Text('Lecturer: $lecturerName', style: const TextStyle(fontWeight: FontWeight.w700)),
                       const SizedBox(height: 8),
                       Text('ICASS Percentage: ${icassPercent.toStringAsFixed(1)}%', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
                       const SizedBox(height: 8),
@@ -188,6 +268,35 @@ class _IcassCheckerScreenState extends State<IcassCheckerScreen> {
         ),
       );
     }));
+  }
+}
+
+class IcassItem {
+  IcassItem({
+    required this.id,
+    required this.studentId,
+    required this.subjectName,
+    required this.lecturerName,
+    required this.componentName,
+    required this.componentScore,
+  });
+
+  final String id;
+  final String studentId;
+  final String subjectName;
+  final String lecturerName;
+  final String componentName;
+  final double? componentScore;
+
+  factory IcassItem.fromSupabaseRow(Map<String, dynamic> row) {
+    return IcassItem(
+      id: (row['id'] ?? '').toString(),
+      studentId: (row['student_id'] ?? '').toString(),
+      subjectName: (row['subject_name'] ?? 'Subject').toString(),
+      lecturerName: (row['lecturer_name'] ?? 'Lecturer').toString(),
+      componentName: (row['component_name'] ?? 'Component').toString(),
+      componentScore: row['component_score'] is num ? (row['component_score'] as num).toDouble() : null,
+    );
   }
 }
 

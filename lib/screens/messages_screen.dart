@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:shimmer/shimmer.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'chat_detail_screen.dart';
 import 'my_campus_friends_screen.dart';
@@ -37,58 +38,82 @@ class _MessagesScreenState extends State<MessagesScreen> {
   }
 
   Future<List<Map<String, dynamic>>> _loadConversations() async {
-    await Future<void>.delayed(const Duration(milliseconds: 800));
+    final user = Supabase.instance.client.auth.currentUser;
+    if (user == null) {
+      return [];
+    }
 
-    return const [
-      {
-        'id': 'tumi_m',
-        'name': 'Tumi Mothoa',
-        'type': 'Friend',
-        'lastMessage': 'Great work on the assignment. I added the final reference section.',
-        'unread': 2,
-        'time': '10:30 AM',
-        'avatarType': 'letter',
-        'avatarText': 'T',
-        'avatarColor': Color(0xFF2E7D32),
-        'isOnline': true,
-      },
-      {
-        'id': 'naledi_s',
-        'name': 'Naledi Sampson',
-        'type': 'Friend',
-        'lastMessage': 'I can meet after class today to discuss the project.',
-        'unread': 0,
-        'time': 'Yesterday',
-        'avatarType': 'letter',
-        'avatarText': 'N',
-        'avatarColor': Color(0xFF1565C0),
-        'isOnline': false,
-      },
-      {
-        'id': 'musa_k',
-        'name': 'Musa Khumalo',
-        'type': 'Friend',
-        'lastMessage': 'I found the library note for question 7 and uploaded it.',
-        'unread': 0,
-        'time': 'Tuesday',
-        'avatarType': 'letter',
-        'avatarText': 'M',
-        'avatarColor': Color(0xFF6A1B9A),
-        'isOnline': true,
-      },
-      {
-        'id': 'liza_p',
-        'name': 'Liza Phiri',
-        'type': 'Friend',
-        'lastMessage': 'Can you review the final slide deck tonight?',
-        'unread': 1,
-        'time': 'Monday',
-        'avatarType': 'letter',
-        'avatarText': 'L',
-        'avatarColor': Color(0xFFEF6C00),
-        'isOnline': false,
-      },
-    ];
+    final raw = await Supabase.instance.client
+        .from('messages')
+        .select('id, sender_id, recipient_id, text, created_at')
+        .or('sender_id.eq.${user.id},recipient_id.eq.${user.id}')
+        .order('created_at', ascending: false) as List<dynamic>?;
+
+    final messages = List<Map<String, dynamic>>.from(raw ?? []);
+    final peerIds = <String>{};
+    final conversationMap = <String, Map<String, dynamic>>{};
+
+    for (final message in messages) {
+      final senderId = (message['sender_id'] as String?)?.trim() ?? '';
+      final recipientId = (message['recipient_id'] as String?)?.trim() ?? '';
+      if (senderId.isEmpty || recipientId.isEmpty) continue;
+
+      final peerId = senderId == user.id ? recipientId : senderId;
+      if (peerId.isEmpty) continue;
+
+      if (!conversationMap.containsKey(peerId)) {
+        conversationMap[peerId] = {
+          'id': peerId,
+          'name': peerId,
+          'type': 'Friend',
+          'lastMessage': message['text'] as String? ?? 'Sent an attachment',
+          'unread': 0,
+          'time': _formatTime(message['created_at']),
+          'avatarType': 'letter',
+          'avatarText': peerId.isNotEmpty ? peerId[0].toUpperCase() : '?',
+          'avatarColor': const Color(0xFF2E7D32),
+          'isOnline': false,
+        };
+        peerIds.add(peerId);
+      }
+    }
+
+    if (peerIds.isNotEmpty) {
+      final profileRaw = await Supabase.instance.client
+          .from('profiles')
+          .select('id, name, surname, photo_url')
+          .in_('id', peerIds.toList()) as List<dynamic>?;
+
+      final profileList = List<Map<String, dynamic>>.from(profileRaw ?? []);
+      for (final profile in profileList) {
+        final id = (profile['id'] as String?)?.trim();
+        if (id == null || !conversationMap.containsKey(id)) continue;
+
+        final displayName = [profile['name'], profile['surname']]
+            .where((element) => element is String && (element as String).trim().isNotEmpty)
+            .join(' ')
+            .trim();
+        final chat = conversationMap[id]!;
+        chat['name'] = displayName.isEmpty ? id : displayName;
+        chat['avatarType'] = profile['photo_url'] != null ? 'image' : 'letter';
+        chat['avatarText'] = displayName.isEmpty ? id[0].toUpperCase() : displayName[0].toUpperCase();
+      }
+    }
+
+    return conversationMap.values.toList();
+  }
+
+  String _formatTime(dynamic createdAt) {
+    if (createdAt == null) return '';
+    final dateTime = createdAt is DateTime
+        ? createdAt
+        : DateTime.tryParse(createdAt.toString()) ?? DateTime.now();
+
+    final difference = DateTime.now().difference(dateTime);
+    if (difference.inMinutes < 1) return 'Just now';
+    if (difference.inHours < 1) return '${difference.inMinutes}m ago';
+    if (difference.inDays < 1) return '${difference.inHours}h ago';
+    return '${dateTime.day}/${dateTime.month}/${dateTime.year}';
   }
 
   @override

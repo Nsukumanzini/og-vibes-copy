@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+
 import 'package:og_vibes_student/screens/lms_quiz_lockdown_screen.dart';
 import 'package:og_vibes_student/widgets/vibe_scaffold.dart';
 
@@ -10,41 +12,66 @@ class QuizScreen extends StatefulWidget {
 }
 
 class _QuizScreenState extends State<QuizScreen> {
-  final List<Map<String, dynamic>> _quizzes = [
-    {
-      'id': 'q1',
-      'title': 'Week 5 Revision Quiz',
-      'lecturer': 'Dr. A. Smith',
-      'description': 'Short 5-question multiple choice revision quiz covering week 5 topics.',
-      'reward': 'R50 airtime',
-      'questions': [
-        {
-          'text': 'What is 2+2?',
-          'options': ['3', '4', '5', '2'],
-          'answer': 1,
-        },
-        {
-          'text': 'Which language is used for Flutter?',
-          'options': ['Kotlin', 'Swift', 'Dart', 'JavaScript'],
-          'answer': 2,
-        },
-      ],
-    },
-    {
-      'id': 'q2',
-      'title': 'Entrepreneurship Check-in',
-      'lecturer': 'Ms. Venter',
-      'description': 'Test your knowledge on business models and basics.',
-      'reward': 'Snack voucher',
-      'questions': [
-        {
-          'text': 'What is a value proposition?',
-          'options': ['Price', 'Product feature', 'Customer benefit', 'Market size'],
-          'answer': 2,
-        }
-      ],
+  bool _isLoading = true;
+  String? _errorMessage;
+  final List<QuizItem> _quizzes = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _loadQuizzes();
+  }
+
+  Future<void> _loadQuizzes() async {
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
+
+    try {
+      final response = await Supabase.instance.client
+          .from('quizzes')
+          .select('''
+            id,
+            title,
+            description,
+            lecturer_name,
+            reward,
+            duration_minutes,
+            passing_score,
+            quiz_date,
+            published,
+            questions:quiz_questions(
+              id,
+              question_text,
+              option_a,
+              option_b,
+              option_c,
+              option_d,
+              correct_option,
+              points,
+              position
+            )
+          ''')
+          .eq('published', true)
+          .order('quiz_date', ascending: false);
+
+      final rows = List<Map<String, dynamic>>.from(response as List<dynamic>? ?? []);
+      if (!mounted) return;
+      setState(() {
+        _quizzes
+          ..clear()
+          ..addAll(rows.map(QuizItem.fromSupabaseRow));
+        _isLoading = false;
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _isLoading = false;
+        _errorMessage = error.toString();
+      });
     }
-  ];
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -55,64 +82,170 @@ class _QuizScreenState extends State<QuizScreen> {
       ),
       body: Padding(
         padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
-        child: _quizzes.isEmpty
-            ? const Center(child: Text('No quizzes available right now.'))
-            : ListView.separated(
-                itemCount: _quizzes.length,
-                separatorBuilder: (_, _) => const SizedBox(height: 12),
-                itemBuilder: (context, index) {
-                  final q = _quizzes[index];
-                  return Card(
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                    child: ListTile(
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                      title: Text(q['title'], style: const TextStyle(fontWeight: FontWeight.w700)),
-                      subtitle: Text('By ${q['lecturer']}'),
-                      trailing: FilledButton(
-                        onPressed: () => _showQuizDetails(context, q),
-                        child: const Text('Open'),
-                      ),
-                    ),
-                  );
-                },
-              ),
+        child: _buildBody(),
       ),
     );
   }
 
-  void _showQuizDetails(BuildContext context, Map<String, dynamic> quiz) {
+  Widget _buildBody() {
+    if (_isLoading) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    if (_errorMessage != null) {
+      return Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.error_outline, size: 42, color: Colors.redAccent),
+            const SizedBox(height: 12),
+            const Text('Could not load quizzes right now.'),
+            const SizedBox(height: 8),
+            Text(_errorMessage!, textAlign: TextAlign.center),
+            const SizedBox(height: 16),
+            ElevatedButton(onPressed: _loadQuizzes, child: const Text('Retry')),
+          ],
+        ),
+      );
+    }
+
+    if (_quizzes.isEmpty) {
+      return const Center(
+        child: Text('No quizzes are available right now. Lecturers can publish them from their dashboard.'),
+      );
+    }
+
+    return ListView.separated(
+      itemCount: _quizzes.length,
+      separatorBuilder: (_, __) => const SizedBox(height: 12),
+      itemBuilder: (context, index) {
+        final quiz = _quizzes[index];
+        return Card(
+          elevation: 3,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+          child: InkWell(
+            borderRadius: BorderRadius.circular(18),
+            onTap: () => _showQuizDetails(context, quiz),
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          quiz.title,
+                          style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 17),
+                        ),
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFE3F2FD),
+                          borderRadius: BorderRadius.circular(999),
+                        ),
+                        child: Text(
+                          '${quiz.durationMinutes} min',
+                          style: const TextStyle(fontWeight: FontWeight.w700, color: Color(0xFF1565C0)),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    quiz.description,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(color: Colors.black54, height: 1.4),
+                  ),
+                  const SizedBox(height: 10),
+                  Wrap(
+                    spacing: 10,
+                    runSpacing: 8,
+                    children: [
+                      _chip(Icons.person_outline, 'By ${quiz.lecturerName}'),
+                      _chip(Icons.card_giftcard_outlined, quiz.reward),
+                      _chip(Icons.emoji_events_outlined, 'Pass ${quiz.passingScore}%'),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: FilledButton.icon(
+                      onPressed: () => _showQuizDetails(context, quiz),
+                      icon: const Icon(Icons.play_arrow_rounded),
+                      label: const Text('Open Quiz'),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _chip(IconData icon, String label) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: Colors.grey.shade100,
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 15, color: const Color(0xFF1565C0)),
+          const SizedBox(width: 6),
+          Text(label, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+        ],
+      ),
+    );
+  }
+
+  void _showQuizDetails(BuildContext context, QuizItem quiz) {
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
       builder: (context) {
         return Padding(
           padding: MediaQuery.of(context).viewInsets,
           child: SizedBox(
-            height: 360,
+            height: 430,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const SizedBox(height: 12),
                 Center(
-                  child: Container(height: 4, width: 56, decoration: BoxDecoration(color: Colors.grey[300], borderRadius: BorderRadius.circular(8))),
+                  child: Container(
+                    height: 4,
+                    width: 56,
+                    decoration: BoxDecoration(color: Colors.grey[300], borderRadius: BorderRadius.circular(8)),
+                  ),
                 ),
                 Padding(
-                  padding: const EdgeInsets.all(16.0),
+                  padding: const EdgeInsets.all(20),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(quiz['title'], style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
-                      const SizedBox(height: 6),
-                      Text('By ${quiz['lecturer']}', style: const TextStyle(color: Colors.black54)),
+                      Text(quiz.title, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
+                      const SizedBox(height: 8),
+                      Text('By ${quiz.lecturerName}', style: const TextStyle(color: Colors.black54)),
                       const SizedBox(height: 12),
-                      Text(quiz['description'] ?? '', style: const TextStyle(height: 1.4)),
-                      const SizedBox(height: 12),
-                      Row(children: [
-                        const Icon(Icons.card_giftcard, size: 18),
-                        const SizedBox(width: 8),
-                        Text('Reward: ${quiz['reward']}', style: const TextStyle(fontWeight: FontWeight.w700)),
-                      ]),
+                      Text(quiz.description, style: const TextStyle(height: 1.5, color: Colors.black87)),
+                      const SizedBox(height: 14),
+                      Wrap(
+                        spacing: 10,
+                        runSpacing: 8,
+                        children: [
+                          _chip(Icons.timer_outlined, '${quiz.durationMinutes} min'),
+                          _chip(Icons.emoji_events_outlined, 'Pass ${quiz.passingScore}%'),
+                          _chip(Icons.card_giftcard_outlined, quiz.reward),
+                        ],
+                      ),
                       const SizedBox(height: 18),
                       Row(children: [
                         Expanded(
@@ -123,12 +256,13 @@ class _QuizScreenState extends State<QuizScreen> {
                         ),
                         const SizedBox(width: 12),
                         Expanded(
-                          child: ElevatedButton(
+                          child: ElevatedButton.icon(
                             onPressed: () {
                               Navigator.of(context).pop();
-                              Navigator.of(context).push(MaterialPageRoute(builder: (_) => LmsQuizLockdownScreen(quiz: quiz)));
+                              Navigator.of(context).push(MaterialPageRoute(builder: (_) => LmsQuizLockdownScreen(quiz: quiz.toMap())));
                             },
-                            child: const Text('Start Quiz'),
+                            icon: const Icon(Icons.play_arrow_rounded),
+                            label: const Text('Start Quiz'),
                           ),
                         ),
                       ])
@@ -140,6 +274,107 @@ class _QuizScreenState extends State<QuizScreen> {
           ),
         );
       },
+    );
+  }
+}
+
+class QuizItem {
+  QuizItem({
+    required this.id,
+    required this.title,
+    required this.description,
+    required this.lecturerName,
+    required this.reward,
+    required this.durationMinutes,
+    required this.passingScore,
+    required this.quizDate,
+    required this.questions,
+  });
+
+  final String id;
+  final String title;
+  final String description;
+  final String lecturerName;
+  final String reward;
+  final int durationMinutes;
+  final int passingScore;
+  final DateTime? quizDate;
+  final List<QuizQuestion> questions;
+
+  Map<String, dynamic> toMap() {
+    return {
+      'id': id,
+      'title': title,
+      'description': description,
+      'lecturer': lecturerName,
+      'reward': reward,
+      'duration_minutes': durationMinutes,
+      'passing_score': passingScore,
+      'quiz_date': quizDate?.toIso8601String(),
+      'questions': questions.map((question) => question.toMap()).toList(),
+    };
+  }
+
+  factory QuizItem.fromSupabaseRow(Map<String, dynamic> row) {
+    final questions = (row['questions'] as List<dynamic>? ?? [])
+        .map((question) => QuizQuestion.fromSupabaseRow(question as Map<String, dynamic>))
+        .toList();
+
+    return QuizItem(
+      id: (row['id'] ?? '').toString(),
+      title: (row['title'] ?? 'Untitled quiz').toString(),
+      description: (row['description'] ?? 'No description provided').toString(),
+      lecturerName: (row['lecturer_name'] ?? 'Lecturer').toString(),
+      reward: (row['reward'] ?? 'Reward pending').toString(),
+      durationMinutes: int.tryParse((row['duration_minutes'] ?? '0').toString()) ?? 0,
+      passingScore: int.tryParse((row['passing_score'] ?? '0').toString()) ?? 0,
+      quizDate: row['quiz_date'] is String ? DateTime.tryParse(row['quiz_date'] as String) : null,
+      questions: questions,
+    );
+  }
+}
+
+class QuizQuestion {
+  QuizQuestion({
+    required this.id,
+    required this.text,
+    required this.options,
+    required this.correctOption,
+    required this.points,
+    required this.position,
+  });
+
+  final String id;
+  final String text;
+  final List<String> options;
+  final int correctOption;
+  final int points;
+  final int position;
+
+  Map<String, dynamic> toMap() {
+    return {
+      'id': id,
+      'text': text,
+      'options': options,
+      'answer': correctOption,
+      'points': points,
+      'position': position,
+    };
+  }
+
+  factory QuizQuestion.fromSupabaseRow(Map<String, dynamic> row) {
+    return QuizQuestion(
+      id: (row['id'] ?? '').toString(),
+      text: (row['question_text'] ?? '').toString(),
+      options: [
+        row['option_a']?.toString() ?? '',
+        row['option_b']?.toString() ?? '',
+        row['option_c']?.toString() ?? '',
+        row['option_d']?.toString() ?? '',
+      ].where((option) => option.isNotEmpty).toList(),
+      correctOption: int.tryParse((row['correct_option'] ?? '0').toString()) ?? 0,
+      points: int.tryParse((row['points'] ?? '1').toString()) ?? 1,
+      position: int.tryParse((row['position'] ?? '0').toString()) ?? 0,
     );
   }
 }

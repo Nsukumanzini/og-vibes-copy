@@ -1,6 +1,10 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:og_vibes_student/widgets/vibe_scaffold.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
+
 import 'pdf_viewer_screen.dart';
 
 class PastQuestionPapersScreen extends StatefulWidget {
@@ -11,84 +15,110 @@ class PastQuestionPapersScreen extends StatefulWidget {
 }
 
 class _PastQuestionPapersScreenState extends State<PastQuestionPapersScreen> {
-  // Mock hierarchical library: level -> subject -> year -> examType -> files
-  late final Map<String, Map<String, Map<String, Map<String, List<Map<String, String>>>>>> _library;
+  final Map<String, Map<String, Map<String, Map<String, List<Map<String, String>>>>>> _library = {};
+  StreamSubscription<List<Map<String, dynamic>>>? _papersSubscription;
 
   String? _selectedLevel;
   String? _selectedSubject;
   String? _selectedYear;
   String? _selectedExamType;
   String _subjectQuery = '';
+  bool _isLoading = true;
+  String? _errorMessage;
 
   @override
   void initState() {
     super.initState();
-    _library = _buildMockLibrary();
+    _loadPapers();
+    _listenForPapers();
   }
 
-  Map<String, Map<String, Map<String, Map<String, List<Map<String, String>>>>>> _buildMockLibrary() {
-    // Levels: Level 2/3/4, N4/N5/N6
-    // For brevity this is small sample data; expand as needed.
-    return {
-      'Level 2': {
-        'Mathematics': {
-          '2024': {
-            'Test 1': [
-              {'title': 'Question Paper', 'url': 'https://example.com/math2024test1.pdf'},
-              {'title': 'Memo', 'url': 'https://example.com/math2024test1_memo.pdf'},
-            ],
-            'Final Exam': [
-              {'title': 'Question Paper', 'url': 'https://example.com/math2024final.pdf'},
-              {'title': 'Memo', 'url': 'https://example.com/math2024final_memo.pdf'},
-            ],
-          },
-          '2023': {
-            'Test 1': [
-              {'title': 'Question Paper', 'url': 'https://example.com/math2023test1.pdf'},
-            ],
-          },
-        },
-        'Computer Practice': {
-          '2024': {
-            'Final Exam': [
-              {'title': 'Question Paper', 'url': 'https://example.com/cp2024final.pdf'},
-              {'title': 'Memo', 'url': 'https://example.com/cp2024final_memo.pdf'},
-            ],
-          }
-        }
-      },
-      'Level 3': {
-        'Entrepreneurship': {
-          '2024': {
-            'Internal Exam': [
-              {'title': 'Question Paper', 'url': 'https://example.com/ent2024internal.pdf'},
-            ]
-          }
-        }
-      },
-      'Level 4': {
-        'Applied Accounting': {
-          '2025': {
-            'Final Exam': [
-              {'title': 'Question Paper', 'url': 'https://example.com/acc2025final.pdf'},
-              {'title': 'Memo', 'url': 'https://example.com/acc2025final_memo.pdf'},
-            ]
-          }
-        }
-      },
-      'N4': {
-        'Mathematics N4': {
-          '2024': {
-            'Final Exam': [
-              {'title': 'Question Paper', 'url': 'https://example.com/mathn42024final.pdf'},
-              {'title': 'Memo', 'url': 'https://example.com/mathn42024final_memo.pdf'},
-            ]
-          }
-        }
-      },
-      'N5': {},
-      'N6': {},
-    };
+  @override
+  void dispose() {
+    _papersSubscription?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _loadPapers() async {
+    if (!mounted) return;
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
+
+    try {
+      final raw = await Supabase.instance.client
+          .from('past_papers')
+          .select('id, level, subject, year, exam_type, title, url, created_at')
+          .order('level', ascending: true)
+          .order('subject', ascending: true)
+          .order('year', ascending: true)
+          .order('exam_type', ascending: true)
+          .order('title', ascending: true) as List<dynamic>;
+
+      if (!mounted) return;
+      setState(() {
+        _library
+          ..clear()
+          ..addAll(_buildLibraryFromRows(List<Map<String, dynamic>>.from(raw)));
+        _isLoading = false;
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _isLoading = false;
+        _errorMessage = error.toString();
+      });
+    }
+  }
+
+  void _listenForPapers() {
+    _papersSubscription = Supabase.instance.client
+        .from('past_papers')
+        .stream(primaryKey: ['id'])
+        .listen((rows) {
+          if (!mounted) return;
+          setState(() {
+            _library
+              ..clear()
+              ..addAll(_buildLibraryFromRows(List<Map<String, dynamic>>.from(rows)));
+            _isLoading = false;
+            _errorMessage = null;
+          });
+        }, onError: (error) {
+          if (!mounted) return;
+          setState(() {
+            _isLoading = false;
+            _errorMessage = error.toString();
+          });
+        });
+  }
+
+  Future<void> _refreshPapers() async {
+    await _loadPapers();
+  }
+
+  Map<String, Map<String, Map<String, Map<String, List<Map<String, String>>>>>> _buildLibraryFromRows(
+    List<Map<String, dynamic>> rows,
+  ) {
+    final grouped = <String, Map<String, Map<String, Map<String, List<Map<String, String>>>>>>{};
+
+    for (final row in rows) {
+      final level = (row['level'] as String?)?.trim() ?? 'Uncategorized';
+      final subject = (row['subject'] as String?)?.trim() ?? 'General';
+      final year = (row['year'] as String?)?.trim() ?? 'Unknown';
+      final examType = (row['exam_type'] as String?)?.trim() ?? 'Other';
+      final title = (row['title'] as String?)?.trim() ?? 'Document';
+      final url = (row['url'] as String?)?.trim() ?? '';
+
+      grouped.putIfAbsent(level, () => <String, Map<String, Map<String, List<Map<String, String>>>>>{});
+      grouped[level]!.putIfAbsent(subject, () => <String, Map<String, List<Map<String, String>>>>{});
+      grouped[level]![subject]!.putIfAbsent(year, () => <String, List<Map<String, String>>>{});
+      grouped[level]![subject]![year]!.putIfAbsent(examType, () => <Map<String, String>>[]);
+      grouped[level]![subject]![year]![examType]!.add({'title': title, 'url': url});
+    }
+
+    return grouped;
   }
 
   void _resetToLevels() {
@@ -164,6 +194,13 @@ class _PastQuestionPapersScreenState extends State<PastQuestionPapersScreen> {
     return VibeScaffold(
       appBar: AppBar(
         title: const Text('Past Question Papers'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            tooltip: 'Refresh',
+            onPressed: _refreshPapers,
+          ),
+        ],
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
           onPressed: () {
@@ -198,11 +235,51 @@ class _PastQuestionPapersScreenState extends State<PastQuestionPapersScreen> {
   }
 
   Widget _buildCurrentStep(BuildContext context) {
+    if (_isLoading && _library.isEmpty) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    if (_errorMessage != null && _library.isEmpty) {
+      return _buildErrorState(context);
+    }
+
     if (_selectedLevel == null) return _buildLevelSelector(context);
     if (_selectedSubject == null) return _buildSubjectList(context);
     if (_selectedYear == null) return _buildYearList(context);
     if (_selectedExamType == null) return _buildExamTypeList(context);
     return _buildFilesList(context);
+  }
+
+  Widget _buildErrorState(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(Icons.error_outline, size: 52, color: Colors.redAccent),
+            const SizedBox(height: 12),
+            Text(
+              'Unable to load past papers right now.',
+              style: Theme.of(context).textTheme.titleMedium,
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              _errorMessage ?? 'Please try again.',
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: Colors.black54),
+            ),
+            const SizedBox(height: 16),
+            ElevatedButton.icon(
+              onPressed: _refreshPapers,
+              icon: const Icon(Icons.refresh),
+              label: const Text('Retry'),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   Widget _buildLevelSelector(BuildContext context) {

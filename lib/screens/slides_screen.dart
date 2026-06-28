@@ -1,7 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:og_vibes_student/widgets/vibe_scaffold.dart';
-import 'pdf_viewer_screen.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
+
+import 'pdf_viewer_screen.dart';
 
 class SlidesScreen extends StatefulWidget {
   const SlidesScreen({super.key});
@@ -11,41 +15,102 @@ class SlidesScreen extends StatefulWidget {
 }
 
 class _SlidesScreenState extends State<SlidesScreen> {
-  // Mock structure: level -> subject -> list of slides (title, url)
-  late final Map<String, Map<String, List<Map<String, String>>>> _library;
+  final Map<String, Map<String, List<Map<String, String>>>> _library = {};
+  StreamSubscription<List<Map<String, dynamic>>>? _slidesSubscription;
 
   String? _selectedLevel;
   String? _selectedSubject;
   String _subjectQuery = '';
+  bool _isLoading = true;
+  String? _errorMessage;
 
   @override
   void initState() {
     super.initState();
-    _library = _buildMockLibrary();
+    _loadSlides();
+    _listenForSlides();
   }
 
-  Map<String, Map<String, List<Map<String, String>>>> _buildMockLibrary() {
-    return {
-      'Level 2': {
-        'Mathematics': [
-          {'title': 'Calculus Summary', 'url': 'https://example.com/math_calculus.pdf'},
-          {'title': 'Algebra Shortcuts', 'url': 'https://example.com/math_algebra.pdf'},
-        ],
-        'Computer Practice': [
-          {'title': 'Word Processing Guide', 'url': 'https://example.com/cp_word.pdf'},
-        ],
-      },
-      'Level 3': {
-        'Entrepreneurship': [
-          {'title': 'Business Models', 'url': 'https://example.com/ent_business.pdf'},
-        ]
-      },
-      'N4': {
-        'Mathematics N4': [
-          {'title': 'N4 Mathematics Summary', 'url': 'https://example.com/mathn4_summary.pdf'},
-        ]
-      }
-    };
+  @override
+  void dispose() {
+    _slidesSubscription?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _loadSlides() async {
+    if (!mounted) return;
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
+
+    try {
+      final raw = await Supabase.instance.client
+          .from('lecture_slides')
+          .select('id, level, subject, title, url, created_at')
+          .order('level', ascending: true)
+          .order('subject', ascending: true)
+          .order('title', ascending: true) as List<dynamic>?;
+
+      if (!mounted) return;
+      setState(() {
+        _library
+          ..clear()
+          ..addAll(_buildLibraryFromRows(List<Map<String, dynamic>>.from(raw ?? [])));
+        _isLoading = false;
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _isLoading = false;
+        _errorMessage = error.toString();
+      });
+    }
+  }
+
+  void _listenForSlides() {
+    _slidesSubscription = Supabase.instance.client
+        .from('lecture_slides')
+        .stream(primaryKey: ['id'])
+        .listen((rows) {
+          if (!mounted) return;
+          setState(() {
+            _library
+              ..clear()
+              ..addAll(_buildLibraryFromRows(List<Map<String, dynamic>>.from(rows)));
+            _isLoading = false;
+            _errorMessage = null;
+          });
+        }, onError: (error) {
+          if (!mounted) return;
+          setState(() {
+            _isLoading = false;
+            _errorMessage = error.toString();
+          });
+        });
+  }
+
+  Future<void> _refreshSlides() async {
+    await _loadSlides();
+  }
+
+  Map<String, Map<String, List<Map<String, String>>>> _buildLibraryFromRows(
+    List<Map<String, dynamic>> rows,
+  ) {
+    final grouped = <String, Map<String, List<Map<String, String>>>>{};
+
+    for (final row in rows) {
+      final level = (row['level'] as String?)?.trim() ?? 'Uncategorized';
+      final subject = (row['subject'] as String?)?.trim() ?? 'General';
+      final title = (row['title'] as String?)?.trim() ?? 'Slide';
+      final url = (row['url'] as String?)?.trim() ?? '';
+
+      grouped.putIfAbsent(level, () => <String, List<Map<String, String>>>{});
+      grouped[level]!.putIfAbsent(subject, () => <Map<String, String>>[]);
+      grouped[level]![subject]!.add({'title': title, 'url': url});
+    }
+
+    return grouped;
   }
 
   void _resetToLevels() {
@@ -58,6 +123,34 @@ class _SlidesScreenState extends State<SlidesScreen> {
 
   Widget _buildLevelSelector(BuildContext context) {
     final levels = _library.keys.toList();
+    if (_isLoading && _library.isEmpty) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    if (_errorMessage != null && _library.isEmpty) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.error_outline, size: 48, color: Colors.redAccent),
+              const SizedBox(height: 12),
+              const Text('Unable to load slides right now.'),
+              const SizedBox(height: 8),
+              Text(_errorMessage ?? 'Please try again.', textAlign: TextAlign.center),
+              const SizedBox(height: 16),
+              ElevatedButton.icon(
+                onPressed: _refreshSlides,
+                icon: const Icon(Icons.refresh),
+                label: const Text('Retry'),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -184,6 +277,13 @@ class _SlidesScreenState extends State<SlidesScreen> {
     return VibeScaffold(
       appBar: AppBar(
         title: const Text('Lecture Slides & Summaries'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            tooltip: 'Refresh',
+            onPressed: _refreshSlides,
+          ),
+        ],
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
           onPressed: () {

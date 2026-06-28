@@ -33,35 +33,38 @@ class AuthService {
     String? deviceLocale,
     String? phone,
   }) async {
-    await Supabase.instance.client.auth.signUp(
-      email: email.trim(),
-      password: password.trim(),
-      data: {
-        'name': name.trim(),
-        'surname': surname.trim(),
-        'campus': campus,
-        'department': department,
-        'level': level,
-        'studentType': studentType,
-        'gender': gender,
-        if (studentNumber != null && studentNumber.isNotEmpty) 'studentNumber': studentNumber.trim(),
-        if (timeZoneName != null && timeZoneName.isNotEmpty) 'timeZoneName': timeZoneName,
-        if (timeZoneOffset != null && timeZoneOffset.isNotEmpty) 'timeZoneOffset': timeZoneOffset,
-        if (deviceLocale != null && deviceLocale.isNotEmpty) 'deviceLocale': deviceLocale,
-        if (phone != null && phone.isNotEmpty) 'phone': phone,
-      },
-    );
-
-    // Some versions of the Supabase client return `void` or different
-    // shapes from the auth methods. Read the current user from the
-    // client to be robust and return a lightweight wrapper with a
-    // `user` property so existing callers continue to work.
-    final user = Supabase.instance.client.auth.currentUser;
-    if (user == null) {
-      throw Exception('Unable to create account. Please try again.');
+    AuthResponse? response;
+    try {
+      response = await Supabase.instance.client.auth.signUp(
+        email: email.trim(),
+        password: password.trim(),
+        data: {
+          'name': name.trim(),
+          'surname': surname.trim(),
+          'campus': campus,
+          'department': department,
+          'level': level,
+          'studentType': studentType,
+          'gender': gender,
+          if (studentNumber != null && studentNumber.isNotEmpty) 'studentNumber': studentNumber.trim(),
+          if (timeZoneName != null && timeZoneName.isNotEmpty) 'timeZoneName': timeZoneName,
+          if (timeZoneOffset != null && timeZoneOffset.isNotEmpty) 'timeZoneOffset': timeZoneOffset,
+          if (deviceLocale != null && deviceLocale.isNotEmpty) 'deviceLocale': deviceLocale,
+          if (phone != null && phone.isNotEmpty) 'phone': phone,
+        },
+      );
+    } on AssertionError catch (_) {
+      throw Exception(
+        'Supabase is not initialized. Provide SUPABASE_URL and SUPABASE_ANON_KEY via --dart-define or ensure .env.local is included and loaded.',
+      );
+    } on AuthException catch (e) {
+      throw Exception(e.message);
+    } catch (e) {
+      throw Exception(e.toString());
     }
 
-    final needsVerification = user.emailConfirmedAt == null;
+    final user = response.user ?? response.session?.user ?? Supabase.instance.client.auth.currentUser;
+    final needsVerification = user?.emailConfirmedAt == null;
     return AuthResult(response: _AuthResponseWrapper(user), needsVerification: needsVerification);
   }
 
@@ -69,12 +72,23 @@ class AuthService {
     required String email,
     required String password,
   }) async {
-    await Supabase.instance.client.auth.signInWithPassword(
-      email: email.trim(),
-      password: password.trim(),
-    );
+    AuthResponse? response;
+    try {
+      response = await Supabase.instance.client.auth.signInWithPassword(
+        email: email.trim(),
+        password: password.trim(),
+      );
+    } on AssertionError catch (_) {
+      throw Exception(
+        'Supabase is not initialized. Provide SUPABASE_URL and SUPABASE_ANON_KEY via --dart-define or ensure .env.local is included and loaded.',
+      );
+    } on AuthException catch (e) {
+      throw Exception(e.message);
+    } catch (e) {
+      throw Exception(e.toString());
+    }
 
-    final user = Supabase.instance.client.auth.currentUser;
+    final user = response.user ?? response.session?.user ?? Supabase.instance.client.auth.currentUser;
     if (user == null) {
       throw Exception('Unable to sign in. Please try again.');
     }
@@ -84,7 +98,14 @@ class AuthService {
   }
 
   Future<AuthResult> signInWithPhoneOtp({required String phone}) async {
-    await Supabase.instance.client.auth.signInWithOtp(phone: phone);
+    try {
+      await Supabase.instance.client.auth.signInWithOtp(phone: phone);
+    } on AssertionError catch (_) {
+      throw Exception(
+        'Supabase is not initialized. Provide SUPABASE_URL and SUPABASE_ANON_KEY via --dart-define or ensure .env.local is included and loaded.',
+      );
+    }
+
     final user = Supabase.instance.client.auth.currentUser;
     if (user == null) {
       throw Exception('Unable to sign in with phone. Please try again.');
@@ -97,6 +118,12 @@ class AuthService {
   }
 
   Future<void> signOut() async {
-    await Supabase.instance.client.auth.signOut();
+    try {
+      await Supabase.instance.client.auth.signOut();
+    } on AssertionError catch (_) {
+      // If Supabase isn't initialized, treat signOut as a no-op.
+      return;
+    }
   }
 }
+

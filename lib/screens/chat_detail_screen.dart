@@ -1,4 +1,5 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'package:og_vibes_student/widgets/vibe_scaffold.dart';
 
@@ -13,40 +14,141 @@ class ChatDetailScreen extends StatefulWidget {
 }
 
 class _ChatDetailScreenState extends State<ChatDetailScreen> {
-  static const List<Map<String, dynamic>> _messages = [
-    {
-      'sender': 'Lerato',
-      'mine': false,
-      'type': 'text',
-      'text': 'Did anyone manage to find the Memo for the June 2025 paper?',
-      'time': '10:15 AM',
-    },
-    {
-      'sender': 'Me',
-      'mine': true,
-      'type': 'text',
-      'text': 'I have it! Let me upload it now.',
-      'time': '10:18 AM',
-    },
-    {
-      'sender': 'Me',
-      'mine': true,
-      'type': 'attachment',
-      'fileName': 'N4_Maths_Memo_June2025.pdf',
-      'fileSize': '2.4 MB',
-      'time': '10:19 AM',
-    },
-    {
-      'sender': 'Sipho',
-      'mine': false,
-      'type': 'text',
-      'text': 'You are a lifesaver bro 🙏 Thanks!',
-      'time': '10:30 AM',
-    },
-  ];
+  final List<Map<String, dynamic>> _messages = [];
+  final TextEditingController _messageController = TextEditingController();
+  bool _isSending = false;
+  bool _isLoading = true;
 
-  void _showOfflineSnack(String message) {
+  @override
+  void initState() {
+    super.initState();
+    _loadMessages();
+  }
+
+  @override
+  void dispose() {
+    _messageController.dispose();
+    super.dispose();
+  }
+
+  void _showSnack(String message) {
+    if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  Future<void> _loadMessages() async {
+    final user = Supabase.instance.client.auth.currentUser;
+    if (user == null) {
+      _showSnack('Please sign in to view messages.');
+      setState(() {
+        _isLoading = false;
+      });
+      return;
+    }
+
+    setState(() {
+      _isLoading = true;
+    });
+
+    try {
+      final raw = await Supabase.instance.client
+          .from('messages')
+          .select('id, sender_id, recipient_id, text, created_at')
+          .or('and(sender_id.eq.${user.id},recipient_id.eq.${widget.chatId}),and(sender_id.eq.${widget.chatId},recipient_id.eq.${user.id})')
+          .order('created_at', ascending: true) as List<dynamic>?;
+
+      final loadedMessages = <Map<String, dynamic>>[];
+      for (final item in raw ?? []) {
+        final senderId = (item['sender_id'] as String?)?.trim() ?? '';
+        final recipientId = (item['recipient_id'] as String?)?.trim() ?? '';
+        if (senderId.isEmpty || recipientId.isEmpty) continue;
+
+        final isMine = senderId == user.id;
+        loadedMessages.add({
+          'sender': isMine ? 'Me' : widget.chatTitle ?? senderId,
+          'mine': isMine,
+          'type': 'text',
+          'text': item['text'] as String? ?? '',
+          'time': _formatTimestamp(item['created_at']),
+          'messageId': item['id'],
+          'senderId': senderId,
+          'recipientId': recipientId,
+        });
+      }
+
+      if (!mounted) return;
+      setState(() {
+        _messages
+          ..clear()
+          ..addAll(loadedMessages);
+        _isLoading = false;
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _isLoading = false;
+      });
+      _showSnack('Failed to load chat: $error');
+    }
+  }
+
+  String _formatTimestamp(dynamic createdAt) {
+    if (createdAt == null) return '';
+    final dateTime = createdAt is DateTime
+        ? createdAt
+        : DateTime.tryParse(createdAt.toString()) ?? DateTime.now();
+
+    final difference = DateTime.now().difference(dateTime);
+    if (difference.inMinutes < 1) return 'Just now';
+    if (difference.inHours < 1) return '${difference.inMinutes}m ago';
+    if (difference.inDays < 1) return '${difference.inHours}h ago';
+    return '${dateTime.day}/${dateTime.month}/${dateTime.year}';
+  }
+
+  Future<void> _sendMessage() async {
+    final rawText = _messageController.text.trim();
+    if (rawText.isEmpty) return;
+
+    final user = Supabase.instance.client.auth.currentUser;
+    if (user == null) {
+      _showSnack('Please sign in to send messages.');
+      return;
+    }
+
+    final recipientId = widget.chatId;
+    setState(() => _isSending = true);
+
+    try {
+      final response = await Supabase.instance.client.from('messages').insert({
+        'sender_id': user.id,
+        'recipient_id': recipientId,
+        'text': rawText,
+      }).select() as List<dynamic>?;
+
+      final inserted = List<Map<String, dynamic>>.from(response ?? []);
+      final messageRecord = inserted.isNotEmpty ? inserted.first : null;
+      final newMessage = {
+        'sender': 'Me',
+        'mine': true,
+        'type': 'text',
+        'text': rawText,
+        'time': _formatTimestamp(DateTime.now()),
+        'messageId': messageRecord?['id'],
+        'senderId': user.id,
+        'recipientId': recipientId,
+      };
+
+      if (!mounted) return;
+      setState(() {
+        _messages.add(newMessage);
+        _messageController.clear();
+      });
+    } catch (error) {
+      _showSnack('Failed to send message: $error');
+    }
+
+    if (!mounted) return;
+    setState(() => _isSending = false);
   }
 
   @override
@@ -61,23 +163,9 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
               widget.chatTitle ?? 'Private Chat',
               style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16),
             ),
-            const SizedBox(height: 2),
-            const Text(
-              'Private chat with your friend',
-              style: TextStyle(
-                fontWeight: FontWeight.w600,
-                fontSize: 12,
-                color: Color(0xFF607D8B),
-              ),
-            ),
           ],
         ),
         actions: [
-          IconButton(
-            tooltip: 'View profile',
-            onPressed: _viewProfile,
-            icon: const Icon(Icons.person_outline),
-          ),
           PopupMenuButton<String>(
             onSelected: (value) {
               if (value == 'Delete') {
@@ -123,25 +211,19 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
             ),
           ),
           Expanded(
-            child: ListView.builder(
-              padding: const EdgeInsets.fromLTRB(12, 16, 12, 12),
-              itemCount: _messages.length,
-              itemBuilder: (context, index) {
-                final message = _messages[index];
-                return _ChatBubble(message: message);
-              },
-            ),
+            child: _isLoading
+                ? const Center(child: CircularProgressIndicator())
+                : ListView.builder(
+                    padding: const EdgeInsets.fromLTRB(12, 16, 12, 12),
+                    itemCount: _messages.length,
+                    itemBuilder: (context, index) {
+                      final message = _messages[index];
+                      return _ChatBubble(message: message);
+                    },
+                  ),
           ),
           _buildInputBar(),
         ],
-      ),
-    );
-  }
-
-  void _viewProfile() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('Opening profile for ${widget.chatTitle ?? 'your friend'}...'),
       ),
     );
   }
@@ -168,11 +250,9 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
     );
 
     if (!mounted) return;
-
     if (choice == true) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Chat deleted with ${widget.chatTitle ?? 'your friend'}.'),
-        ),
+        SnackBar(content: Text('Chat deleted with ${widget.chatTitle ?? 'your friend'}.'),),
       );
       Navigator.of(context).pop();
     }
@@ -207,7 +287,6 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
     );
 
     if (!mounted) return;
-
     if (reason != null) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Reported chat: $reason')),
@@ -227,7 +306,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
           ),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withValues(alpha: 0.04),
+              color: Colors.black.withOpacity(0.04),
               blurRadius: 12,
               offset: const Offset(0, -3),
             ),
@@ -237,18 +316,12 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
           children: [
             Expanded(
               child: TextField(
-                readOnly: true,
-                onTap: () => _showOfflineSnack('Offline demo: message input is disabled.'),
+                controller: _messageController,
+                textCapitalization: TextCapitalization.sentences,
                 decoration: InputDecoration(
                   hintText: 'Type a message...',
                   filled: true,
                   fillColor: const Color(0xFFF4F7FB),
-                  prefixIcon: IconButton(
-                    icon: const Icon(Icons.attach_file),
-                    onPressed: () => _showOfflineSnack(
-                      'Offline demo: attachment picker is disabled.',
-                    ),
-                  ),
                   contentPadding: const EdgeInsets.symmetric(
                     horizontal: 16,
                     vertical: 12,
@@ -262,18 +335,21 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
             ),
             const SizedBox(width: 8),
             InkWell(
-              onTap: () => _showOfflineSnack(
-                'Offline demo: voice note capture is disabled.',
-              ),
+              onTap: _isSending ? null : _sendMessage,
               borderRadius: BorderRadius.circular(24),
               child: Container(
                 width: 46,
                 height: 46,
-                decoration: const BoxDecoration(
-                  color: Color(0xFF1565C0),
+                decoration: BoxDecoration(
+                  color: _isSending ? Colors.grey : const Color(0xFF1565C0),
                   shape: BoxShape.circle,
                 ),
-                child: const Icon(Icons.mic, color: Colors.white),
+                child: _isSending
+                    ? const Padding(
+                        padding: EdgeInsets.all(12),
+                        child: CircularProgressIndicator(strokeWidth: 2, valueColor: AlwaysStoppedAnimation<Color>(Colors.white)),
+                      )
+                    : const Icon(Icons.send, color: Colors.white),
               ),
             ),
           ],
@@ -301,9 +377,7 @@ class _ChatBubble extends StatelessWidget {
         margin: const EdgeInsets.only(bottom: 10),
         constraints: const BoxConstraints(maxWidth: 320),
         child: Column(
-          crossAxisAlignment: mine
-              ? CrossAxisAlignment.end
-              : CrossAxisAlignment.start,
+          crossAxisAlignment: mine ? CrossAxisAlignment.end : CrossAxisAlignment.start,
           children: [
             if (!mine)
               Padding(
@@ -346,9 +420,7 @@ class _ChatBubble extends StatelessWidget {
                         height: 1.35,
                         fontWeight: FontWeight.w500,
                       ),
-                    )
-                  else
-                    _AttachmentBubbleContent(mine: mine, message: message),
+                    ),
                   const SizedBox(height: 8),
                   Align(
                     alignment: Alignment.centerRight,
@@ -366,61 +438,6 @@ class _ChatBubble extends StatelessWidget {
             ),
           ],
         ),
-      ),
-    );
-  }
-}
-
-class _AttachmentBubbleContent extends StatelessWidget {
-  const _AttachmentBubbleContent({required this.mine, required this.message});
-
-  final bool mine;
-  final Map<String, dynamic> message;
-
-  @override
-  Widget build(BuildContext context) {
-    final Color iconColor = mine ? Colors.white : const Color(0xFF1565C0);
-    final Color textColor = mine ? Colors.white : const Color(0xFF1A1A1A);
-
-    return Container(
-      padding: const EdgeInsets.all(10),
-      decoration: BoxDecoration(
-        color: mine
-            ? Colors.white.withValues(alpha: 0.14)
-            : const Color(0xFFE6ECF4),
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Row(
-        children: [
-          Icon(Icons.picture_as_pdf, color: iconColor, size: 24),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  message['fileName'] as String,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    color: textColor,
-                    fontWeight: FontWeight.w700,
-                    fontSize: 13,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  message['fileSize'] as String,
-                  style: TextStyle(
-                    color: mine ? Colors.white70 : const Color(0xFF607D8B),
-                    fontWeight: FontWeight.w600,
-                    fontSize: 12,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
       ),
     );
   }

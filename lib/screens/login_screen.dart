@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:og_vibes_student/screens/home_screen.dart';
 
+import '../services/auth_service.dart';
+
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
 
@@ -17,6 +19,7 @@ class _LoginScreenState extends State<LoginScreen>
 
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
+  final AuthService _authService = AuthService();
   bool _obscurePassword = true;
   bool _isSubmitting = false;
 
@@ -63,22 +66,65 @@ class _LoginScreenState extends State<LoginScreen>
     super.dispose();
   }
 
-  void _onLoginPressed() async {
+  Future<void> _onLoginPressed() async {
+    final email = _emailController.text.trim();
+    final password = _passwordController.text;
+
+    if (email.isEmpty || password.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please enter your email and password.')),
+      );
+      return;
+    }
+
     setState(() {
       _isSubmitting = true;
     });
 
-    await Future<void>.delayed(const Duration(milliseconds: 600));
+    try {
+      final result = await _authService.signIn(email: email, password: password);
+      if (!mounted) return;
 
-    if (!mounted) return;
-
-    setState(() {
-      _isSubmitting = false;
-    });
-
-    Navigator.of(context).pushReplacement(
-      MaterialPageRoute(builder: (_) => const HomeScreen()),
-    );
+      if (result.needsVerification) {
+        await showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (context) => AlertDialog(
+            title: const Text('Verify your email'),
+            content: const Text(
+              'Your account is registered, but you need to verify your email before signing in.',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(),
+                child: const Text('OK'),
+              ),
+            ],
+          ),
+        );
+      } else {
+        if (!mounted) return;
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(builder: (_) => const HomeScreen()),
+        );
+      }
+    } catch (e, st) {
+      // ignore: avoid_print
+      print('Login error: $e');
+      // ignore: avoid_print
+      print(st);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('$e')),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isSubmitting = false;
+        });
+      }
+    }
   }
 
   @override

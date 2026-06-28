@@ -1,11 +1,6 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:og_vibes_student/widgets/vibe_scaffold.dart';
-import 'dart:io';
-
-import 'package:flutter/foundation.dart';
-import 'package:image_picker/image_picker.dart';
-import 'package:file_picker/file_picker.dart';
-import 'package:share_plus/share_plus.dart';
 
 class GroupChatsScreen extends StatefulWidget {
   const GroupChatsScreen({super.key});
@@ -15,176 +10,401 @@ class GroupChatsScreen extends StatefulWidget {
 }
 
 class _GroupChatsScreenState extends State<GroupChatsScreen> {
-  late List<_GroupChat> _groups;
   final TextEditingController _messageController = TextEditingController();
+  final TextEditingController _searchController = TextEditingController();
+  List<_GroupChat> _groups = [];
   _GroupChat? _selectedGroup;
-  final ImagePicker _imagePicker = ImagePicker();
+  bool _isLoadingGroups = true;
+  bool _isLoadingMessages = false;
+  bool _isSending = false;
+  String _searchQuery = '';
 
   @override
   void initState() {
     super.initState();
-    _groups = [
-      _GroupChat(
-        id: '1',
-        name: 'Mathematics N4 - Main Class',
-        lecturer: 'Dr. Smith',
-        description: 'General discussions for Math N4',
-        memberCount: 34,
-        messages: [
-          _Message(
-            sender: 'John Doe',
-            content: 'Thanks for creating this group!',
-            timestamp: DateTime.now().subtract(const Duration(hours: 1)),
-            isFromLecturer: false,
-          ),
-        ],
-      ),
-      _GroupChat(
-        id: '2',
-        name: 'Computer Practice N4 - Study Group',
-        lecturer: 'Prof. Johnson',
-        description: 'Collaboration and support group',
-        memberCount: 28,
-        messages: [
-          _Message(
-            sender: 'Prof. Johnson',
-            content: 'Assignment 1 deadline is Friday. Any questions?',
-            timestamp: DateTime.now().subtract(const Duration(hours: 3)),
-            isFromLecturer: true,
-          ),
-        ],
-      ),
-      _GroupChat(
-        id: '3',
-        name: 'Engineering Science N4 - Lab Updates',
-        lecturer: 'Dr. Williams',
-        description: 'Lab schedules and practical guidelines',
-        memberCount: 42,
-        messages: [
-          _Message(
-            sender: 'Dr. Williams',
-            content: 'Lab session moved to Thursday at 2 PM',
-            timestamp: DateTime.now().subtract(const Duration(hours: 5)),
-            isFromLecturer: true,
-          ),
-        ],
-      ),
-    ];
+    _searchController.addListener(_onSearchChanged);
+    _loadGroups();
   }
 
   @override
   void dispose() {
     _messageController.dispose();
+    _searchController.dispose();
     super.dispose();
   }
 
-  void _selectGroup(_GroupChat group) {
-    setState(() => _selectedGroup = group);
-  }
-
-  Future<void> _pickImage() async {
-    if (_selectedGroup == null) return;
-    final picked = await _imagePicker.pickImage(source: ImageSource.gallery, maxWidth: 1600);
-    if (picked == null) return;
+  void _onSearchChanged() {
     setState(() {
-      _selectedGroup!.messages.add(_Message(
-        sender: 'You',
-        content: '',
-        timestamp: DateTime.now(),
-        isFromLecturer: false,
-        attachment: _Attachment(path: picked.path, name: picked.name, isImage: true),
-      ));
+      _searchQuery = _searchController.text.trim();
     });
   }
 
-  Future<void> _pickFile() async {
-    if (_selectedGroup == null) return;
-    final result = await FilePicker.platform.pickFiles(allowMultiple: false);
-    if (result == null || result.files.isEmpty) return;
-    final file = result.files.first;
+  Future<void> _loadGroups() async {
     setState(() {
-      _selectedGroup!.messages.add(_Message(
-        sender: 'You',
-        content: file.name,
-        timestamp: DateTime.now(),
-        isFromLecturer: false,
-        attachment: _Attachment(path: file.path, name: file.name, isImage: file.extension != null && ['png','jpg','jpeg','gif','webp'].contains(file.extension!.toLowerCase())),
-      ));
+      _isLoadingGroups = true;
     });
-  }
 
-  void _sendMessage() {
-    if (_messageController.text.trim().isEmpty || _selectedGroup == null) return;
+    try {
+      final raw = await Supabase.instance.client
+          .from('group_chats')
+          .select('id, name, description, member_count')
+          .order('created_at', ascending: false) as List<dynamic>?;
 
-    setState(() {
-      _selectedGroup!.messages.add(
-        _Message(
-          sender: 'You',
-          content: _messageController.text.trim(),
-          timestamp: DateTime.now(),
-          isFromLecturer: false,
-        ),
+      final loadedGroups = <_GroupChat>[];
+      for (final item in raw ?? []) {
+        loadedGroups.add(_GroupChat(
+          id: item['id'].toString(),
+          name: item['name'] as String? ?? 'Unnamed Group',
+          description: item['description'] as String? ?? '',
+          memberCount: item['member_count'] is int
+              ? item['member_count'] as int
+              : int.tryParse(item['member_count']?.toString() ?? '') ?? 0,
+          messages: [],
+        ));
+      }
+
+      if (!mounted) return;
+      setState(() {
+        _groups = loadedGroups;
+        if (_selectedGroup == null && _groups.isNotEmpty) {
+          _selectedGroup = _groups.first;
+          _loadGroupMessages(_selectedGroup!.id);
+        }
+        _isLoadingGroups = false;
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _isLoadingGroups = false;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Unable to load groups: $error')),
       );
-      _messageController.clear();
-    });
+    }
   }
 
-  @override
-  Widget build(BuildContext context) {
-    return VibeScaffold(
-      appBar: AppBar(
-        title: const Text('Group Chats'),
-        elevation: 0,
-      ),
-      body: Row(
-        children: [
-          // Groups list
-          SizedBox(
-            width: MediaQuery.of(context).size.width < 600 ? 0 : 300,
-            child: MediaQuery.of(context).size.width < 600
-                ? const SizedBox.shrink()
-                : _buildGroupsList(),
-          ),
-          // Chat area
-          Expanded(
-            child: _selectedGroup == null
-                ? _buildEmptyState()
-                : _buildChatArea(),
+  Future<void> _loadGroupMessages(String groupId) async {
+    setState(() {
+      _isLoadingMessages = true;
+    });
+
+    try {
+      final raw = await Supabase.instance.client
+          .from('group_messages')
+          .select('id, sender_id, text, created_at')
+          .eq('group_id', groupId)
+          .order('created_at', ascending: true) as List<dynamic>?;
+
+      final senderIds = <String>{};
+      for (final item in raw ?? []) {
+        final senderId = (item['sender_id'] as String?)?.trim() ?? '';
+        if (senderId.isNotEmpty) {
+          senderIds.add(senderId);
+        }
+      }
+
+      final profiles = <String, String>{};
+      if (senderIds.isNotEmpty) {
+        final profileRaw = await Supabase.instance.client
+            .from('profiles')
+            .select('id, name, surname')
+            .in_('id', senderIds.toList()) as List<dynamic>?;
+
+        for (final profile in profileRaw ?? []) {
+          final id = (profile['id'] as String?)?.trim();
+          if (id == null) continue;
+          final displayName = [profile['name'], profile['surname']]
+              .where((part) => part is String && (part as String).trim().isNotEmpty)
+              .join(' ')
+              .trim();
+          profiles[id] = displayName.isNotEmpty ? displayName : id;
+        }
+      }
+
+      final userId = Supabase.instance.client.auth.currentUser?.id;
+      final loadedMessages = <_Message>[];
+      for (final item in raw ?? []) {
+        final senderId = (item['sender_id'] as String?)?.trim() ?? '';
+        if (senderId.isEmpty) continue;
+
+        loadedMessages.add(_Message(
+          id: item['id'].toString(),
+          senderId: senderId,
+          senderName: senderId == userId
+              ? 'You'
+              : profiles[senderId] ?? senderId,
+          content: item['text'] as String? ?? '',
+          createdAt: item['created_at'] is DateTime
+              ? item['created_at'] as DateTime
+              : DateTime.tryParse(item['created_at']?.toString() ?? '') ?? DateTime.now(),
+        ));
+      }
+
+      if (!mounted) return;
+      setState(() {
+        final selected = _groups.firstWhere((group) => group.id == groupId, orElse: () => _selectedGroup!);
+        selected.messages
+          ..clear()
+          ..addAll(loadedMessages);
+        _selectedGroup = selected;
+        _isLoadingMessages = false;
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _isLoadingMessages = false;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Unable to load messages: $error')),
+      );
+    }
+  }
+
+  Future<void> _sendMessage() async {
+    final text = _messageController.text.trim();
+    if (text.isEmpty || _selectedGroup == null) return;
+
+    final user = Supabase.instance.client.auth.currentUser;
+    if (user == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please sign in to send messages.')),
+      );
+      return;
+    }
+
+    setState(() {
+      _isSending = true;
+    });
+
+    try {
+      final response = await Supabase.instance.client.from('group_messages').insert({
+        'group_id': _selectedGroup!.id,
+        'sender_id': user.id,
+        'text': text,
+      }).select() as List<dynamic>?;
+
+      final inserted = List<Map<String, dynamic>>.from(response ?? []);
+      final messageRecord = inserted.isNotEmpty ? inserted.first : null;
+      final newMessage = _Message(
+        id: messageRecord?['id']?.toString() ?? DateTime.now().millisecondsSinceEpoch.toString(),
+        senderId: user.id,
+        senderName: 'You',
+        content: text,
+        createdAt: messageRecord?['created_at'] is DateTime
+            ? messageRecord!['created_at'] as DateTime
+            : DateTime.tryParse(messageRecord?['created_at']?.toString() ?? '') ?? DateTime.now(),
+      );
+
+      if (!mounted) return;
+      setState(() {
+        _selectedGroup?.messages.add(newMessage);
+        _messageController.clear();
+      });
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Unable to send message: $error')),
+      );
+    } finally {
+      if (!mounted) return;
+      setState(() {
+        _isSending = false;
+      });
+    }
+  }
+
+  Future<void> _selectGroup(_GroupChat group) async {
+    if (_selectedGroup?.id == group.id) return;
+    setState(() {
+      _selectedGroup = group;
+    });
+    await _loadGroupMessages(group.id);
+  }
+
+  void _showCreateGroup() {
+    final nameCtrl = TextEditingController();
+    final descCtrl = TextEditingController();
+    showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Create Group'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(controller: nameCtrl, decoration: const InputDecoration(labelText: 'Group name')),
+            const SizedBox(height: 8),
+            TextField(controller: descCtrl, decoration: const InputDecoration(labelText: 'Description')),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+          ElevatedButton(
+            onPressed: () async {
+              final name = nameCtrl.text.trim();
+              if (name.isEmpty) return;
+              final description = descCtrl.text.trim();
+              final user = Supabase.instance.client.auth.currentUser;
+              if (user == null) {
+                if (!mounted) return;
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Sign in to create a group.')),
+                );
+                return;
+              }
+
+              try {
+                final response = await Supabase.instance.client.from('group_chats').insert({
+                  'name': name,
+                  'description': description,
+                  'member_count': 1,
+                  'created_by': user.id,
+                }).select() as List<dynamic>?;
+
+                final inserted = List<Map<String, dynamic>>.from(response ?? []);
+                if (inserted.isNotEmpty) {
+                  final newGroup = _GroupChat(
+                    id: inserted.first['id'].toString(),
+                    name: name,
+                    description: description,
+                    memberCount: 1,
+                    messages: [],
+                  );
+                  if (!mounted) return;
+                  setState(() {
+                    _groups.insert(0, newGroup);
+                    _selectedGroup = newGroup;
+                  });
+                  await _loadGroupMessages(newGroup.id);
+                }
+                Navigator.pop(context);
+              } catch (error) {
+                if (!mounted) return;
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('Unable to create group: $error')),
+                );
+              }
+            },
+            child: const Text('Create'),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildGroupsList() {
-    return Column(
-      children: [
-        Expanded(
-          child: ListView.builder(
-            itemCount: _groups.length,
-            itemBuilder: (context, index) {
-              final group = _groups[index];
-              final isSelected = _selectedGroup?.id == group.id;
-              return _buildGroupTile(group, isSelected);
-            },
+  @override
+  Widget build(BuildContext context) {
+    final width = MediaQuery.of(context).size.width;
+    final isMobile = width < 800;
+
+    final filteredGroups = _searchQuery.isEmpty
+        ? _groups
+        : _groups.where((group) => group.name.toLowerCase().contains(_searchQuery.toLowerCase())).toList();
+
+    final groupList = _buildGroupsList(filteredGroups);
+
+    return VibeScaffold(
+      appBar: AppBar(
+        title: const Text('Group Chats'),
+        elevation: 0,
+        actions: [
+          IconButton(
+            tooltip: 'Create Group',
+            onPressed: _showCreateGroup,
+            icon: const Icon(Icons.add),
           ),
-        ),
-      ],
+        ],
+      ),
+      body: isMobile
+          ? Column(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: TextField(
+                    controller: _searchController,
+                    decoration: InputDecoration(
+                      hintText: 'Search groups...',
+                      prefixIcon: const Icon(Icons.search),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(16)),
+                    ),
+                  ),
+                ),
+                Expanded(
+                  child: filteredGroups.isEmpty
+                      ? _buildEmptyState()
+                      : Column(
+                          children: [
+                            Expanded(child: groupList),
+                            if (_selectedGroup != null)
+                              Expanded(child: _buildChatArea()),
+                          ],
+                        ),
+                ),
+              ],
+            )
+          : Row(
+              children: [
+                SizedBox(
+                  width: 320,
+                  child: Column(
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.all(12),
+                        child: TextField(
+                          controller: _searchController,
+                          decoration: InputDecoration(
+                            hintText: 'Search groups...',
+                            prefixIcon: const Icon(Icons.search),
+                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(16)),
+                          ),
+                        ),
+                      ),
+                      Expanded(child: groupList),
+                    ],
+                  ),
+                ),
+                const VerticalDivider(width: 1, color: Color(0xFFE0E0E0)),
+                Expanded(
+                  child: _selectedGroup == null ? _buildEmptyState() : _buildChatArea(),
+                ),
+              ],
+            ),
+    );
+  }
+
+  Widget _buildGroupsList(List<_GroupChat> groups) {
+    if (_isLoadingGroups) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    return ListView.separated(
+      padding: const EdgeInsets.all(12),
+      itemCount: groups.length,
+      separatorBuilder: (_, __) => const SizedBox(height: 8),
+      itemBuilder: (context, index) {
+        final group = groups[index];
+        final isSelected = _selectedGroup?.id == group.id;
+        return _buildGroupTile(group, isSelected);
+      },
     );
   }
 
   Widget _buildGroupTile(_GroupChat group, bool isSelected) {
     return Material(
-      color: isSelected ? Colors.grey[200] : Colors.transparent,
+      color: isSelected ? Colors.grey[100] : Colors.transparent,
       child: InkWell(
         onTap: () => _selectGroup(group),
         child: Container(
-          padding: const EdgeInsets.all(12),
+          padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(
             border: Border(
               left: isSelected
                   ? BorderSide(color: Theme.of(context).primaryColor, width: 4)
                   : BorderSide.none,
+            ),
+            color: isSelected ? Colors.white : null,
+            borderRadius: const BorderRadius.only(
+              topRight: Radius.circular(12),
+              bottomRight: Radius.circular(12),
             ),
           ),
           child: Column(
@@ -195,22 +415,19 @@ class _GroupChatsScreenState extends State<GroupChatsScreen> {
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
-                  fontWeight: FontWeight.w700,
-                  fontSize: 13,
-                  color: isSelected ? Theme.of(context).primaryColor : null,
+                  fontWeight: isSelected ? FontWeight.w800 : FontWeight.w700,
+                  fontSize: 14,
+                  color: isSelected ? Theme.of(context).primaryColor : Colors.black,
                 ),
               ),
-              const SizedBox(height: 4),
+              const SizedBox(height: 6),
               Text(
-                'By: ${group.lecturer}',
-                maxLines: 1,
+                group.description,
+                maxLines: 2,
                 overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  fontSize: 12,
-                  color: Colors.grey,
-                ),
+                style: const TextStyle(fontSize: 12, color: Colors.grey),
               ),
-              const SizedBox(height: 4),
+              const SizedBox(height: 6),
               Text(
                 '${group.memberCount} members',
                 style: const TextStyle(fontSize: 11, color: Colors.grey),
@@ -247,9 +464,9 @@ class _GroupChatsScreenState extends State<GroupChatsScreen> {
   }
 
   Widget _buildChatArea() {
+    final group = _selectedGroup!;
     return Column(
       children: [
-        // Group header
         Container(
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
@@ -265,7 +482,7 @@ class _GroupChatsScreenState extends State<GroupChatsScreen> {
                   CircleAvatar(
                     backgroundColor: Theme.of(context).primaryColor,
                     child: Text(
-                      _selectedGroup!.name[0],
+                      group.name.isNotEmpty ? group.name[0] : '?',
                       style: const TextStyle(color: Colors.white),
                     ),
                   ),
@@ -275,7 +492,7 @@ class _GroupChatsScreenState extends State<GroupChatsScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          _selectedGroup!.name,
+                          group.name,
                           style: const TextStyle(
                             fontWeight: FontWeight.w700,
                             fontSize: 16,
@@ -283,29 +500,14 @@ class _GroupChatsScreenState extends State<GroupChatsScreen> {
                         ),
                         const SizedBox(height: 4),
                         Text(
-                          'Created by ${_selectedGroup!.lecturer}',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: Colors.grey[600],
-                          ),
+                          'Members: ${group.memberCount}',
+                          style: TextStyle(fontSize: 12, color: Colors.grey[600]),
                         ),
                       ],
                     ),
                   ),
                   IconButton(
-                    tooltip: 'Image',
-                    onPressed: _pickImage,
-                    icon: const Icon(Icons.photo),
-                  ),
-                  IconButton(
-                    tooltip: 'File',
-                    onPressed: _pickFile,
-                    icon: const Icon(Icons.attach_file),
-                  ),
-                  IconButton(
-                    onPressed: () {
-                      _showGroupInfo();
-                    },
+                    onPressed: _showGroupInfo,
                     icon: const Icon(Icons.info_outline),
                   ),
                 ],
@@ -313,25 +515,25 @@ class _GroupChatsScreenState extends State<GroupChatsScreen> {
             ],
           ),
         ),
-        // Messages
         Expanded(
-          child: ListView.builder(
-            reverse: true,
-            itemCount: _selectedGroup!.messages.length,
-            itemBuilder: (context, index) {
-              final message =
-                  _selectedGroup!.messages[_selectedGroup!.messages.length - 1 - index];
-              return _buildMessageBubble(message);
-            },
-          ),
+          child: _isLoadingMessages
+              ? const Center(child: CircularProgressIndicator())
+              : group.messages.isEmpty
+                  ? const Center(child: Text('No messages yet. Start the conversation.'))
+                  : ListView.builder(
+                      reverse: true,
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      itemCount: group.messages.length,
+                      itemBuilder: (context, index) {
+                        final message = group.messages[group.messages.length - 1 - index];
+                        return _buildMessageBubble(message);
+                      },
+                    ),
         ),
-        // Input area
         Container(
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
-            border: Border(
-              top: BorderSide(color: Colors.grey[300]!),
-            ),
+            border: Border(top: BorderSide(color: Colors.grey[300]!)),
           ),
           child: Row(
             children: [
@@ -354,10 +556,19 @@ class _GroupChatsScreenState extends State<GroupChatsScreen> {
               ),
               const SizedBox(width: 8),
               FloatingActionButton(
-                onPressed: _sendMessage,
+                onPressed: _isSending ? null : _sendMessage,
                 mini: true,
                 backgroundColor: Theme.of(context).primaryColor,
-                child: const Icon(Icons.send, size: 18),
+                child: _isSending
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                        ),
+                      )
+                    : const Icon(Icons.send, size: 18),
               ),
             ],
           ),
@@ -367,7 +578,7 @@ class _GroupChatsScreenState extends State<GroupChatsScreen> {
   }
 
   Widget _buildMessageBubble(_Message message) {
-    final isYourMessage = message.sender == 'You';
+    final isYourMessage = message.senderName == 'You';
     return Align(
       alignment: isYourMessage ? Alignment.centerRight : Alignment.centerLeft,
       child: Padding(
@@ -376,109 +587,39 @@ class _GroupChatsScreenState extends State<GroupChatsScreen> {
           crossAxisAlignment:
               isYourMessage ? CrossAxisAlignment.end : CrossAxisAlignment.start,
           children: [
-            Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                if (!isYourMessage)
-                  Padding(
-                    padding: const EdgeInsets.only(right: 8),
-                    child: CircleAvatar(
-                      radius: 16,
-                      backgroundColor: message.isFromLecturer
-                          ? Colors.orange
-                          : Colors.grey[300],
-                      child: Text(
-                        message.sender[0],
-                        style: TextStyle(
-                          color: message.isFromLecturer
-                              ? Colors.white
-                              : Colors.black,
-                          fontWeight: FontWeight.w700,
-                          fontSize: 12,
-                        ),
-                      ),
+            if (!isYourMessage)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 4),
+                child: Text(
+                  message.senderName,
+                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
+                ),
+              ),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+              decoration: BoxDecoration(
+                color: isYourMessage ? Theme.of(context).primaryColor : Colors.grey[200],
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    message.content,
+                    style: TextStyle(
+                      color: isYourMessage ? Colors.white : Colors.black87,
                     ),
                   ),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 14,
-                      vertical: 10,
-                    ),
-                    decoration: BoxDecoration(
-                      color: isYourMessage
-                          ? Theme.of(context).primaryColor
-                          : Colors.grey[200],
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                    constraints: BoxConstraints(
-                      maxWidth: MediaQuery.of(context).size.width * 0.6,
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        if (message.attachment != null) ...[
-                          if (message.attachment!.isImage && message.attachment!.path != null && !kIsWeb)
-                            GestureDetector(
-                              onTap: () => showDialog<void>(
-                                context: context,
-                                builder: (_) => Dialog(
-                                  child: Image.file(File(message.attachment!.path!)),
-                                ),
-                              ),
-                              child: ClipRRect(
-                                borderRadius: BorderRadius.circular(10),
-                                child: Image.file(
-                                  File(message.attachment!.path!),
-                                  width: 160,
-                                  height: 110,
-                                  fit: BoxFit.cover,
-                                ),
-                              ),
-                            )
-                          else
-                            Row(
-                              children: [
-                                const Icon(Icons.insert_drive_file, size: 28),
-                                const SizedBox(width: 8),
-                                Expanded(child: Text(message.attachment!.name, style: TextStyle(color: isYourMessage ? Colors.white : Colors.black))),
-                                IconButton(
-                                  icon: const Icon(Icons.download_rounded),
-                                  color: isYourMessage ? Colors.white : Colors.black54,
-                                  onPressed: () async {
-                                    final path = message.attachment!.path;
-                                    if (path != null && path.isNotEmpty && File(path).existsSync()) {
-                                      try {
-                                        await Share.shareXFiles([XFile(path)], text: message.attachment!.name);
-                                      } catch (_) {
-                                        if (!mounted) return;
-                                        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Unable to share file')));
-                                      }
-                                    } else {
-                                      if (!mounted) return;
-                                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('File not available')));
-                                    }
-                                  },
-                                )
-                              ],
-                            ),
-                          const SizedBox(height: 8),
-                        ],
-                        if (message.content.isNotEmpty)
-                          Text(
-                            message.content,
-                            style: TextStyle(
-                              color: isYourMessage ? Colors.white : Colors.black,
-                            ),
-                          ),
-                      ],
+                  const SizedBox(height: 6),
+                  Text(
+                    _formatTime(message.createdAt),
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: isYourMessage ? Colors.white70 : Colors.black54,
                     ),
                   ),
-              ],
-            ),
-            const SizedBox(height: 4),
-            Text(
-              _formatTime(message.timestamp),
-              style: const TextStyle(fontSize: 11, color: Colors.grey),
+                ],
+              ),
             ),
           ],
         ),
@@ -502,6 +643,7 @@ class _GroupChatsScreenState extends State<GroupChatsScreen> {
   }
 
   void _showGroupInfo() {
+    if (_selectedGroup == null) return;
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -516,11 +658,6 @@ class _GroupChatsScreenState extends State<GroupChatsScreen> {
             ),
             const SizedBox(height: 12),
             Text(
-              'Created by: ${_selectedGroup!.lecturer}',
-              style: const TextStyle(fontWeight: FontWeight.w600),
-            ),
-            const SizedBox(height: 12),
-            Text(
               'Description: ${_selectedGroup!.description}',
               style: const TextStyle(fontWeight: FontWeight.w600),
             ),
@@ -528,26 +665,6 @@ class _GroupChatsScreenState extends State<GroupChatsScreen> {
             Text(
               'Members: ${_selectedGroup!.memberCount}',
               style: const TextStyle(fontWeight: FontWeight.w600),
-            ),
-            const SizedBox(height: 12),
-            Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: Colors.orange[100],
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: const Row(
-                children: [
-                  Icon(Icons.info, size: 16, color: Colors.orange),
-                  SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      'Anyone (students or lecturers) can create and manage groups here. Be respectful and follow class rules.',
-                      style: TextStyle(fontSize: 12),
-                    ),
-                  ),
-                ],
-              ),
             ),
           ],
         ),
@@ -560,88 +677,36 @@ class _GroupChatsScreenState extends State<GroupChatsScreen> {
       ),
     );
   }
-
-  void _showCreateGroup() {
-    final nameCtrl = TextEditingController();
-    final descCtrl = TextEditingController();
-    showDialog<void>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Create Group'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(controller: nameCtrl, decoration: const InputDecoration(labelText: 'Group name')),
-            const SizedBox(height: 8),
-            TextField(controller: descCtrl, decoration: const InputDecoration(labelText: 'Description')),
-          ],
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
-          ElevatedButton(
-            onPressed: () {
-              final name = nameCtrl.text.trim();
-              if (name.isEmpty) return;
-              final group = _GroupChat(
-                id: DateTime.now().millisecondsSinceEpoch.toString(),
-                name: name,
-                lecturer: 'You',
-                description: descCtrl.text.trim(),
-                memberCount: 1,
-                messages: [],
-              );
-              setState(() {
-                _groups.insert(0, group);
-                _selectedGroup = group;
-              });
-              Navigator.pop(context);
-            },
-            child: const Text('Create'),
-          ),
-        ],
-      ),
-    );
-  }
 }
 
 class _GroupChat {
-  final String id;
-  final String name;
-  final String lecturer;
-  final String description;
-  final int memberCount;
-  final List<_Message> messages;
-
   _GroupChat({
     required this.id,
     required this.name,
-    required this.lecturer,
     required this.description,
     required this.memberCount,
     required this.messages,
   });
+
+  final String id;
+  final String name;
+  final String description;
+  final int memberCount;
+  final List<_Message> messages;
 }
 
 class _Message {
-  final String sender;
-  final String content;
-  final DateTime timestamp;
-  final bool isFromLecturer;
-  final _Attachment? attachment;
-
   _Message({
-    required this.sender,
+    required this.id,
+    required this.senderId,
+    required this.senderName,
     required this.content,
-    required this.timestamp,
-    required this.isFromLecturer,
-    this.attachment,
+    required this.createdAt,
   });
-}
 
-class _Attachment {
-  final String? path; // local path
-  final String name;
-  final bool isImage;
-
-  _Attachment({this.path, required this.name, this.isImage = false});
+  final String id;
+  final String senderId;
+  final String senderName;
+  final String content;
+  final DateTime createdAt;
 }

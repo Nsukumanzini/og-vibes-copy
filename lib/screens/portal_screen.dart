@@ -17,6 +17,8 @@ class _PortalScreenState extends State<PortalScreen> {
 
   late final WebViewController _controller;
   double _progress = 0;
+  bool _canGoBack = false;
+  bool _canGoForward = false;
   final List<String> _historyLog = <String>[];
 
   @override
@@ -30,16 +32,40 @@ class _PortalScreenState extends State<PortalScreen> {
           onProgress: (value) {
             setState(() => _progress = (value.clamp(0, 100) / 100));
           },
-          onPageFinished: (url) {
+          onPageFinished: (url) async {
+            if (!mounted) return;
+            await _updateNavigationState();
             setState(() {
               _progress = 1;
               _historyLog.add(url);
             });
             _applyPortalReadabilityStyles();
           },
+          onNavigationRequest: (request) {
+            if (!request.url.startsWith('https://')) {
+              return NavigationDecision.prevent;
+            }
+            return NavigationDecision.navigate;
+          },
+          onWebResourceError: (error) {
+            if (!mounted) return;
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('Portal load failed: ${error.errorCode}')),
+            );
+          },
         ),
       )
       ..loadRequest(Uri.parse(_initialUrl));
+  }
+
+  Future<void> _updateNavigationState() async {
+    final canGoBack = await _controller.canGoBack();
+    final canGoForward = await _controller.canGoForward();
+    if (!mounted) return;
+    setState(() {
+      _canGoBack = canGoBack;
+      _canGoForward = canGoForward;
+    });
   }
 
   void _applyPortalReadabilityStyles() {
@@ -185,44 +211,71 @@ class _PortalScreenState extends State<PortalScreen> {
       right: 20,
       bottom: 20,
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
         decoration: BoxDecoration(
-          color: Colors.white.withValues(alpha: 0.12),
-          borderRadius: BorderRadius.circular(28),
-          border: Border.all(color: Colors.white.withValues(alpha: 0.2)),
+          color: Colors.white.withValues(alpha: 0.16),
+          borderRadius: BorderRadius.circular(24),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.24)),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withValues(alpha: 0.3),
-              blurRadius: 20,
-              offset: const Offset(0, 10),
+              color: Colors.black.withValues(alpha: 0.18),
+              blurRadius: 16,
+              offset: const Offset(0, 8),
             ),
           ],
         ),
         child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            IconButton(
-              tooltip: 'Back',
-              icon: const Icon(Icons.arrow_back, color: Colors.white),
+            _portalButton(
+              icon: Icons.arrow_back,
+              label: 'Back',
+              enabled: _canGoBack,
               onPressed: _goBack,
             ),
-            IconButton(
-              tooltip: 'Refresh',
-              icon: const Icon(Icons.refresh, color: Colors.white),
+            const SizedBox(width: 8),
+            _portalButton(
+              icon: Icons.refresh,
+              label: 'Refresh',
+              enabled: true,
               onPressed: _controller.reload,
             ),
-            IconButton(
-              tooltip: 'Forward',
-              icon: const Icon(Icons.arrow_forward, color: Colors.white),
+            const SizedBox(width: 8),
+            _portalButton(
+              icon: Icons.arrow_forward,
+              label: 'Forward',
+              enabled: _canGoForward,
               onPressed: _goForward,
             ),
-            IconButton(
-              tooltip: 'Home',
-              icon: const Icon(Icons.home_filled, color: Colors.white),
+            const Spacer(),
+            _portalButton(
+              icon: Icons.home_filled,
+              label: 'Portal',
+              enabled: true,
               onPressed: () => _controller.loadRequest(Uri.parse(_initialUrl)),
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _portalButton({
+    required IconData icon,
+    required String label,
+    required bool enabled,
+    required VoidCallback onPressed,
+  }) {
+    return Expanded(
+      child: TextButton.icon(
+        style: TextButton.styleFrom(
+          padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
+          backgroundColor: enabled ? Colors.white.withValues(alpha: 0.2) : Colors.white10,
+          foregroundColor: Colors.white,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        ),
+        icon: Icon(icon, size: 18),
+        label: Text(label, style: const TextStyle(fontSize: 12)),
+        onPressed: enabled ? onPressed : null,
       ),
     );
   }
