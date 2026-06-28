@@ -267,7 +267,7 @@ class _CommentSheetState extends State<CommentSheet> {
     try {
       final res = await Supabase.instance.client
           .from('comments')
-          .select('*, profiles(name, surname, photo_url)')
+          .select('*, profiles(name, surname, nickname, photo_url)')
           .eq('post_id', widget.postId)
           .order('created_at', ascending: true);
 
@@ -285,6 +285,12 @@ class _CommentSheetState extends State<CommentSheet> {
 
   String _extractCommentAuthorName(Map<String, dynamic>? profile) {
     if (profile == null) return 'OG Vibester';
+
+    final nickname = (profile['nickname'] as String?)?.trim();
+    if (nickname != null && nickname.isNotEmpty) {
+      return nickname;
+    }
+
     final name = (profile['name'] as String?)?.trim();
     final surname = (profile['surname'] as String?)?.trim();
     if ((name?.isNotEmpty ?? false) && (surname?.isNotEmpty ?? false)) {

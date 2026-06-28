@@ -82,15 +82,15 @@ class _MessagesScreenState extends State<MessagesScreen> {
       final profileRaw = await Supabase.instance.client
           .from('profiles')
           .select('id, name, surname, photo_url')
-          .in_('id', peerIds.toList()) as List<dynamic>?;
+          .inFilter('id', peerIds.toList()) as List<dynamic>?;
 
-      final profileList = List<Map<String, dynamic>>.from(profileRaw ?? []);
-      for (final profile in profileList) {
+      for (final profile in profileRaw ?? []) {
         final id = (profile['id'] as String?)?.trim();
         if (id == null || !conversationMap.containsKey(id)) continue;
 
         final displayName = [profile['name'], profile['surname']]
-            .where((element) => element is String && (element as String).trim().isNotEmpty)
+            .whereType<String>()
+            .where((element) => element.trim().isNotEmpty)
             .join(' ')
             .trim();
         final chat = conversationMap[id]!;

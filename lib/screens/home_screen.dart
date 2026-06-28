@@ -52,6 +52,8 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _isLoadingPosts = true;
   List<Map<String, dynamic>> _posts = [];
   StreamSubscription<List<Map<String, dynamic>>>? _postSubscription;
+  StreamSubscription<List<Map<String, dynamic>>>? _likesSubscription;
+  StreamSubscription<List<Map<String, dynamic>>>? _commentsSubscription;
 
   @override
   void initState() {
@@ -73,7 +75,7 @@ class _HomeScreenState extends State<HomeScreen> {
     try {
       final data = await Supabase.instance.client
           .from('posts')
-          .select('*, profiles(name, surname, photo_url, campus, department)')
+          .select('*, profiles(name, surname, nickname, photo_url, campus, department), comments(id)')
           .eq('is_deleted', false)
           .order('created_at', ascending: false)
           .limit(_postLimit);
@@ -95,6 +97,8 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void dispose() {
     _postSubscription?.cancel();
+    _likesSubscription?.cancel();
+    _commentsSubscription?.cancel();
     _scrollController.removeListener(_handleScroll);
     _scrollController.dispose();
     super.dispose();
@@ -108,20 +112,31 @@ class _HomeScreenState extends State<HomeScreen> {
     _postSubscription = Supabase.instance.client
         .from('posts')
         .stream(primaryKey: ['id'])
-        .listen((rows) {
-          if (!mounted) return;
-          setState(() {
-            _posts = rows
-                .map((row) => Map<String, dynamic>.from(row))
-                .toList();
-            _isLoadingPosts = false;
-          });
-        }, onError: (_) {
-          if (!mounted) return;
-          setState(() {
-            _isLoadingPosts = false;
-          });
-        });
+        .listen((_) {
+      if (!mounted) return;
+      _loadPosts();
+    }, onError: (_) {
+      if (!mounted) return;
+      setState(() {
+        _isLoadingPosts = false;
+      });
+    });
+
+    _likesSubscription = Supabase.instance.client
+        .from('post_likes')
+        .stream(primaryKey: ['id'])
+        .listen((_) {
+      if (!mounted) return;
+      _loadPosts();
+    });
+
+    _commentsSubscription = Supabase.instance.client
+        .from('comments')
+        .stream(primaryKey: ['id'])
+        .listen((_) {
+      if (!mounted) return;
+      _loadPosts();
+    });
   }
 
   Future<void> _handleScroll() async {

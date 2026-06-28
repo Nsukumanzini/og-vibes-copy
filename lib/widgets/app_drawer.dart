@@ -20,6 +20,7 @@ class AppDrawer extends StatefulWidget {
 
 class _AppDrawerState extends State<AppDrawer> {
   bool _isExamMode = false;
+  String? _userNickname;
   String _userName = 'OG Vibester';
   String _userCampus = 'Campus Unknown';
   String _userCourse = 'General Studies';
@@ -40,15 +41,18 @@ class _AppDrawerState extends State<AppDrawer> {
     try {
       final data = await Supabase.instance.client
           .from('profiles')
-          .select('name, campus, department, photo_url')
+          .select('nickname, name, campus, department, photo_url')
           .eq('id', user.id)
           .single();
       if (!mounted) return;
       final map = data as Map<String, dynamic>?;
       setState(() {
-        _userName = (map?['name'] as String?)?.trim().isNotEmpty == true
-            ? map!['name'] as String
-            : (user.email?.split('@').first ?? 'OG Vibester');
+        _userNickname = (map?['nickname'] as String?)?.trim();
+        _userName = (_userNickname?.isNotEmpty == true)
+            ? _userNickname!
+            : (map?['name'] as String?)?.trim().isNotEmpty == true
+                ? map!['name'] as String
+                : (user.email?.split('@').first ?? 'OG Vibester');
         _userCampus = (map?['campus'] as String?)?.trim().isNotEmpty == true
             ? map!['campus'] as String
             : 'Campus Unknown';
@@ -77,69 +81,82 @@ class _AppDrawerState extends State<AppDrawer> {
       backgroundColor: const Color(0xFF0A0E21),
       child: Column(
         children: [
-          DrawerHeader(
-            decoration: const BoxDecoration(color: Color(0xFF0A0E21)),
-            margin: EdgeInsets.zero,
-            padding: const EdgeInsets.fromLTRB(16, 32, 16, 16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    CircleAvatar(
-                      radius: 35,
-                      backgroundColor: Colors.white24,
-                      backgroundImage: _photoUrl != null
-                          ? NetworkImage(_photoUrl!)
-                          : null,
-                      child: _photoUrl == null
-                          ? Text(
-                              _userName.isNotEmpty
-                                  ? _userName[0].toUpperCase()
-                                  : 'O',
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 24, 16, 12),
+            child: Material(
+              color: Colors.white.withOpacity(0.08),
+              borderRadius: BorderRadius.circular(20),
+              child: InkWell(
+                borderRadius: BorderRadius.circular(20),
+                onTap: () {
+                  Navigator.of(context).pop();
+                  Navigator.of(context).push(
+                    MaterialPageRoute(builder: (_) => const ProfileScreen()),
+                  );
+                },
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                  child: Row(
+                    children: [
+                      CircleAvatar(
+                        radius: 30,
+                        backgroundColor: Colors.white24,
+                        backgroundImage: _photoUrl != null ? NetworkImage(_photoUrl!) : null,
+                        child: _photoUrl == null
+                            ? Text(
+                                _userName.isNotEmpty ? _userName[0].toUpperCase() : 'O',
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 22,
+                                ),
+                              )
+                            : null,
+                      ),
+                      const SizedBox(width: 14),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              _userName,
                               style: const TextStyle(
                                 color: Colors.white,
-                                fontWeight: FontWeight.bold,
-                                fontSize: 24,
+                                fontSize: 18,
+                                fontWeight: FontWeight.w700,
                               ),
-                            )
-                          : null,
-                    ),
-                    const SizedBox(width: 15),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            _userName,
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
                             ),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            _userCampus,
-                            style: const TextStyle(
-                              color: Colors.white70,
-                              fontSize: 14,
+                            const SizedBox(height: 4),
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: Text(
+                                    _userCourse,
+                                    style: const TextStyle(
+                                      color: Colors.white70,
+                                      fontSize: 13,
+                                    ),
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                              ],
                             ),
-                          ),
-                          const SizedBox(height: 8),
-                          Chip(
-                            backgroundColor: Colors.white24,
-                            label: Text(
-                              _userCourse,
-                              style: const TextStyle(color: Colors.white),
+                            const SizedBox(height: 4),
+                            Text(
+                              _userCampus,
+                              style: const TextStyle(
+                                color: Colors.white54,
+                                fontSize: 12,
+                              ),
                             ),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
-                    ),
-                  ],
+                      const Icon(Icons.arrow_forward_ios, color: Colors.white70, size: 18),
+                    ],
+                  ),
                 ),
-              ],
+              ),
             ),
           ),
           Expanded(
@@ -168,7 +185,7 @@ class _AppDrawerState extends State<AppDrawer> {
                     color: Colors.white70,
                   ),
                   title: const Text(
-                    '🔔 Notification Manager',
+                    'Notification Settings',
                     style: TextStyle(color: Colors.white),
                   ),
                   onTap: () {
@@ -180,6 +197,7 @@ class _AppDrawerState extends State<AppDrawer> {
                     );
                   },
                 ),
+                const Divider(color: Colors.white24),
                 ListTile(
                   leading: const Icon(
                     Icons.phone_in_talk,
@@ -222,7 +240,7 @@ class _AppDrawerState extends State<AppDrawer> {
                     color: Colors.white70,
                   ),
                   title: const Text(
-                    '💡 Suggest a Feature',
+                    'Suggest an Idea',
                     style: TextStyle(color: Colors.white),
                   ),
                   onTap: () {

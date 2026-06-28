@@ -27,6 +27,7 @@ class AuthService {
     required String level,
     required String studentType,
     required String gender,
+    String? nickname,
     String? studentNumber,
     String? timeZoneName,
     String? timeZoneOffset,
@@ -41,6 +42,7 @@ class AuthService {
         data: {
           'name': name.trim(),
           'surname': surname.trim(),
+          if (nickname != null && nickname.isNotEmpty) 'nickname': nickname.trim(),
           'campus': campus,
           'department': department,
           'level': level,
@@ -64,6 +66,25 @@ class AuthService {
     }
 
     final user = response.user ?? response.session?.user ?? Supabase.instance.client.auth.currentUser;
+    if (user != null) {
+      try {
+        await Supabase.instance.client.from('profiles').upsert(
+          {
+            'id': user.id,
+            'name': name.trim(),
+            'surname': surname.trim(),
+            if (nickname != null && nickname.isNotEmpty) 'nickname': nickname.trim(),
+            'campus': campus,
+            'department': department,
+            'level': level,
+          },
+          onConflict: 'id',
+        );
+      } catch (_) {
+        // Ignore profile upsert failures here; signup should still proceed.
+      }
+    }
+
     final needsVerification = user?.emailConfirmedAt == null;
     return AuthResult(response: _AuthResponseWrapper(user), needsVerification: needsVerification);
   }

@@ -72,6 +72,9 @@ class _PostCardState extends State<PostCard> {
     final authorPhoto = _extractAuthorPhoto(data);
     final authorCampus = _extractAuthorCampus(data) ?? campus;
     final authorDepartment = _extractAuthorDepartment(data) ?? department;
+    final commentCount = data['comments'] is List
+        ? (data['comments'] as List).length
+        : (data['comments_count'] as int?) ?? 0;
 
     final images = _extractImages(data);
     final imageCount = images.length;
@@ -91,14 +94,14 @@ class _PostCardState extends State<PostCard> {
 
     final textTheme = Theme.of(context).textTheme;
     final colorScheme = Theme.of(context).colorScheme;
-    // Use OG Vibes Blue as card background for strong contrast
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
-        color: const Color(0xFF2962FF), // OG Vibes Blue
-        borderRadius: BorderRadius.circular(16),
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: Colors.grey.shade200),
         boxShadow: const [
-          BoxShadow(color: Colors.black12, blurRadius: 8, offset: Offset(0, 4)),
+          BoxShadow(color: Colors.black12, blurRadius: 12, offset: Offset(0, 6)),
         ],
       ),
       child: Padding(
@@ -131,6 +134,7 @@ class _PostCardState extends State<PostCard> {
             _buildFooter(
               likeCount: _likeCount,
               hasLiked: _hasLiked,
+              commentCount: commentCount,
               postId: postId,
               data: data,
               textTheme: textTheme,
@@ -403,6 +407,7 @@ class _PostCardState extends State<PostCard> {
   Widget _buildFooter({
     required int likeCount,
     required bool hasLiked,
+    required int commentCount,
     required String postId,
     required Map<String, dynamic> data,
     required TextTheme textTheme,
@@ -425,13 +430,8 @@ class _PostCardState extends State<PostCard> {
             ),
             _ActionButton(
               icon: Icons.chat_bubble_outline,
-              label: 'Comment',
+              label: commentCount == 0 ? 'Comment' : 'Comment ($commentCount)',
               onTap: () => _openComments(postId),
-            ),
-            _ActionButton(
-              icon: Icons.share,
-              label: 'Share',
-              onTap: () => _sharePost(data),
             ),
           ],
         ),
@@ -532,17 +532,6 @@ class _PostCardState extends State<PostCard> {
     });
   }
 
-  void _sharePost(Map<String, dynamic> data) {
-    final content = (data['content'] as String?)?.trim();
-    final campus = data['campus'] as String? ?? 'campus';
-    final sharePreview = content != null && content.isNotEmpty
-        ? content
-        : 'A vibe from $campus';
-
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text('Share coming soon: $sharePreview')));
-  }
 
   List<String> _extractImages(Map<String, dynamic> data) {
     final images = <String>[];
@@ -644,6 +633,8 @@ class _PostCardState extends State<PostCard> {
   String? _extractAuthorName(Map<String, dynamic> data) {
     final profiles = data['profiles'];
     if (profiles is Map) {
+      final nickname = ((profiles['nickname'] ?? '') as String).trim();
+      if (nickname.isNotEmpty) return nickname;
       final name = (profiles['name'] as String?)?.trim();
       final surname = (profiles['surname'] as String?)?.trim();
       final full = [if (name != null && name.isNotEmpty) name, if (surname != null && surname.isNotEmpty) surname].join(' ');

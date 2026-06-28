@@ -2,7 +2,9 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
+import 'package:og_vibes_student/models/lost_and_found_item.dart';
 import 'package:og_vibes_student/widgets/vibe_scaffold.dart';
 
 class LostAndFoundScreen extends StatefulWidget {
@@ -14,27 +16,51 @@ class LostAndFoundScreen extends StatefulWidget {
 
 class _LostAndFoundScreenState extends State<LostAndFoundScreen> {
   final ImagePicker _picker = ImagePicker();
-
-  final List<_FoundItem> _foundItems = <_FoundItem>[
-    const _FoundItem(
-      title: 'Student ID Card - Sipho Ndlovu',
-      foundAt: 'Library',
-      collectAt: 'Admin Desk',
-      requirements: 'ID copy or proof of registration',
-      icon: Icons.badge_outlined,
-      color: Color(0xFF1565C0),
-    ),
-    const _FoundItem(
-      title: 'Black Casio Calculator',
-      foundAt: 'IT Lab 2',
-      collectAt: 'Security Gate',
-      requirements: 'Describe serial or bring ID',
-      icon: Icons.calculate_outlined,
-      color: Color(0xFF455A64),
-    ),
-  ];
-
+  final List<LostAndFoundItem> _foundItems = <LostAndFoundItem>[];
+  bool _isLoading = true;
+  String? _errorMessage;
   int? _expandedIndex;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadItems();
+  }
+
+  Future<void> _loadItems() async {
+    if (!mounted) return;
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
+
+    try {
+      final response = await Supabase.instance.client
+          .from('lost_and_found_items')
+          .select('id, title, found_at, collect_at, requirements, image_url, status, created_at')
+          .eq('status', 'active')
+          .order('created_at', ascending: false);
+
+      final raw = response as List<dynamic>? ?? [];
+      final items = raw
+          .map((item) => LostAndFoundItem.fromRow(Map<String, dynamic>.from(item as Map)))
+          .toList();
+
+      if (!mounted) return;
+      setState(() {
+        _foundItems
+          ..clear()
+          ..addAll(items);
+        _isLoading = false;
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _isLoading = false;
+        _errorMessage = error.toString();
+      });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -58,11 +84,46 @@ class _LostAndFoundScreenState extends State<LostAndFoundScreen> {
   }
 
   Widget _buildFoundItemsTab() {
-    return ListView.builder(
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 110),
-      itemCount: _foundItems.length,
-      itemBuilder: (BuildContext context, int index) {
-        final _FoundItem item = _foundItems[index];
+    if (_isLoading) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    if (_errorMessage != null) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.error_outline, size: 48, color: Colors.redAccent),
+              const SizedBox(height: 12),
+              const Text('Could not load lost & found items.'),
+              const SizedBox(height: 8),
+              Text(_errorMessage!, textAlign: TextAlign.center),
+              const SizedBox(height: 16),
+              ElevatedButton(onPressed: _loadItems, child: const Text('Retry')),
+            ],
+          ),
+        ),
+      );
+    }
+
+    if (_foundItems.isEmpty) {
+      return const Center(
+        child: Padding(
+          padding: EdgeInsets.all(24),
+          child: Text('No lost & found items yet. Report one above.'),
+        ),
+      );
+    }
+
+    return RefreshIndicator(
+      onRefresh: _loadItems,
+      child: ListView.builder(
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 110),
+        itemCount: _foundItems.length,
+        itemBuilder: (BuildContext context, int index) {
+          final LostAndFoundItem item = _foundItems[index];
         final bool expanded = _expandedIndex == index;
 
         return Container(
@@ -104,7 +165,12 @@ class _LostAndFoundScreenState extends State<LostAndFoundScreen> {
                               borderRadius: BorderRadius.circular(6),
                               child: Image.memory(item.imageBytes!, width: 48, height: 48, fit: BoxFit.cover),
                             )
-                          : Icon(item.icon, color: item.color),
+                          : item.imageUrl != null && item.imageUrl!.isNotEmpty
+                              ? ClipRRect(
+                                  borderRadius: BorderRadius.circular(6),
+                                  child: Image.network(item.imageUrl!, width: 48, height: 48, fit: BoxFit.cover),
+                                )
+                              : Icon(item.icon, color: item.color),
                     ),
                     const SizedBox(width: 10),
                     Expanded(
@@ -173,10 +239,10 @@ class _LostAndFoundScreenState extends State<LostAndFoundScreen> {
           ),
         );
       },
-    );
+    ));
   }
 
-  void _openClaimDialog(_FoundItem item) {
+  void _openClaimDialog(LostAndFoundItem item) {
     final claimantCtrl = TextEditingController();
     final proofCtrl = TextEditingController();
 
@@ -282,25 +348,58 @@ class _LostAndFoundScreenState extends State<LostAndFoundScreen> {
                 SizedBox(
                   width: double.infinity,
                   child: ElevatedButton(
-                    onPressed: () {
-                      final item = _FoundItem(
-                        title: titleCtrl.text.isEmpty ? 'Untitled Item' : titleCtrl.text,
-                        foundAt: foundAtCtrl.text.isEmpty ? 'Unknown' : foundAtCtrl.text,
-                        collectAt: collectAtCtrl.text.isEmpty ? 'Admin Desk' : collectAtCtrl.text,
-                        requirements: requirementsCtrl.text.isEmpty ? 'ID or proof of ownership' : requirementsCtrl.text,
-                        icon: Icons.inventory_2_outlined,
-                        color: Colors.teal,
-                        imageBytes: preview,
-                      );
+                    onPressed: () async {
+                      final sheetContext = context;
+                      final sheetMessenger = ScaffoldMessenger.of(sheetContext);
+                      final user = Supabase.instance.client.auth.currentUser;
+                      if (user == null) {
+                        sheetMessenger.showSnackBar(
+                          const SnackBar(content: Text('Please sign in before reporting an item.')),
+                        );
+                        return;
+                      }
 
-                      setState(() => _foundItems.insert(0, item));
-                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Item reported — it appears in Found Items')));
-                      // clear fields
-                      titleCtrl.clear();
-                      foundAtCtrl.clear();
-                      collectAtCtrl.clear();
-                      requirementsCtrl.clear();
-                      setState(() => preview = null);
+                      final title = titleCtrl.text.trim();
+                      final foundAt = foundAtCtrl.text.trim();
+                      final collectAt = collectAtCtrl.text.trim();
+                      final requirements = requirementsCtrl.text.trim();
+
+                      try {
+                        String? imageUrl;
+                        if (preview != null) {
+                          final fileName = 'lost_and_found/${user.id}/${DateTime.now().millisecondsSinceEpoch}.jpg';
+                          await Supabase.instance.client.storage.from('lost-and-found').uploadBinary(fileName, preview!);
+                          final signedUrl = await Supabase.instance.client.storage.from('lost-and-found').createSignedUrl(fileName, 60 * 60 * 24 * 365);
+                          imageUrl = signedUrl;
+                        }
+
+                        await Supabase.instance.client.from('lost_and_found_items').insert({
+                          'user_id': user.id,
+                          'title': title.isEmpty ? 'Untitled item' : title,
+                          'found_at': foundAt.isEmpty ? 'Unknown' : foundAt,
+                          'collect_at': collectAt.isEmpty ? 'Admin Desk' : collectAt,
+                          'requirements': requirements.isEmpty ? 'Bring ID or proof of ownership' : requirements,
+                          'image_url': imageUrl,
+                          'status': 'active',
+                          'created_at': DateTime.now().toIso8601String(),
+                        });
+
+                        if (!mounted) return;
+                        await _loadItems();
+                        sheetMessenger.showSnackBar(
+                          const SnackBar(content: Text('Item reported — it appears in Found Items')),
+                        );
+                        titleCtrl.clear();
+                        foundAtCtrl.clear();
+                        collectAtCtrl.clear();
+                        requirementsCtrl.clear();
+                        setState(() => preview = null);
+                      } catch (error) {
+                        if (!mounted) return;
+                        sheetMessenger.showSnackBar(
+                          SnackBar(content: Text('Failed to report item: $error')),
+                        );
+                      }
                     },
                     child: const Text('Report Item'),
                   ),
@@ -312,24 +411,4 @@ class _LostAndFoundScreenState extends State<LostAndFoundScreen> {
       );
     });
   }
-}
-
-class _FoundItem {
-  const _FoundItem({
-    required this.title,
-    required this.foundAt,
-    required this.collectAt,
-    required this.requirements,
-    required this.icon,
-    required this.color,
-    this.imageBytes,
-  });
-
-  final String title;
-  final String foundAt;
-  final String collectAt;
-  final String requirements;
-  final IconData icon;
-  final Color color;
-  final Uint8List? imageBytes;
 }

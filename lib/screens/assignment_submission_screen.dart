@@ -215,8 +215,8 @@ class _AssignmentSubmissionScreenState
         'submitted_at': DateTime.now().toIso8601String(),
       });
 
-      if (!mounted) return;
       await _loadSubmissions();
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           backgroundColor: Color(0xFF2E7D32),
@@ -232,10 +232,11 @@ class _AssignmentSubmissionScreenState
         SnackBar(content: Text('Upload failed: $error')),
       );
     } finally {
-      if (!mounted) return;
-      setState(() {
-        _isLoading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
     }
   }
 
@@ -305,7 +306,7 @@ class _AssignmentSubmissionScreenState
             child: ListView.separated(
               scrollDirection: Axis.horizontal,
               itemCount: _levelOptions.length,
-              separatorBuilder: (_, __) => const SizedBox(width: 8),
+              separatorBuilder: (_, _) => const SizedBox(width: 8),
               itemBuilder: (context, index) {
                 final level = _levelOptions[index];
                 final selected = level == _selectedLevel;
@@ -354,7 +355,7 @@ class _AssignmentSubmissionScreenState
     return ListView.separated(
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 100),
       itemCount: items.length,
-      separatorBuilder: (_, __) => const SizedBox(height: 12),
+      separatorBuilder: (_, _) => const SizedBox(height: 12),
       itemBuilder: (context, index) {
         final item = items[index];
         return _SubmissionCard(
@@ -398,7 +399,7 @@ class _AssignmentSubmissionScreenState
     return ListView.separated(
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 100),
       itemCount: items.length,
-      separatorBuilder: (_, __) => const SizedBox(height: 12),
+      separatorBuilder: (_, _) => const SizedBox(height: 12),
       itemBuilder: (context, index) {
         final item = items[index];
         return _SubmissionCard(
@@ -444,7 +445,7 @@ class _AssignmentSubmissionScreenState
     return ListView.separated(
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 100),
       itemCount: items.length,
-      separatorBuilder: (_, __) => const SizedBox(height: 12),
+      separatorBuilder: (_, _) => const SizedBox(height: 12),
       itemBuilder: (context, index) {
         final item = items[index];
         return _SubmissionCard(
@@ -734,4 +735,5 @@ class _SubmissionItem {
       documentUrl: row['document_url']?.toString(),
       submittedAt: submittedAt,
       grade: row['grade']?.toString(),
-      feedback: row['feedback']?.toString(),
+      feedback: row['feedback']?.toString());
+  }}

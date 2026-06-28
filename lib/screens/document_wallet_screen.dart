@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'package:og_vibes_student/widgets/vibe_scaffold.dart';
 
@@ -16,8 +17,55 @@ class DocumentWalletScreen extends StatefulWidget {
 }
 
 class _DocumentWalletScreenState extends State<DocumentWalletScreen> {
-  final List<_WalletDocument> _documents = [];
-  
+  final List<WalletDocument> _documents = [];
+  bool _isLoading = true;
+  String? _errorMessage;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadDocuments();
+  }
+
+  Future<void> _loadDocuments() async {
+    final user = Supabase.instance.client.auth.currentUser;
+    if (user == null) {
+      if (!mounted) return;
+      setState(() {
+        _isLoading = false;
+        _errorMessage = 'Please sign in to view your document wallet.';
+      });
+      return;
+    }
+
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
+
+    try {
+      final response = await Supabase.instance.client
+          .from('student_documents')
+          .select('id, title, description, file_name, file_url, file_type, uploaded_at')
+          .eq('user_id', user.id)
+          .order('uploaded_at', ascending: false);
+
+      final rows = List<Map<String, dynamic>>.from(response as List<dynamic>);
+      if (!mounted) return;
+      setState(() {
+        _documents
+          ..clear()
+          ..addAll(rows.map(mapDocumentRowToWalletDocument));
+        _isLoading = false;
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _isLoading = false;
+        _errorMessage = 'Could not load your documents right now.';
+      });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -70,24 +118,50 @@ class _DocumentWalletScreenState extends State<DocumentWalletScreen> {
             ),
           ),
           Expanded(
-            child: _documents.isEmpty
-                ? _buildEmptyState()
-                : Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    child: ListView.separated(
-                      padding: const EdgeInsets.only(bottom: 120, top: 8),
-                      itemCount: _documents.length,
-                      separatorBuilder: (_, _) => const SizedBox(height: 12),
-                      itemBuilder: (context, index) {
-                        final document = _documents[index];
-                        return _DocumentCard(
-                          document: document,
-                          onView: () => _openDocumentPreview(document),
-                          onDownload: () => _downloadDocument(document),
-                        );
-                      },
-                    ),
-                  ),
+            child: _isLoading
+                ? const Center(child: CircularProgressIndicator())
+                : _errorMessage != null
+                    ? Center(
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 24),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(Icons.error_outline, size: 48, color: Color(0xFF2962FF)),
+                              const SizedBox(height: 12),
+                              Text(
+                                _errorMessage!,
+                                textAlign: TextAlign.center,
+                                style: const TextStyle(fontWeight: FontWeight.w700),
+                              ),
+                              const SizedBox(height: 12),
+                              ElevatedButton.icon(
+                                onPressed: _loadDocuments,
+                                icon: const Icon(Icons.refresh),
+                                label: const Text('Try again'),
+                              ),
+                            ],
+                          ),
+                        ),
+                      )
+                    : _documents.isEmpty
+                        ? _buildEmptyState()
+                        : Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 16),
+                            child: ListView.separated(
+                              padding: const EdgeInsets.only(bottom: 120, top: 8),
+                              itemCount: _documents.length,
+                              separatorBuilder: (_, _) => const SizedBox(height: 12),
+                              itemBuilder: (context, index) {
+                                final document = _documents[index];
+                                return _DocumentCard(
+                                  document: document,
+                                  onView: () => _openDocumentPreview(document),
+                                  onDownload: () => _downloadDocument(document),
+                                );
+                              },
+                            ),
+                          ),
           ),
         ],
       ),
@@ -216,24 +290,49 @@ class _DocumentWalletScreenState extends State<DocumentWalletScreen> {
                       child: ElevatedButton(
                         onPressed: selectedFile == null
                             ? null
-                            : () {
-                                final document = _WalletDocument(
-                                  title: titleController.text.trim().isEmpty ? selectedFile!.name : titleController.text.trim(),
-                                  description: descriptionController.text.trim().isEmpty
-                                      ? 'Student document saved for quick access.'
-                                      : descriptionController.text.trim(),
-                                  fileName: selectedFile!.name,
-                                  fileBytes: selectedFile!.bytes ?? Uint8List(0),
-                                  fileExtension: selectedFile!.extension ?? '',
-                                  uploadedAt: DateTime.now(),
-                                );
-                                setState(() {
-                                  _documents.insert(0, document);
-                                });
-                                Navigator.of(context).pop();
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(content: Text('Document added to your wallet.')),
-                                );
+                            : () async {
+                                final user = Supabase.instance.client.auth.currentUser;
+                                if (user == null) {
+                                  if (!mounted) return;
+                                  Navigator.of(context).pop();
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(content: Text('Please sign in to upload documents.')),
+                                  );
+                                  return;
+                                }
+
+                                final title = titleController.text.trim().isEmpty ? selectedFile!.name : titleController.text.trim();
+                                final description = descriptionController.text.trim().isEmpty
+                                    ? 'Student document saved for quick access.'
+                                    : descriptionController.text.trim();
+                                final fileName = '${user.id}/${DateTime.now().millisecondsSinceEpoch}_${selectedFile!.name}';
+
+                                try {
+                                  await Supabase.instance.client.storage.from('documents').uploadBinary(fileName, selectedFile!.bytes ?? Uint8List(0));
+                                  final publicUrl = await Supabase.instance.client.storage.from('documents').createSignedUrl(fileName, 60 * 60 * 24 * 365);
+
+                                  await Supabase.instance.client.from('student_documents').insert({
+                                    'user_id': user.id,
+                                    'title': title,
+                                    'description': description,
+                                    'file_name': selectedFile!.name,
+                                    'file_url': publicUrl,
+                                    'file_type': selectedFile!.extension ?? '',
+                                  });
+
+                                  if (!mounted) return;
+                                  await _loadDocuments();
+                                  if (!mounted) return;
+                                  Navigator.of(context).pop();
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(content: Text('Document added to your wallet.')),
+                                  );
+                                } catch (error) {
+                                  if (!mounted) return;
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(content: Text('Failed to upload document: $error')),
+                                  );
+                                }
                               },
                         child: const Text('Save Document'),
                       ),
@@ -249,7 +348,7 @@ class _DocumentWalletScreenState extends State<DocumentWalletScreen> {
     );
   }
 
-  void _openDocumentPreview(_WalletDocument document) {
+  void _openDocumentPreview(WalletDocument document) {
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
@@ -337,7 +436,7 @@ class _DocumentWalletScreenState extends State<DocumentWalletScreen> {
     );
   }
 
-  Future<void> _downloadDocument(_WalletDocument document) async {
+  Future<void> _downloadDocument(WalletDocument document) async {
     if (kIsWeb) {
       await Share.shareXFiles([
         XFile.fromData(document.fileBytes, name: document.fileName)],
@@ -365,7 +464,7 @@ class _DocumentCard extends StatelessWidget {
     required this.onDownload,
   });
 
-  final _WalletDocument document;
+  final WalletDocument document;
   final VoidCallback onView;
   final VoidCallback onDownload;
 
@@ -446,8 +545,8 @@ class _DocumentCard extends StatelessWidget {
   }
 }
 
-class _WalletDocument {
-  _WalletDocument({
+class WalletDocument {
+  WalletDocument({
     required this.title,
     required this.description,
     required this.fileName,
@@ -462,4 +561,19 @@ class _WalletDocument {
   final Uint8List fileBytes;
   final String fileExtension;
   final DateTime uploadedAt;
+}
+
+WalletDocument mapDocumentRowToWalletDocument(Map<String, dynamic> row) {
+  final fileName = (row['file_name'] ?? '').toString();
+  final extension = (row['file_type'] ?? '').toString();
+  final uploadedAt = DateTime.tryParse((row['uploaded_at'] ?? '').toString()) ?? DateTime.now();
+
+  return WalletDocument(
+    title: (row['title'] ?? '').toString().isEmpty ? fileName : (row['title'] ?? '').toString(),
+    description: (row['description'] ?? '').toString().isEmpty ? 'Saved document' : (row['description'] ?? '').toString(),
+    fileName: fileName.isEmpty ? 'document' : fileName,
+    fileBytes: Uint8List(0),
+    fileExtension: extension.isEmpty ? (fileName.split('.').lastOrNull ?? '') : extension,
+    uploadedAt: uploadedAt,
+  );
 }

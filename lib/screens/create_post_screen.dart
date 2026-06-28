@@ -76,7 +76,7 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
         final safeName = attachment.name
             .replaceAll(RegExp(r'[^A-Za-z0-9._-]'), '_');
         final fileName =
-            'posts/${user.id}/${DateTime.now().millisecondsSinceEpoch}_$safeName';
+    '${user.id}/${DateTime.now().millisecondsSinceEpoch}_$safeName';
 
         await Supabase.instance.client.storage
             .from('posts')
@@ -115,8 +115,9 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
         SnackBar(content: Text('Unable to publish post: $error')),
       );
     } finally {
-      if (!mounted) return;
-      setState(() => _isSubmitting = false);
+      if (mounted) {
+        setState(() => _isSubmitting = false);
+      }
     }
   }
 

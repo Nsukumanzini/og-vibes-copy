@@ -1189,6 +1189,7 @@ class _SignupScreenState extends State<SignupScreen>
         password: _passwordController.text,
         name: _nameController.text,
         surname: _surnameController.text,
+        nickname: _nicknameController.text.trim(),
         campus: _selectedCampus,
         department: _selectedDepartment,
         level: _selectedLevel,

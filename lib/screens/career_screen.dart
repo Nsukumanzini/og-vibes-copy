@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+
 import 'package:og_vibes_student/widgets/vibe_scaffold.dart';
 
 class CareerScreen extends StatefulWidget {
@@ -11,11 +13,36 @@ class CareerScreen extends StatefulWidget {
 class _CareerScreenState extends State<CareerScreen>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
+  late Future<Map<String, List<Map<String, dynamic>>>> _opportunitiesFuture;
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 4, vsync: this);
+    _opportunitiesFuture = _loadOpportunities();
+  }
+
+  Future<Map<String, List<Map<String, dynamic>>>> _loadOpportunities() async {
+    final response = await Supabase.instance.client
+        .from('career_opportunities')
+        .select('id, title, description, category, company, duration, type, salary, created_at')
+        .order('created_at', ascending: false);
+
+    final rows = List<Map<String, dynamic>>.from(response as List<dynamic>);
+    final grouped = <String, List<Map<String, dynamic>>>{
+      'bursary': [],
+      'internship': [],
+      'job': [],
+      'funding': [],
+    };
+
+    for (final row in rows) {
+      final category = (row['category'] ?? 'funding').toString().toLowerCase();
+      final bucket = grouped.containsKey(category) ? category : 'funding';
+      grouped[bucket]!.add(mapCareerRowToItem(row));
+    }
+
+    return grouped;
   }
 
   @override
@@ -52,19 +79,43 @@ class _CareerScreenState extends State<CareerScreen>
           ],
         ),
       ),
-      body: TabBarView(
-        controller: _tabController,
-        children: [
-          _buildBursariesTab(),
-          _buildInternshipsTab(),
-          _buildJobsTab(),
-          _buildFundingTab(),
-        ],
+      body: FutureBuilder<Map<String, List<Map<String, dynamic>>>>(
+        future: _opportunitiesFuture,
+        builder: (context, snapshot) {
+          if (snapshot.connectionState != ConnectionState.done) {
+            return const Center(child: CircularProgressIndicator());
+          }
+
+          if (!snapshot.hasData || snapshot.hasError) {
+            return Center(
+              child: ElevatedButton.icon(
+                onPressed: () {
+                  setState(() {
+                    _opportunitiesFuture = _loadOpportunities();
+                  });
+                },
+                icon: const Icon(Icons.refresh),
+                label: const Text('Retry career load'),
+              ),
+            );
+          }
+
+          final opportunities = snapshot.data!;
+          return TabBarView(
+            controller: _tabController,
+            children: [
+              _buildBursariesTab(opportunities['bursary'] ?? const []),
+              _buildInternshipsTab(opportunities['internship'] ?? const []),
+              _buildJobsTab(opportunities['job'] ?? const []),
+              _buildFundingTab(opportunities['funding'] ?? const []),
+            ],
+          );
+        },
       ),
     );
   }
 
-  Widget _buildBursariesTab() {
+  Widget _buildBursariesTab(List<Map<String, dynamic>> items) {
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
@@ -73,47 +124,22 @@ class _CareerScreenState extends State<CareerScreen>
           'Explore financial assistance programs',
         ),
         const SizedBox(height: 16),
-        _buildBursaryCard(
-          title: 'Merit-Based Bursaries',
-          description: 'Scholarships based on academic excellence',
-          icon: Icons.star,
-          color: Colors.amber,
-        ),
-        const SizedBox(height: 12),
-        _buildBursaryCard(
-          title: 'Need-Based Bursaries',
-          description: 'Financial aid for students in need',
-          icon: Icons.support,
-          color: Colors.blue,
-        ),
-        const SizedBox(height: 12),
-        _buildBursaryCard(
-          title: 'Faculty-Specific Bursaries',
-          description: 'Support for specific academic departments',
-          icon: Icons.school,
-          color: Colors.green,
-        ),
-        const SizedBox(height: 12),
-        _buildBursaryCard(
-          title: 'External Bursaries',
-          description: 'Opportunities from external organizations',
-          icon: Icons.business,
-          color: Colors.purple,
-        ),
-        const SizedBox(height: 12),
-        _buildBursaryCard(
-          title: 'Sports & Arts Bursaries',
-          description: 'Support for talented athletes and artists',
-          icon: Icons.sports_soccer,
-          color: Colors.red,
-        ),
+        ...items.map((item) => Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: _buildBursaryCard(
+                title: item['title'].toString(),
+                description: item['description'].toString(),
+                icon: Icons.star,
+                color: Colors.amber,
+              ),
+            )),
         const SizedBox(height: 30),
         _buildActionButton('View All Bursaries', Colors.amber),
       ],
     );
   }
 
-  Widget _buildInternshipsTab() {
+  Widget _buildInternshipsTab(List<Map<String, dynamic>> items) {
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
@@ -122,52 +148,23 @@ class _CareerScreenState extends State<CareerScreen>
           'Gain real-world experience',
         ),
         const SizedBox(height: 16),
-        _buildInternshipCard(
-          company: 'Tech Corp',
-          position: 'Software Development Intern',
-          duration: '6 months',
-          icon: Icons.code,
-          color: Colors.blue,
-        ),
-        const SizedBox(height: 12),
-        _buildInternshipCard(
-          company: 'Creative Agency',
-          position: 'Graphic Design Intern',
-          duration: '4 months',
-          icon: Icons.palette,
-          color: Colors.pink,
-        ),
-        const SizedBox(height: 12),
-        _buildInternshipCard(
-          company: 'Finance Ltd',
-          position: 'Finance & Accounting Intern',
-          duration: '6 months',
-          icon: Icons.attach_money,
-          color: Colors.green,
-        ),
-        const SizedBox(height: 12),
-        _buildInternshipCard(
-          company: 'Marketing Solutions',
-          position: 'Digital Marketing Intern',
-          duration: '3 months',
-          icon: Icons.trending_up,
-          color: Colors.orange,
-        ),
-        const SizedBox(height: 12),
-        _buildInternshipCard(
-          company: 'Legal Services',
-          position: 'Legal Intern',
-          duration: '6 months',
-          icon: Icons.gavel,
-          color: Colors.indigo,
-        ),
+        ...items.map((item) => Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: _buildInternshipCard(
+                company: item['company'].toString(),
+                position: item['title'].toString(),
+                duration: item['duration'].toString(),
+                icon: Icons.code,
+                color: Colors.blue,
+              ),
+            )),
         const SizedBox(height: 30),
         _buildActionButton('Browse All Internships', Colors.blue),
       ],
     );
   }
 
-  Widget _buildJobsTab() {
+  Widget _buildJobsTab(List<Map<String, dynamic>> items) {
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
@@ -176,52 +173,23 @@ class _CareerScreenState extends State<CareerScreen>
           'Find graduate and part-time positions',
         ),
         const SizedBox(height: 16),
-        _buildJobCard(
-          company: 'Corporate Solutions',
-          position: 'Junior Software Engineer',
-          type: 'Full-time',
-          salary: 'R15,000 - R20,000/month',
-          icon: Icons.computer,
-        ),
-        const SizedBox(height: 12),
-        _buildJobCard(
-          company: 'University Services',
-          position: 'Student Tutor (Part-time)',
-          type: 'Part-time',
-          salary: 'R150/hour',
-          icon: Icons.school,
-        ),
-        const SizedBox(height: 12),
-        _buildJobCard(
-          company: 'Retail Chain',
-          position: 'Campus Ambassador',
-          type: 'Part-time',
-          salary: 'R200/hour + commission',
-          icon: Icons.shopping_bag,
-        ),
-        const SizedBox(height: 12),
-        _buildJobCard(
-          company: 'Consulting Firm',
-          position: 'Business Analyst',
-          type: 'Full-time',
-          salary: 'R25,000 - R30,000/month',
-          icon: Icons.analytics,
-        ),
-        const SizedBox(height: 12),
-        _buildJobCard(
-          company: 'Tech Startup',
-          position: 'UI/UX Designer',
-          type: 'Full-time',
-          salary: 'R18,000 - R24,000/month',
-          icon: Icons.design_services,
-        ),
+        ...items.map((item) => Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: _buildJobCard(
+                company: item['company'].toString(),
+                position: item['title'].toString(),
+                type: item['type'].toString(),
+                salary: item['salary'].toString(),
+                icon: Icons.computer,
+              ),
+            )),
         const SizedBox(height: 30),
         _buildActionButton('View All Jobs', Colors.green),
       ],
     );
   }
 
-  Widget _buildFundingTab() {
+  Widget _buildFundingTab(List<Map<String, dynamic>> items) {
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
@@ -230,40 +198,15 @@ class _CareerScreenState extends State<CareerScreen>
           'Explore diverse funding opportunities',
         ),
         const SizedBox(height: 16),
-        _buildFundingCard(
-          title: 'Study Loans',
-          description: 'Affordable education loans with flexible repayment',
-          icon: Icons.account_balance,
-          color: Colors.teal,
-        ),
-        const SizedBox(height: 12),
-        _buildFundingCard(
-          title: 'Government Grants',
-          description: 'Non-repayable financial aid from government',
-          icon: Icons.public,
-          color: Colors.deepOrange,
-        ),
-        const SizedBox(height: 12),
-        _buildFundingCard(
-          title: 'Corporate Sponsorships',
-          description: 'Support from major companies and corporations',
-          icon: Icons.corporate_fare,
-          color: Colors.indigo,
-        ),
-        const SizedBox(height: 12),
-        _buildFundingCard(
-          title: 'NGO Support',
-          description: 'Assistance from non-governmental organizations',
-          icon: Icons.favorite,
-          color: Colors.red,
-        ),
-        const SizedBox(height: 12),
-        _buildFundingCard(
-          title: 'Crowdfunding',
-          description: 'Connect with fundraising platforms',
-          icon: Icons.groups,
-          color: Colors.lightBlue,
-        ),
+        ...items.map((item) => Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: _buildFundingCard(
+                title: item['title'].toString(),
+                description: item['description'].toString(),
+                icon: Icons.account_balance,
+                color: Colors.teal,
+              ),
+            )),
         const SizedBox(height: 30),
         _buildActionButton('Explore Funding Options', Colors.teal),
       ],
@@ -526,4 +469,16 @@ class _CareerScreenState extends State<CareerScreen>
       ),
     );
   }
+}
+
+Map<String, dynamic> mapCareerRowToItem(Map<String, dynamic> row) {
+  return {
+    'title': (row['title'] ?? '').toString(),
+    'description': (row['description'] ?? '').toString(),
+    'category': (row['category'] ?? '').toString(),
+    'company': (row['company'] ?? '').toString(),
+    'duration': (row['duration'] ?? '').toString(),
+    'type': (row['type'] ?? '').toString(),
+    'salary': (row['salary'] ?? '').toString(),
+  };
 }

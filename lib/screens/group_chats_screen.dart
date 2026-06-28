@@ -107,17 +107,23 @@ class _GroupChatsScreenState extends State<GroupChatsScreen> {
       if (senderIds.isNotEmpty) {
         final profileRaw = await Supabase.instance.client
             .from('profiles')
-            .select('id, name, surname')
-            .in_('id', senderIds.toList()) as List<dynamic>?;
+            .select('id, name, surname, nickname')
+            .inFilter('id', senderIds.toList()) as List<dynamic>?;
 
         for (final profile in profileRaw ?? []) {
           final id = (profile['id'] as String?)?.trim();
           if (id == null) continue;
-          final displayName = [profile['name'], profile['surname']]
-              .where((part) => part is String && (part as String).trim().isNotEmpty)
+          final nickname = ((profile['nickname'] ?? '') as String).trim();
+          final fullName = [profile['name'], profile['surname']]
+              .where((part) => part is String && (part).trim().isNotEmpty)
               .join(' ')
               .trim();
-          profiles[id] = displayName.isNotEmpty ? displayName : id;
+          final displayName = nickname.isNotEmpty
+              ? nickname
+              : fullName.isNotEmpty
+                  ? fullName
+                  : id;
+          profiles[id] = displayName;
         }
       }
 
@@ -206,10 +212,11 @@ class _GroupChatsScreenState extends State<GroupChatsScreen> {
         SnackBar(content: Text('Unable to send message: $error')),
       );
     } finally {
-      if (!mounted) return;
-      setState(() {
-        _isSending = false;
-      });
+      if (mounted) {
+        setState(() {
+          _isSending = false;
+        });
+      }
     }
   }
 
@@ -240,13 +247,15 @@ class _GroupChatsScreenState extends State<GroupChatsScreen> {
           TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
           ElevatedButton(
             onPressed: () async {
+              final dialogNavigator = Navigator.of(context);
+              final dialogMessenger = ScaffoldMessenger.of(context);
               final name = nameCtrl.text.trim();
               if (name.isEmpty) return;
               final description = descCtrl.text.trim();
               final user = Supabase.instance.client.auth.currentUser;
               if (user == null) {
                 if (!mounted) return;
-                ScaffoldMessenger.of(context).showSnackBar(
+                dialogMessenger.showSnackBar(
                   const SnackBar(content: Text('Sign in to create a group.')),
                 );
                 return;
@@ -275,11 +284,12 @@ class _GroupChatsScreenState extends State<GroupChatsScreen> {
                     _selectedGroup = newGroup;
                   });
                   await _loadGroupMessages(newGroup.id);
+                  if (!mounted) return;
                 }
-                Navigator.pop(context);
+                dialogNavigator.pop();
               } catch (error) {
                 if (!mounted) return;
-                ScaffoldMessenger.of(context).showSnackBar(
+                dialogMessenger.showSnackBar(
                   SnackBar(content: Text('Unable to create group: $error')),
                 );
               }
@@ -379,7 +389,7 @@ class _GroupChatsScreenState extends State<GroupChatsScreen> {
     return ListView.separated(
       padding: const EdgeInsets.all(12),
       itemCount: groups.length,
-      separatorBuilder: (_, __) => const SizedBox(height: 8),
+      separatorBuilder: (_, _) => const SizedBox(height: 8),
       itemBuilder: (context, index) {
         final group = groups[index];
         final isSelected = _selectedGroup?.id == group.id;

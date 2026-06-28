@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_staggered_animations/flutter_staggered_animations.dart';
 import 'package:shimmer/shimmer.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'package:og_vibes_student/widgets/vibe_scaffold.dart';
 
@@ -11,6 +12,79 @@ class MarketScreen extends StatefulWidget {
 
   @override
   State<MarketScreen> createState() => _MarketScreenState();
+}
+
+Map<String, dynamic> mapProductRowToMarketItem(Map<String, dynamic> row) {
+  final title = (row['title'] ?? '').toString();
+  final price = (row['price'] is num) ? (row['price'] as num).toDouble() : double.tryParse(row['price'].toString()) ?? 0;
+  final createdAt = (row['created_at'] ?? '').toString();
+  final rawProfiles = row['profiles'];
+  final profiles = rawProfiles is Map ? Map<String, dynamic>.from(rawProfiles) : <String, dynamic>{};
+  final name = (profiles['name'] ?? '').toString().trim();
+  final surname = (profiles['surname'] ?? '').toString().trim();
+  final sellerName = [name, surname].where((part) => part.isNotEmpty).join(' ').trim();
+  final category = (row['category'] ?? 'General').toString();
+  final created = DateTime.tryParse(createdAt);
+
+  return {
+    'title': title.isEmpty ? 'Untitled listing' : title,
+    'price': 'R ${price.toStringAsFixed(2)}',
+    'seller': sellerName.isEmpty ? 'Campus seller' : sellerName,
+    'category': category,
+    'time': created == null ? 'Recently added' : _relativeTime(created),
+    'icon': _iconForCategory(category),
+    'accent': _accentForCategory(category),
+  };
+}
+
+String _relativeTime(DateTime createdAt) {
+  final diff = DateTime.now().difference(createdAt);
+  if (diff.inDays > 0) {
+    return '${diff.inDays} day${diff.inDays == 1 ? '' : 's'} ago';
+  }
+  if (diff.inHours > 0) {
+    return '${diff.inHours} hour${diff.inHours == 1 ? '' : 's'} ago';
+  }
+  if (diff.inMinutes > 0) {
+    return '${diff.inMinutes} minute${diff.inMinutes == 1 ? '' : 's'} ago';
+  }
+  return 'Just now';
+}
+
+IconData _iconForCategory(String category) {
+  switch (category.toLowerCase()) {
+    case 'textbooks':
+      return Icons.menu_book_rounded;
+    case 'clothing/uniforms':
+    case 'clothing':
+      return Icons.checkroom_rounded;
+    case 'appliances':
+      return Icons.kitchen_rounded;
+    case 'stationery':
+      return Icons.straighten_rounded;
+    case 'study tools':
+      return Icons.calculate_rounded;
+    default:
+      return Icons.shopping_bag_outlined;
+  }
+}
+
+Color _accentForCategory(String category) {
+  switch (category.toLowerCase()) {
+    case 'textbooks':
+      return const Color(0xFF2962FF);
+    case 'clothing/uniforms':
+    case 'clothing':
+      return const Color(0xFF00ACC1);
+    case 'appliances':
+      return const Color(0xFFFF8F00);
+    case 'stationery':
+      return const Color(0xFF6A1B9A);
+    case 'study tools':
+      return const Color(0xFF2E7D32);
+    default:
+      return const Color(0xFF5E35B1);
+  }
 }
 
 class _MarketScreenState extends State<MarketScreen> {
@@ -23,55 +97,14 @@ class _MarketScreenState extends State<MarketScreen> {
   }
 
   Future<List<Map<String, dynamic>>> _loadMarketItems() async {
-    await Future<void>.delayed(const Duration(milliseconds: 1200));
+    final response = await Supabase.instance.client
+        .from('products')
+        .select('id, title, price, category, description, created_at, images, seller_id, profiles!products_seller_id_fkey(name, surname)')
+        .eq('status', 'available')
+        .order('created_at', ascending: false);
 
-    return const [
-      {
-        'title': 'N4 Mathematics Textbook (Good Condition)',
-        'price': 'R 200',
-        'seller': 'Thandi M.',
-        'category': 'Textbooks',
-        'time': '1 hour ago',
-        'icon': Icons.menu_book_rounded,
-        'accent': Color(0xFF2962FF),
-      },
-      {
-        'title': 'Navy Blue Engineering Boiler Suit (Size M)',
-        'price': 'R 150',
-        'seller': 'Sipho Ndlovu',
-        'category': 'Clothing/Uniforms',
-        'time': '3 hours ago',
-        'icon': Icons.checkroom_rounded,
-        'accent': Color(0xFF00ACC1),
-      },
-      {
-        'title': 'Defy Kettle (Perfect for Res)',
-        'price': 'R 120',
-        'seller': 'Lerato K.',
-        'category': 'Appliances',
-        'time': 'Yesterday',
-        'icon': Icons.kitchen_rounded,
-        'accent': Color(0xFFFF8F00),
-      },
-      {
-        'title': 'Drawing Board & T-Square set',
-        'price': 'R 350',
-        'seller': 'David S.',
-        'category': 'Stationery',
-        'time': '2 days ago',
-        'icon': Icons.straighten_rounded,
-        'accent': Color(0xFF6A1B9A),
-      },
-      {
-        'title': 'Scientific Calculator (Casio fx-82ZA Plus)',
-        'price': 'R 280',
-        'seller': 'Nomsa P.',
-        'category': 'Study Tools',
-        'time': '2 days ago',
-        'icon': Icons.calculate_rounded,
-        'accent': Color(0xFF2E7D32),
-      },
-    ];
+    final rows = List<Map<String, dynamic>>.from(response as List<dynamic>);
+    return rows.map(mapProductRowToMarketItem).toList();
   }
 
   @override
