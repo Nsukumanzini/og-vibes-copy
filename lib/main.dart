@@ -5,6 +5,8 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 import 'screens/splash_screen.dart';
+import 'screens/incoming_call_screen.dart';
+import 'services/call_service.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 Future<void> main() async {
@@ -92,8 +94,70 @@ Future<void> _loadDotEnv() async {
 }
 
 
-class MyApp extends StatelessWidget {
+class MyApp extends StatefulWidget {
   const MyApp({super.key});
+
+  @override
+  State<MyApp> createState() => _MyAppState();
+}
+
+class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
+  final CallService _callService = CallService();
+  final GlobalKey<NavigatorState> _navigatorKey = GlobalKey<NavigatorState>();
+  bool _isShowingIncomingCall = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _listenForIncomingCalls();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _listenForIncomingCalls();
+    }
+  }
+
+  void _listenForIncomingCalls() {
+    final currentUserId = Supabase.instance.client.auth.currentUser?.id;
+    if (currentUserId == null) return;
+
+    _callService.listenForIncomingCalls(
+      currentUserId: currentUserId,
+      onIncoming: (call) {
+        if (_isShowingIncomingCall) return;
+        _isShowingIncomingCall = true;
+        final navigator = _navigatorKey.currentState;
+        if (navigator == null) return;
+
+        navigator.push(
+          MaterialPageRoute(
+            builder: (_) => IncomingCallScreen(
+              contactName: call['caller_id']?.toString() ?? 'Someone',
+              callType: call['type']?.toString() ?? 'audio',
+              onAccept: () {
+                navigator.pop();
+                _isShowingIncomingCall = false;
+              },
+              onDecline: () {
+                navigator.pop();
+                _isShowingIncomingCall = false;
+              },
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _callService.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -216,6 +280,7 @@ class MyApp extends StatelessWidget {
     return MaterialApp(
       title: 'OG Vibes',
       debugShowCheckedModeBanner: false,
+      navigatorKey: _navigatorKey,
       theme: themed,
       home: const SplashScreen(),
       builder: (context, child) {

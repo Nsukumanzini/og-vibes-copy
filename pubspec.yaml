@@ -80,6 +80,7 @@ dependencies:
   syncfusion_flutter_pdfviewer: ^31.1.21
   path: ^1.9.1
   flutter_dotenv: ^6.0.1
+  flutter_webrtc: ^0.12.3
 
 
 dependency_overrides:

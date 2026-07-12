@@ -110,6 +110,7 @@ class AuthService {
     }
 
     final user = response.user ?? response.session?.user ?? Supabase.instance.client.auth.currentUser;
+    print(Supabase.instance.client.auth.currentSession?.accessToken);
     if (user == null) {
       throw Exception('Unable to sign in. Please try again.');
     }

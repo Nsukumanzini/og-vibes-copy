@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>PWA Call Demo</title>
+    <style>
+      body { font-family: Inter, system-ui, sans-serif; margin: 0; padding: 24px; background: #f5f7fb; color: #162033; }
+      .card { background: white; border-radius: 16px; padding: 16px; margin-bottom: 16px; box-shadow: 0 8px 24px rgba(0,0,0,.06); }
+      button { border: 0; border-radius: 999px; padding: 10px 16px; margin-right: 8px; background: #2962ff; color: white; cursor: pointer; }
+      button.secondary { background: #607d8b; }
+      [hidden] { display: none; }
+      ul { margin: 0; padding-left: 18px; }
+    </style>
+  </head>
+  <body>
+    <h1>PWA Call & Video Call Demo</h1>
+    <p id="status">Initializing call UI…</p>
+
+    <div class="card" id="outgoing-card" hidden>
+      <h2>Calling</h2>
+      <p>Ring ring…</p>
+      <button class="secondary" id="end-call">End call</button>
+    </div>
+
+    <div class="card" id="incoming-card" hidden>
+      <h2>Incoming Call</h2>
+      <p id="message">Incoming video call</p>
+      <button id="accept-call">Accept</button>
+      <button class="secondary" id="decline-call">Decline</button>
+    </div>
+
+    <div class="card" id="active-card" hidden>
+      <h2>Active Call</h2>
+      <p>Local + remote video tiles will appear here once the WebRTC session is connected.</p>
+      <button id="mute-call">Mute</button>
+      <button class="secondary" id="camera-call">Toggle Camera</button>
+      <button class="secondary" id="end-call-active">End</button>
+    </div>
+
+    <div class="card">
+      <h2>Actions</h2>
+      <button id="start-call">Start test call</button>
+    </div>
+
+    <div class="card">
+      <h2>Call History</h2>
+      <ul id="history-list"></ul>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+    <script src="./callService.js"></script>
+    <script src="./useWebRTC.js"></script>
+    <script src="./app.js"></script>
+  </body>
+</html>
