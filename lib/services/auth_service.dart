@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 class AuthResult {
@@ -110,7 +111,7 @@ class AuthService {
     }
 
     final user = response.user ?? response.session?.user ?? Supabase.instance.client.auth.currentUser;
-    print(Supabase.instance.client.auth.currentSession?.accessToken);
+    debugPrint(Supabase.instance.client.auth.currentSession?.accessToken);
     if (user == null) {
       throw Exception('Unable to sign in. Please try again.');
     }

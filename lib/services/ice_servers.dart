@@ -10,11 +10,10 @@ class IceServers {
   static Future<Map<String, dynamic>> fetch() async {
     try {
       final response = await Supabase.instance.client.functions.invoke('get-turn-credentials');
-      if (response.error != null) {
-        throw Exception('Failed to fetch TURN credentials: ${response.error!.message}');
-      }
-
       final data = response.data;
+      if (data == null) {
+        throw Exception('Failed to fetch TURN credentials: no data returned');
+      }
       if (data is Map<String, dynamic> && data['iceServers'] != null) {
         return {'iceServers': data['iceServers']};
       }

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../screens/call_feature_screen.dart';
 import '../screens/helpful_contacts_screen.dart';
 import '../screens/login_screen.dart';
 import '../screens/notification_settings_screen.dart';
@@ -213,6 +214,22 @@ class _AppDrawerState extends State<AppDrawer> {
                       MaterialPageRoute(
                         builder: (_) => const HelpfulContactsScreen(),
                       ),
+                    );
+                  },
+                ),
+                ListTile(
+                  leading: const Icon(
+                    Icons.video_call_rounded,
+                    color: Colors.white70,
+                  ),
+                  title: const Text(
+                    'Call Feature',
+                    style: TextStyle(color: Colors.white),
+                  ),
+                  onTap: () {
+                    Navigator.of(context).pop();
+                    Navigator.of(context).push(
+                      MaterialPageRoute(builder: (_) => const CallFeatureScreen()),
                     );
                   },
                 ),

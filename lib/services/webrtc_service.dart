@@ -24,16 +24,14 @@ class WebRtcService {
     });
   }
 
-  Future<RTCPeerConnection> createPeerConnection({
+  Future<RTCPeerConnection> createPeer({
     required void Function(RTCIceCandidate candidate) onIceCandidate,
     required void Function(MediaStream stream) onTrack,
     required void Function(String state) onConnectionStateChange,
   }) async {
     final configuration = await IceServers.fetch();
 
-    _peerConnection = await createPeerConnection(
-      configuration,
-    );
+    _peerConnection = await createPeerConnection(configuration);
 
     _peerConnection!.onIceCandidate = (candidate) => onIceCandidate(candidate);
     _peerConnection!.onTrack = (event) {

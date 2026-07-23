@@ -8,14 +8,10 @@ class SignalingService {
 
   Future<void> joinChannel(String callId) async {
     _channel?.unsubscribe();
-    final accessToken = _client.auth.currentSession?.access_token;
     _channel = _client.channel(
       'call-$callId',
       opts: RealtimeChannelConfig(
         private: true,
-        auth: accessToken != null
-            ? RealtimeChannelAuth(token: accessToken)
-            : null,
       ),
     );
     _channel!.subscribe();
