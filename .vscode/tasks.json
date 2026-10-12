@@ -1,83 +1,34 @@
 {
-	"version": "2.0.0",
-	"tasks": [
-		{
-			"label": "Flutter Build APK",
-			"type": "shell",
-			"command": "flutter",
-			"args": [
-				"build",
-				"apk"
-			],
-			"problemMatcher": [
-				"$dart"
-			],
-			"group": "build"
-		},
-		{
-			"label": "Flutter Build APK",
-			"type": "shell",
-			"command": "flutter",
-			"args": [
-				"build",
-				"apk"
-			],
-			"problemMatcher": [
-				"$dart"
-			],
-			"group": "build"
-		},
-		{
-			"label": "Flutter Build APK",
-			"type": "shell",
-			"command": "flutter",
-			"args": [
-				"build",
-				"apk"
-			],
-			"problemMatcher": [
-				"$dart"
-			],
-			"group": "build"
-		},
-		{
-			"label": "Flutter Build APK",
-			"type": "shell",
-			"command": "flutter",
-			"args": [
-				"build",
-				"apk"
-			],
-			"problemMatcher": [
-				"$dart"
-			],
-			"group": "build"
-		},
-		{
-			"label": "Flutter Build APK",
-			"type": "shell",
-			"command": "flutter",
-			"args": [
-				"build",
-				"apk"
-			],
-			"problemMatcher": [
-				"$dart"
-			],
-			"group": "build"
-		},
-		{
-			"label": "Flutter Build APK",
-			"type": "shell",
-			"command": "flutter",
-			"args": [
-				"build",
-				"apk"
-			],
-			"problemMatcher": [
-				"$dart"
-			],
-			"group": "build"
-		}
-	]
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "OG Vibes: Build Web Release",
+      "type": "shell",
+      "command": "flutter",
+      "args": [
+        "build",
+        "web",
+        "--release",
+        "--dart-define-from-file=config/release.json"
+      ],
+      "problemMatcher": ["$dart"],
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      }
+    },
+    {
+      "label": "OG Vibes: Build Android APK",
+      "type": "shell",
+      "command": "flutter",
+      "args": [
+        "build",
+        "apk",
+        "--release",
+        "--dart-define-from-file=config/release.json"
+      ],
+      "problemMatcher": ["$dart"],
+      "group": "build"
+    }
+  ]
 }

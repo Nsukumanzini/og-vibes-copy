@@ -5,8 +5,6 @@ import 'package:flutter/material.dart';
 import 'package:og_vibes_student/screens/home_screen.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-import '../services/auth_service.dart';
-
 import 'login_screen.dart';
 import 'signup_screen.dart';
 
@@ -35,10 +33,7 @@ class _LandingScreenState extends State<LandingScreen>
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      _startLandingAnimations();
-    });
+    _startLandingAnimations();
   }
 
   @override
@@ -190,10 +185,7 @@ class _LandingScreenState extends State<LandingScreen>
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(26),
-        border: Border.all(
-          color: const Color(0xFF2962FF),
-          width: 3,
-        ),
+        border: Border.all(color: const Color(0xFF2962FF), width: 3),
         boxShadow: const [
           BoxShadow(
             color: Color(0xFF42A5F5),
@@ -206,10 +198,7 @@ class _LandingScreenState extends State<LandingScreen>
         borderRadius: BorderRadius.circular(22),
         child: Padding(
           padding: const EdgeInsets.all(8),
-          child: Image.asset(
-            'assets/images/logo.jpeg',
-            fit: BoxFit.contain,
-          ),
+          child: Image.asset('assets/images/logo.jpeg', fit: BoxFit.contain),
         ),
       ),
     );
@@ -218,10 +207,7 @@ class _LandingScreenState extends State<LandingScreen>
       return circle;
     }
 
-    return ScaleTransition(
-      scale: _bounceAnimation!,
-      child: circle,
-    );
+    return ScaleTransition(scale: _bounceAnimation!, child: circle);
   }
 
   Widget _buildCtas(BuildContext context) {
@@ -231,7 +217,9 @@ class _LandingScreenState extends State<LandingScreen>
           width: double.infinity,
           child: ElevatedButton.icon(
             onPressed: () {
-              Navigator.of(context).push(MaterialPageRoute(builder: (_) => const LoginScreen()));
+              Navigator.of(
+                context,
+              ).push(MaterialPageRoute(builder: (_) => const LoginScreen()));
             },
             icon: const Icon(Icons.login),
             label: const Text('Login'),
@@ -268,23 +256,12 @@ class _LandingScreenState extends State<LandingScreen>
         SizedBox(
           width: double.infinity,
           child: OutlinedButton.icon(
-            onPressed: () async {
-                  final navigator = Navigator.of(context);
-                  final messenger = ScaffoldMessenger.of(context);
-                  try {
-                    final authService = AuthService();
-                    await authService.signInAnonymously();
-                    if (!mounted) return;
-                    navigator.pushReplacement(
-                      MaterialPageRoute(builder: (_) => const HomeScreen()),
-                    );
-                  } catch (_) {
-                    if (!mounted) return;
-                    messenger.showSnackBar(
-                      const SnackBar(content: Text('Guest login is not available with Supabase.')),
-                    );
-                  }
-                },
+            onPressed: () {
+              Navigator.of(context).pushAndRemoveUntil(
+                MaterialPageRoute(builder: (_) => const HomeScreen()),
+                (route) => false,
+              );
+            },
             icon: const Icon(Icons.person_outline),
             label: const Text('Continue as Guest'),
             style: OutlinedButton.styleFrom(

@@ -1,0 +1,12 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "za.co.ogtechnologies.ogvibes",
+      "sha256_cert_fingerprints": [
+        "E3:5E:D7:17:2F:24:84:8B:0D:9B:0B:1F:DD:FA:BF:14:F5:5C:5E:54:20:B7:E0:D4:B5:F5:1D:C9:9A:D7:6C:26"
+      ]
+    }
+  }
+]

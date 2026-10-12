@@ -1,5 +1,6 @@
 import 'package:confetti/confetti.dart';
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 class SuggestionBoxScreen extends StatefulWidget {
   const SuggestionBoxScreen({super.key});
@@ -10,6 +11,7 @@ class SuggestionBoxScreen extends StatefulWidget {
 
 class _SuggestionBoxScreenState extends State<SuggestionBoxScreen> {
   final TextEditingController _ideaController = TextEditingController();
+  bool _sending = false;
   late final ConfettiController _confettiController;
 
   @override
@@ -39,7 +41,7 @@ class _SuggestionBoxScreenState extends State<SuggestionBoxScreen> {
         elevation: 0,
         iconTheme: const IconThemeData(color: Colors.white),
       ),
-      extendBodyBehindAppBar: true,
+      extendBodyBehindAppBar: false,
       body: Container(
         decoration: const BoxDecoration(
           gradient: LinearGradient(
@@ -51,34 +53,32 @@ class _SuggestionBoxScreenState extends State<SuggestionBoxScreen> {
         child: Stack(
           alignment: Alignment.topCenter,
           children: [
-            Padding(
+            SingleChildScrollView(
               padding: const EdgeInsets.all(20),
               child: Column(
                 children: [
-                  Expanded(
-                    child: TextField(
-                      controller: _ideaController,
-                      maxLines: null,
-                      expands: true,
-                      style: const TextStyle(color: Colors.white),
-                      cursorColor: Colors.white,
-                      decoration: InputDecoration(
-                        labelText: 'Share your campus-changing idea...',
-                        labelStyle: const TextStyle(color: Colors.white70),
-                        filled: true,
-                        fillColor: Colors.white.withValues(alpha: 0.15),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: const BorderSide(color: Colors.white30),
-                        ),
-                        enabledBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: const BorderSide(color: Colors.white30),
-                        ),
-                        focusedBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: const BorderSide(color: Colors.white),
-                        ),
+                  TextField(
+                    controller: _ideaController,
+                    minLines: 8,
+                    maxLines: 16,
+                    style: const TextStyle(color: Colors.white),
+                    cursorColor: Colors.white,
+                    decoration: InputDecoration(
+                      labelText: 'Share your campus-changing idea...',
+                      labelStyle: const TextStyle(color: Colors.white70),
+                      filled: true,
+                      fillColor: Colors.white.withValues(alpha: 0.15),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: const BorderSide(color: Colors.white30),
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: const BorderSide(color: Colors.white30),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: const BorderSide(color: Colors.white),
                       ),
                     ),
                   ),
@@ -93,10 +93,10 @@ class _SuggestionBoxScreenState extends State<SuggestionBoxScreen> {
                           borderRadius: BorderRadius.circular(28),
                         ),
                       ),
-                      onPressed: _sendIdea,
-                      child: const Text(
-                        'Send Idea to Developer 🚀',
-                        style: TextStyle(
+                      onPressed: _sending ? null : _sendIdea,
+                      child: Text(
+                        _sending ? 'Sending…' : 'Send suggestion',
+                        style: const TextStyle(
                           fontWeight: FontWeight.bold,
                           color: Colors.white,
                         ),
@@ -121,7 +121,8 @@ class _SuggestionBoxScreenState extends State<SuggestionBoxScreen> {
     );
   }
 
-  void _sendIdea() {
+  Future<void> _sendIdea() async {
+    if (_sending) return;
     final idea = _ideaController.text.trim();
     if (idea.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -129,10 +130,38 @@ class _SuggestionBoxScreenState extends State<SuggestionBoxScreen> {
       );
       return;
     }
-    _confettiController.play();
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Thanks! Our developers are on it.')),
-    );
-    _ideaController.clear();
+    final user = Supabase.instance.client.auth.currentUser;
+    if (user == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please sign in to send your idea.')),
+      );
+      return;
+    }
+
+    setState(() => _sending = true);
+    try {
+      await Supabase.instance.client.from('suggestion_submissions').insert({
+        'user_id': user.id,
+        'category': 'product_idea',
+        'message': idea,
+      });
+      if (!mounted) return;
+      if (!MediaQuery.disableAnimationsOf(context)) _confettiController.play();
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Thanks! Your idea has been saved.')),
+      );
+      _ideaController.clear();
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Could not send your suggestion. Check your connection and try again.',
+          ),
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _sending = false);
+    }
   }
 }

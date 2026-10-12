@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:og_vibes_student/screens/home_screen.dart';
 
 import '../services/auth_service.dart';
+import 'email_verification_screen.dart';
+import 'signup_screen.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -45,15 +48,13 @@ class _LoginScreenState extends State<LoginScreen>
       ),
     );
 
-    _cardSlide = Tween<Offset>(
-      begin: const Offset(0, 0.15),
-      end: Offset.zero,
-    ).animate(
-      CurvedAnimation(
-        parent: _animationController,
-        curve: const Interval(0.45, 1.0, curve: Curves.easeOut),
-      ),
-    );
+    _cardSlide = Tween<Offset>(begin: const Offset(0, 0.15), end: Offset.zero)
+        .animate(
+          CurvedAnimation(
+            parent: _animationController,
+            curve: const Interval(0.45, 1.0, curve: Curves.easeOut),
+          ),
+        );
 
     _animationController.forward();
   }
@@ -82,24 +83,16 @@ class _LoginScreenState extends State<LoginScreen>
     });
 
     try {
-      final result = await _authService.signIn(email: email, password: password);
+      final result = await _authService.signIn(
+        email: email,
+        password: password,
+      );
       if (!mounted) return;
 
       if (result.needsVerification) {
-        await showDialog(
-          context: context,
-          barrierDismissible: false,
-          builder: (context) => AlertDialog(
-            title: const Text('Verify your email'),
-            content: const Text(
-              'Your account is registered, but you need to verify your email before signing in.',
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(context).pop(),
-                child: const Text('OK'),
-              ),
-            ],
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(
+            builder: (_) => EmailVerificationScreen(email: email),
           ),
         );
       } else {
@@ -113,16 +106,94 @@ class _LoginScreenState extends State<LoginScreen>
       print('Login error: $e');
       // ignore: avoid_print
       print(st);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('$e')),
+      if (mounted && e.toString().toLowerCase().contains('confirm')) {
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(
+            builder: (_) => EmailVerificationScreen(email: email),
+          ),
         );
+      } else if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('$e')));
       }
     } finally {
       if (mounted) {
         setState(() {
           _isSubmitting = false;
         });
+      }
+    }
+  }
+
+  Future<void> _forgotPassword() async {
+    final controller = TextEditingController(
+      text: _emailController.text.trim(),
+    );
+    final email = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        icon: const Icon(
+          Icons.mark_email_read_outlined,
+          size: 42,
+          color: Color(0xFF2962FF),
+        ),
+        title: const Text('Reset your password'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text(
+              'Enter your account email. We will send a secure recovery link.',
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: controller,
+              autofocus: true,
+              keyboardType: TextInputType.emailAddress,
+              decoration: const InputDecoration(
+                labelText: 'Email address',
+                prefixIcon: Icon(Icons.email_outlined),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, controller.text.trim()),
+            child: const Text('Send link'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (email == null || email.isEmpty || !mounted) return;
+    try {
+      await Supabase.instance.client.auth.resetPasswordForEmail(
+        email,
+        redirectTo: AuthService.passwordRecoveryRedirect(),
+      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Recovery email sent. Open the link on this device to choose a new password.',
+            ),
+          ),
+        );
+      }
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'We could not send the recovery email. Check the address and try again.',
+            ),
+          ),
+        );
       }
     }
   }
@@ -183,7 +254,10 @@ class _LoginScreenState extends State<LoginScreen>
                     Align(
                       alignment: Alignment.centerLeft,
                       child: IconButton(
-                        icon: const Icon(Icons.arrow_back, color: Color(0xFF0D47A1)),
+                        icon: const Icon(
+                          Icons.arrow_back,
+                          color: Color(0xFF0D47A1),
+                        ),
                         onPressed: () => Navigator.of(context).pop(),
                       ),
                     ),
@@ -232,7 +306,10 @@ class _LoginScreenState extends State<LoginScreen>
                               children: [
                                 Text(
                                   'Good to see you again',
-                                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                                  style:
+                                      Theme.of(
+                                        context,
+                                      ).textTheme.headlineSmall?.copyWith(
                                         fontWeight: FontWeight.bold,
                                         color: const Color(0xFF0D47A1),
                                       ) ??
@@ -245,7 +322,10 @@ class _LoginScreenState extends State<LoginScreen>
                                 const SizedBox(height: 8),
                                 const Text(
                                   'Login with your OG Vibes account and continue your journey.',
-                                  style: TextStyle(color: Colors.black54, height: 1.5),
+                                  style: TextStyle(
+                                    color: Colors.black54,
+                                    height: 1.5,
+                                  ),
                                 ),
                                 const SizedBox(height: 24),
                                 TextField(
@@ -281,12 +361,25 @@ class _LoginScreenState extends State<LoginScreen>
                                     ),
                                   ),
                                 ),
-                                const SizedBox(height: 22),
+                                Align(
+                                  alignment: Alignment.centerRight,
+                                  child: TextButton(
+                                    onPressed: _isSubmitting
+                                        ? null
+                                        : _forgotPassword,
+                                    child: const Text('Forgot password?'),
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
                                 ElevatedButton(
-                                  onPressed: _isSubmitting ? null : _onLoginPressed,
+                                  onPressed: _isSubmitting
+                                      ? null
+                                      : _onLoginPressed,
                                   style: ElevatedButton.styleFrom(
                                     backgroundColor: primaryBlue,
-                                    padding: const EdgeInsets.symmetric(vertical: 16),
+                                    padding: const EdgeInsets.symmetric(
+                                      vertical: 16,
+                                    ),
                                     shape: RoundedRectangleBorder(
                                       borderRadius: BorderRadius.circular(16),
                                     ),
@@ -296,13 +389,19 @@ class _LoginScreenState extends State<LoginScreen>
                                           height: 22,
                                           width: 22,
                                           child: CircularProgressIndicator(
-                                            valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                                            valueColor:
+                                                AlwaysStoppedAnimation<Color>(
+                                                  Colors.white,
+                                                ),
                                             strokeWidth: 2.2,
                                           ),
                                         )
                                       : const Text(
                                           'Sign In',
-                                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                                          style: TextStyle(
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 16,
+                                          ),
                                         ),
                                 ),
                                 const SizedBox(height: 12),
@@ -311,20 +410,31 @@ class _LoginScreenState extends State<LoginScreen>
                                       ? null
                                       : () {
                                           Navigator.of(context).pushReplacement(
-                                            MaterialPageRoute(builder: (_) => const HomeScreen()),
+                                            MaterialPageRoute(
+                                              builder: (_) =>
+                                                  const HomeScreen(),
+                                            ),
                                           );
                                         },
                                   style: OutlinedButton.styleFrom(
                                     foregroundColor: primaryBlue,
-                                    side: const BorderSide(color: primaryBlue, width: 1.8),
-                                    padding: const EdgeInsets.symmetric(vertical: 16),
+                                    side: const BorderSide(
+                                      color: primaryBlue,
+                                      width: 1.8,
+                                    ),
+                                    padding: const EdgeInsets.symmetric(
+                                      vertical: 16,
+                                    ),
                                     shape: RoundedRectangleBorder(
                                       borderRadius: BorderRadius.circular(16),
                                     ),
                                   ),
                                   child: const Text(
                                     'Continue as Guest',
-                                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 16,
+                                    ),
                                   ),
                                 ),
                               ],
@@ -335,20 +445,28 @@ class _LoginScreenState extends State<LoginScreen>
                     ),
                     const SizedBox(height: 18),
                     Center(
-                      child: RichText(
-                        textAlign: TextAlign.center,
-                        text: const TextSpan(
-                          text: 'Need an account? ',
-                          style: TextStyle(color: Colors.black54),
-                          children: [
-                            TextSpan(
-                              text: 'Sign up later',
-                              style: TextStyle(
-                                color: primaryBlue,
-                                fontWeight: FontWeight.bold,
+                      child: TextButton(
+                        onPressed: _isSubmitting
+                            ? null
+                            : () => Navigator.of(context).push(
+                                MaterialPageRoute(
+                                  builder: (_) => const SignupScreen(),
+                                ),
                               ),
-                            ),
-                          ],
+                        child: const Text.rich(
+                          TextSpan(
+                            text: 'New to OG Vibes? ',
+                            style: TextStyle(color: Colors.black54),
+                            children: [
+                              TextSpan(
+                                text: 'Sign up',
+                                style: TextStyle(
+                                  color: primaryBlue,
+                                  fontWeight: FontWeight.w800,
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
                       ),
                     ),

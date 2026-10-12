@@ -24,6 +24,12 @@
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<key>NSCameraUsageDescription</key>
+	<string>OG Vibes uses your camera when you choose to make a video call.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>OG Vibes uses your microphone for private voice and video calls.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>OG Vibes uses your location only while you use nearby or safety features that require it.</string>
 	<key>UILaunchStoryboardName</key>
 	<string>LaunchScreen</string>
 	<key>UIMainStoryboardFile</key>

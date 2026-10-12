@@ -27,13 +27,13 @@
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black">
   <meta name="apple-mobile-web-app-title" content="OG Vibes">
-  <link rel="apple-touch-icon" href="assets/images/logo.jpeg">
+  <link rel="apple-touch-icon" sizes="192x192" href="/icons/Icon-192.png">
 
   <!-- Favicon -->
-  <link rel="icon" type="image/jpeg" href="assets/images/logo.jpeg"/>
+  <link rel="icon" type="image/png" sizes="48x48" href="/favicon.png"/>
 
   <title>OG Vibes</title>
-  <link rel="manifest" href="manifest.json">
+  <link rel="manifest" href="/manifest.json">
 
   <style>
     html,
@@ -59,6 +59,49 @@
       font-size: 1.25rem;
       letter-spacing: 0.05em;
     }
+
+    #app_install_prompt {
+      position: fixed;
+      z-index: 2147483647;
+      left: 12px;
+      right: 12px;
+      bottom: max(14px, env(safe-area-inset-bottom));
+      display: none;
+      max-width: 520px;
+      margin: 0 auto;
+      padding: 18px;
+      border: 1px solid rgba(255,255,255,.28);
+      border-radius: 24px;
+      color: #fff;
+      background: linear-gradient(135deg, rgba(7,26,57,.98), rgba(22,79,186,.97));
+      box-shadow: 0 22px 55px rgba(4,24,61,.38);
+      backdrop-filter: blur(18px);
+      -webkit-backdrop-filter: blur(18px);
+    }
+
+    #app_install_prompt.visible { display: block; animation: og-install-in .42s ease-out; }
+    #app_install_prompt .install-copy { display: flex; align-items: center; gap: 12px; }
+    #app_install_prompt .install-logo { width: 48px; height: 48px; border-radius: 14px; object-fit: cover; }
+    #app_install_prompt h2 { margin: 0 34px 4px 0; font-size: 1.05rem; }
+    #app_install_prompt p { margin: 0; color: #dce8ff; font-size: .82rem; line-height: 1.4; }
+    #app_install_prompt button {
+      border: 0; cursor: pointer; font: inherit; font-weight: 800;
+    }
+    #app_install_close {
+      position: absolute; top: 8px; right: 8px; width: 38px; height: 38px;
+      border-radius: 999px; color: #fff; background: transparent; font-size: 1.25rem;
+    }
+    #app_install_action {
+      width: 100%; margin-top: 14px; padding: 11px 14px; border-radius: 14px;
+      color: #1249a5; background: #fff;
+    }
+    @keyframes og-install-in {
+      from { opacity: 0; transform: translateY(22px) scale(.98); }
+      to { opacity: 1; transform: translateY(0) scale(1); }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      #app_install_prompt.visible { animation: none; }
+    }
   </style>
 
   <script>
@@ -67,6 +110,17 @@
   </script>
 </head>
 <body>
+  <aside id="app_install_prompt" role="dialog" aria-modal="true" aria-labelledby="app_install_title">
+    <button id="app_install_close" type="button" aria-label="Close install prompt">&times;</button>
+    <div class="install-copy">
+      <img class="install-logo" src="icons/Icon-192.png" alt="OG Vibes logo">
+      <div>
+        <h2 id="app_install_title">Install OG Vibes</h2>
+        <p>Keep OG Vibes on your Home Screen for faster, app-like access.</p>
+      </div>
+    </div>
+    <button id="app_install_action" type="button">Install OG Vibes</button>
+  </aside>
   <div id="flutter_loading">
     <div>
       <h1>OG Vibes is waking up...</h1>
@@ -75,6 +129,55 @@
   <!-- Passkeys Web SDK (required by passkeys_web plugin) -->
   <!-- If you prefer to vendor this file, download the bundle and serve it locally. -->
   <script src="https://github.com/corbado/flutter-passkeys/releases/download/2.4.0/bundle.js"></script>
+  <script>
+    (function () {
+      var deferredInstallPrompt = null;
+      var ua = window.navigator.userAgent || '';
+      var isAppleMobile = /iPhone|iPad|iPod/i.test(ua) ||
+        (/Macintosh/i.test(ua) && window.navigator.maxTouchPoints > 1);
+      var isStandalone = window.matchMedia('(display-mode: standalone)').matches ||
+        window.navigator.standalone === true;
+      if (isStandalone) return;
+
+      var prompt = document.getElementById('app_install_prompt');
+      var install = document.getElementById('app_install_action');
+      var close = function () { prompt.classList.remove('visible'); };
+      var show = function () { prompt.classList.add('visible'); };
+      document.getElementById('app_install_close').addEventListener('click', close);
+
+      window.addEventListener('beforeinstallprompt', function (event) {
+        event.preventDefault();
+        deferredInstallPrompt = event;
+        show();
+      });
+
+      install.addEventListener('click', async function () {
+        if (deferredInstallPrompt) {
+          deferredInstallPrompt.prompt();
+          await deferredInstallPrompt.userChoice;
+          deferredInstallPrompt = null;
+          close();
+          return;
+        }
+        if (isAppleMobile && navigator.share) {
+          try {
+            await navigator.share({ title: 'OG Vibes', url: window.location.href });
+          } catch (_) {}
+        }
+      });
+
+      window.addEventListener('appinstalled', close);
+      if (isAppleMobile) show();
+    }());
+
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', function () {
+        navigator.serviceWorker.register('/firebase-messaging-sw.js', {
+          scope: '/firebase-cloud-messaging-push-scope',
+        });
+      });
+    }
+  </script>
   <script src="flutter_bootstrap.js" async></script>
 </body>
 </html>
