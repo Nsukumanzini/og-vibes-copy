@@ -1,0 +1,5 @@
+name: flutter_local_notifications
+version: 22.2.0
+description: Local stub package for flutter_local_notifications.
+environment:
+  sdk: '>=3.10.0 <4.0.0'

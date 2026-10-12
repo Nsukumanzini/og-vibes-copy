@@ -57,13 +57,16 @@ dependencies:
   webview_flutter: ^4.13.0
   liquid_progress_indicator_v2: ^0.5.0
   file_picker: ^10.3.7
-  supabase_flutter: ^2.0.0
+  desktop_drop: ^0.7.1
+  supabase_flutter:
+    path: local_packages/supabase_flutter
   flutter_secure_storage: ^9.2.2
   fl_chart: ^0.69.0
   path_provider: ^2.1.4
   permission_handler: ^12.0.1
   record: 6.1.2
   share_plus: ^12.0.1
+  qr_flutter: ^4.1.0
   shared_preferences: ^2.3.2
   table_calendar: ^3.1.2
   # google_mobile_ads: ^5.1.0 (REMOVED for premium app)
@@ -81,6 +84,13 @@ dependencies:
   path: ^1.9.1
   flutter_dotenv: ^6.0.1
   flutter_webrtc: ^0.12.3
+  video_player: ^2.13.0
+  firebase_core:
+    path: local_packages/firebase_core
+  firebase_messaging:
+    path: local_packages/firebase_messaging
+  flutter_local_notifications:
+    path: local_packages/flutter_local_notifications
 
 
 dependency_overrides:
@@ -110,7 +120,6 @@ flutter:
 
   assets:
     - assets/images/
-    - assets/env.local
 
   fonts:
     - family: NotoSans

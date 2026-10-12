@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'package:og_vibes_student/widgets/vibe_scaffold.dart';
 
@@ -269,24 +270,35 @@ class _WhistleblowerScreenState extends State<WhistleblowerScreen> {
     }
 
     setState(() => _isSubmitting = true);
-    await Future<void>.delayed(const Duration(milliseconds: 1500));
-    if (!mounted) {
-      return;
+    try {
+      await Supabase.instance.client.from('whistleblower_reports').insert({
+        'incident_type': _selectedIncidentType,
+        'location': _locationController.text.trim(),
+        'description': _descriptionController.text.trim(),
+        'occurred_at_text': _dateTimeController.text.trim(),
+      });
+      if (!mounted) return;
+      setState(() {
+        _isSubmitting = false;
+        _selectedIncidentType = null;
+        _locationController.clear();
+        _descriptionController.clear();
+        _dateTimeController.clear();
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          backgroundColor: Color(0xFF2E7D32),
+          content: Text(
+            '🔒 Report securely submitted to Campus Management.',
+          ),
+        ),
+      );
+    } on PostgrestException catch (error) {
+      if (!mounted) return;
+      setState(() => _isSubmitting = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Secure submission failed: ${error.message}')),
+      );
     }
-
-    setState(() {
-      _isSubmitting = false;
-      _selectedIncidentType = null;
-      _locationController.clear();
-      _descriptionController.clear();
-      _dateTimeController.clear();
-    });
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        backgroundColor: Color(0xFF2E7D32),
-        content: Text('🔒 Report securely encrypted and sent to Campus Management.'),
-      ),
-    );
   }
 }

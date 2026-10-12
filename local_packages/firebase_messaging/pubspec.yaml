@@ -1,0 +1,5 @@
+name: firebase_messaging
+version: 16.4.3
+description: Local stub package for firebase_messaging.
+environment:
+  sdk: '>=3.10.0 <4.0.0'

@@ -1,6 +1,8 @@
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import 'push_notification_service.dart';
+
 class AuthResult {
   const AuthResult({required this.response, required this.needsVerification});
 
@@ -142,6 +144,7 @@ class AuthService {
 
   Future<void> signOut() async {
     try {
+      await PushNotificationService.unregisterCurrentDevice();
       await Supabase.instance.client.auth.signOut();
     } on AssertionError catch (_) {
       // If Supabase isn't initialized, treat signOut as a no-op.
@@ -149,4 +152,3 @@ class AuthService {
     }
   }
 }
-

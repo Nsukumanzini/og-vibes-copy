@@ -1,8 +1,13 @@
-﻿import 'package:flutter/material.dart';
+import 'dart:ui';
+
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_animate/flutter_animate.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-import 'package:og_vibes_student/screens/chat_detail_screen.dart';
-import 'package:og_vibes_student/widgets/vibe_scaffold.dart';
+import '../utils/theme_constants.dart';
+import '../widgets/vibe_scaffold.dart';
+import 'chat_detail_screen.dart';
 
 class FriendRequestsScreen extends StatefulWidget {
   const FriendRequestsScreen({super.key});
@@ -11,26 +16,35 @@ class FriendRequestsScreen extends StatefulWidget {
   State<FriendRequestsScreen> createState() => _FriendRequestsScreenState();
 }
 
-class _FriendRequestsScreenState extends State<FriendRequestsScreen> with SingleTickerProviderStateMixin {
+class _FriendRequestsScreenState extends State<FriendRequestsScreen>
+    with SingleTickerProviderStateMixin {
   final TextEditingController _searchController = TextEditingController();
-  late final TabController _tabController;
-  String _selectedLevel = 'All';
-  String _searchQuery = '';
-  bool _isLoading = true;
-  String? _errorMessage;
+  final List<FriendProfile> _discover = <FriendProfile>[];
+  final List<FriendRequestEntry> _incoming = <FriendRequestEntry>[];
+  final List<FriendRequestEntry> _outgoing = <FriendRequestEntry>[];
+  final List<FriendProfile> _friends = <FriendProfile>[];
 
-  final List<Map<String, dynamic>> _students = [];
-  final List<Map<String, dynamic>> _incoming = [];
-  final List<Map<String, dynamic>> _friends = [];
-  final Set<String> _pendingOutgoingIds = {};
-  final Set<String> _pendingIncomingIds = {};
-  final Set<String> _friendIds = {};
-  final List<String> _levels = ['All'];
+  late final TabController _tabController;
+  bool _loading = true;
+  bool _refreshing = false;
+  bool _filtersExpanded = false;
+  String? _error;
+  String _search = '';
+  String _campus = 'All';
+  String _faculty = 'All';
+  String _course = 'All';
+  String _level = 'All';
+
+  SupabaseClient get _supabase => Supabase.instance.client;
+  User? get _user => _supabase.auth.currentUser;
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 3, vsync: this);
+    _tabController = TabController(length: 4, vsync: this)
+      ..addListener(() {
+        if (!_tabController.indexIsChanging && mounted) setState(() {});
+      });
     _loadData();
   }
 
@@ -41,890 +55,1489 @@ class _FriendRequestsScreenState extends State<FriendRequestsScreen> with Single
     super.dispose();
   }
 
-  List<Map<String, dynamic>> _parseRows(dynamic response) {
-    if (response is List) {
-      return response
-          .whereType<Map>()
-          .map((item) => Map<String, dynamic>.from(item))
-          .toList();
-    }
-
-    if (response is Map) {
-      final data = response['data'];
-      if (data is List) {
-        return data
-            .whereType<Map>()
-            .map((item) => Map<String, dynamic>.from(item))
-            .toList();
-      }
-    }
-
-    return [];
-  }
-
-  String _displayName(Map<String, dynamic> row) {
-    final nickname = ((row['nickname'] ?? '') as String).trim();
-    if (nickname.isNotEmpty) return nickname;
-
-    final name = ((row['name'] ?? '') as String).trim();
-    final surname = ((row['surname'] ?? '') as String).trim();
-    final full = [if (name.isNotEmpty) name, if (surname.isNotEmpty) surname].join(' ');
-    return full.isNotEmpty ? full : 'Student';
-  }
-
-  String _courseLabel(Map<String, dynamic> row) {
-    final department = ((row['department'] ?? '') as String).trim();
-    return department.isEmpty ? 'No department set' : department;
-  }
-
-  String _profileSubtitle(Map<String, dynamic> row) {
-    final campus = ((row['campus'] ?? '') as String).trim();
-    if (campus.isNotEmpty) {
-      return campus;
-    }
-    return _courseLabel(row);
-  }
-
-  String _profileLevel(Map<String, dynamic> row) {
-    final level = ((row['level'] ?? '') as String).trim();
-    return level.isEmpty ? 'Unspecified' : level;
-  }
-
-  Future<void> _loadData() async {
-    final currentUserId = Supabase.instance.client.auth.currentUser?.id;
-    if (currentUserId == null) {
+  Future<void> _loadData({bool showLoader = true}) async {
+    final user = _user;
+    if (user == null) {
+      if (!mounted) return;
       setState(() {
-        _isLoading = false;
-        _errorMessage = 'You need to be signed in to view friend requests.';
+        _loading = false;
+        _error = 'Sign in to discover your campus community.';
       });
       return;
     }
 
-    setState(() {
-      _isLoading = true;
-      _errorMessage = null;
-    });
+    if (showLoader && mounted) {
+      setState(() {
+        _loading = true;
+        _error = null;
+      });
+    } else if (mounted) {
+      setState(() => _refreshing = true);
+    }
 
     try {
-      final profilesResponse = await Supabase.instance.client
-          .from('profiles')
-          .select('id, name, surname, nickname, department, level, campus, photo_url')
-          .neq('id', currentUserId)
-          .order('name', ascending: true);
-
-      final profileRows = _parseRows(profilesResponse);
-      final students = <Map<String, dynamic>>[];
-      final seenLevels = <String>{'All'};
-
-      for (final row in profileRows) {
-        final levelLabel = _profileLevel(row);
-        seenLevels.add(levelLabel);
-
-        students.add({
-          'id': row['id'],
-          'name': _displayName(row),
-          'course': _courseLabel(row),
-          'subtitle': _profileSubtitle(row),
-          'level': levelLabel,
-          'photo_url': row['photo_url'],
-          'profile': row,
-        });
-      }
-
-      final incomingRequestResponse = await Supabase.instance.client
-          .from('friend_requests')
-          .select('id, sender_id, receiver_id, status, created_at')
-          .eq('receiver_id', currentUserId)
-          .eq('status', 'pending')
-          .order('created_at', ascending: false);
-      final incomingRequestRows = _parseRows(incomingRequestResponse);
-      final senderIds = incomingRequestRows.map((row) => row['sender_id'].toString()).toSet().toList();
-      _pendingIncomingIds
-        ..clear()
-        ..addAll(senderIds);
-
-      final outgoingRequestResponse = await Supabase.instance.client
-          .from('friend_requests')
-          .select('receiver_id')
-          .eq('sender_id', currentUserId)
-          .eq('status', 'pending');
-      final outgoingRequestRows = _parseRows(outgoingRequestResponse);
-      _pendingOutgoingIds
-        ..clear()
-        ..addAll(outgoingRequestRows.map((row) => row['receiver_id'].toString()));
-
-      final friendshipResponse = await Supabase.instance.client
-          .from('friendships')
-          .select('friend_id')
-          .eq('user_id', currentUserId);
-      final friendshipRows = _parseRows(friendshipResponse);
-      _friendIds
-        ..clear()
-        ..addAll(friendshipRows.map((row) => row['friend_id'].toString()));
-
-      final incoming = <Map<String, dynamic>>[];
-      if (senderIds.isNotEmpty) {
-        final senderProfilesResponse = await Supabase.instance.client
+      final responses = await Future.wait<dynamic>(<Future<dynamic>>[
+        _supabase
             .from('profiles')
-            .select('id, name, surname, nickname, department, level, campus, photo_url')
-            .inFilter('id', senderIds);
-        final senderRows = _parseRows(senderProfilesResponse);
-        final senderMap = {for (final row in senderRows) row['id'].toString(): row};
+            .select(
+              'id, name, surname, nickname, campus, department, faculty, '
+              'course, level, photo_url, is_verified, is_online',
+            )
+            .neq('id', user.id)
+            .order('name'),
+        _supabase
+            .from('friend_requests')
+            .select(
+              'id, sender_id, receiver_id, status, created_at, updated_at',
+            )
+            .or('sender_id.eq.${user.id},receiver_id.eq.${user.id}')
+            .eq('status', 'pending')
+            .order('created_at', ascending: false),
+        _supabase
+            .from('friendships')
+            .select('user_id, friend_id, created_at')
+            .or('user_id.eq.${user.id},friend_id.eq.${user.id}'),
+      ]);
 
-        for (final request in incomingRequestRows) {
-          final senderRow = senderMap[request['sender_id'].toString()];
-          if (senderRow == null) continue;
-          final levelLabel = _profileLevel(senderRow);
-          incoming.add({
-            'id': request['id'],
-            'sender_id': request['sender_id'],
-            'name': _displayName(senderRow),
-            'course': _courseLabel(senderRow),
-            'subtitle': _profileSubtitle(senderRow),
-            'level': levelLabel,
-            'photo_url': senderRow['photo_url'],
-            'profile': senderRow,
-          });
+      final profileRows = List<Map<String, dynamic>>.from(
+        responses[0] as List<dynamic>,
+      );
+      final requestRows = List<Map<String, dynamic>>.from(
+        responses[1] as List<dynamic>,
+      );
+      final friendshipRows = List<Map<String, dynamic>>.from(
+        responses[2] as List<dynamic>,
+      );
+      final profiles = profileRows.map(FriendProfile.fromRow).toList();
+      final profileMap = <String, FriendProfile>{
+        for (final profile in profiles) profile.id: profile,
+      };
+
+      final friendIds = friendshipRows.map((row) {
+        final first = row['user_id'].toString();
+        return first == user.id ? row['friend_id'].toString() : first;
+      }).toSet();
+
+      final counts = <String, int>{};
+      if (profiles.isNotEmpty) {
+        final mutualRows = List<Map<String, dynamic>>.from(
+          await _supabase.rpc(
+                'get_mutual_friend_counts',
+                params: <String, dynamic>{
+                  'candidate_ids': profiles
+                      .map((profile) => profile.id)
+                      .toList(),
+                },
+              )
+              as List<dynamic>,
+        );
+        for (final row in mutualRows) {
+          counts[row['candidate_id'].toString()] =
+              int.tryParse(row['mutual_count']?.toString() ?? '') ?? 0;
         }
       }
 
-      final friends = <Map<String, dynamic>>[];
-      if (_friendIds.isNotEmpty) {
-        final friendProfilesResponse = await Supabase.instance.client
-            .from('profiles')
-            .select('id, name, surname, nickname, department, level, campus, photo_url')
-            .inFilter('id', _friendIds.toList());
-        final friendRows = _parseRows(friendProfilesResponse);
+      final enrichedProfiles = profiles
+          .map(
+            (profile) =>
+                profile.copyWith(mutualFriendCount: counts[profile.id] ?? 0),
+          )
+          .toList();
+      final enrichedMap = <String, FriendProfile>{
+        for (final profile in enrichedProfiles) profile.id: profile,
+      };
 
-        for (final row in friendRows) {
-          final levelLabel = _profileLevel(row);
-          friends.add({
-            'id': row['id'],
-            'name': _displayName(row),
-            'course': _courseLabel(row),
-            'subtitle': _profileSubtitle(row),
-            'level': levelLabel,
-            'photo_url': row['photo_url'],
-            'profile': row,
-          });
+      final incoming = <FriendRequestEntry>[];
+      final outgoing = <FriendRequestEntry>[];
+      for (final row in requestRows) {
+        final senderId = row['sender_id'].toString();
+        final receiverId = row['receiver_id'].toString();
+        if (receiverId == user.id) {
+          final profile = enrichedMap[senderId] ?? profileMap[senderId];
+          if (profile != null) {
+            incoming.add(FriendRequestEntry.fromRow(row, profile));
+          }
+        } else if (senderId == user.id) {
+          final profile = enrichedMap[receiverId] ?? profileMap[receiverId];
+          if (profile != null) {
+            outgoing.add(FriendRequestEntry.fromRow(row, profile));
+          }
         }
       }
+
+      final incomingIds = incoming.map((entry) => entry.profile.id).toSet();
+      final outgoingIds = outgoing.map((entry) => entry.profile.id).toSet();
+      final friends =
+          enrichedProfiles
+              .where((profile) => friendIds.contains(profile.id))
+              .toList()
+            ..sort((a, b) => a.displayName.compareTo(b.displayName));
+      final discover =
+          enrichedProfiles
+              .where(
+                (profile) =>
+                    !friendIds.contains(profile.id) &&
+                    !incomingIds.contains(profile.id) &&
+                    !outgoingIds.contains(profile.id),
+              )
+              .toList()
+            ..sort((a, b) {
+              final mutualComparison = b.mutualFriendCount.compareTo(
+                a.mutualFriendCount,
+              );
+              return mutualComparison != 0
+                  ? mutualComparison
+                  : a.displayName.compareTo(b.displayName);
+            });
 
       if (!mounted) return;
       setState(() {
-        _students
+        _discover
           ..clear()
-          ..addAll(students);
+          ..addAll(discover);
         _incoming
           ..clear()
           ..addAll(incoming);
+        _outgoing
+          ..clear()
+          ..addAll(outgoing);
         _friends
           ..clear()
           ..addAll(friends);
-        _levels
-          ..clear()
-          ..addAll(seenLevels.toList()..sort());
-        _isLoading = false;
+        _loading = false;
+        _refreshing = false;
+        _error = null;
       });
     } catch (error) {
       if (!mounted) return;
       setState(() {
-        _isLoading = false;
-        _errorMessage = 'We could not load friend data right now.';
+        _loading = false;
+        _refreshing = false;
+        _error = _friendlyError(error);
       });
     }
   }
 
-  List<Map<String, dynamic>> get _filteredStudents {
-    return _students.where((student) {
-      final levelMatch = _selectedLevel == 'All' || student['level'] == _selectedLevel;
-      final name = (student['name'] as String).toLowerCase();
-      final searchMatch = _searchQuery.isEmpty || name.contains(_searchQuery.toLowerCase());
-      return levelMatch && searchMatch;
-    }).toList();
+  List<FriendProfile> get _allProfiles => <FriendProfile>[
+    ..._incoming.map((entry) => entry.profile),
+    ..._outgoing.map((entry) => entry.profile),
+    ..._friends,
+    ..._discover,
+  ];
+
+  List<String> _options(String Function(FriendProfile) value) {
+    final values =
+        _allProfiles
+            .map(value)
+            .where((entry) => entry.trim().isNotEmpty)
+            .toSet()
+            .toList()
+          ..sort();
+    return <String>['All', ...values];
   }
 
-  List<Map<String, dynamic>> get _filteredIncoming {
-    return _incoming.where((request) {
-      final levelMatch = _selectedLevel == 'All' || request['level'] == _selectedLevel;
-      final name = (request['name'] as String).toLowerCase();
-      final searchMatch = _searchQuery.isEmpty || name.contains(_searchQuery.toLowerCase());
-      return levelMatch && searchMatch;
-    }).toList();
+  bool _matches(FriendProfile profile) {
+    final nameMatches =
+        _search.isEmpty ||
+        profile.displayName.toLowerCase().contains(_search.toLowerCase());
+    return nameMatches &&
+        (_campus == 'All' || profile.campus == _campus) &&
+        (_faculty == 'All' || profile.faculty == _faculty) &&
+        (_course == 'All' || profile.course == _course) &&
+        (_level == 'All' || profile.level == _level);
   }
 
-  List<Map<String, dynamic>> get _filteredFriends {
-    return _friends.where((friend) {
-      final levelMatch = _selectedLevel == 'All' || friend['level'] == _selectedLevel;
-      final name = (friend['name'] as String).toLowerCase();
-      final searchMatch = _searchQuery.isEmpty || name.contains(_searchQuery.toLowerCase());
-      return levelMatch && searchMatch;
-    }).toList();
+  int get _activeFilterCount => <bool>[
+    _campus != 'All',
+    _faculty != 'All',
+    _course != 'All',
+    _level != 'All',
+  ].where((active) => active).length;
+
+  void _clearFilters() {
+    HapticFeedback.selectionClick();
+    setState(() {
+      _campus = 'All';
+      _faculty = 'All';
+      _course = 'All';
+      _level = 'All';
+    });
   }
 
-  bool _hasOutgoingRequest(String profileId) => _pendingOutgoingIds.contains(profileId);
-  bool _hasIncomingRequest(String profileId) => _pendingIncomingIds.contains(profileId);
-  bool _isFriend(String profileId) => _friendIds.contains(profileId);
-
-  Future<void> _sendFriendRequest(String recipientId) async {
-    final currentUserId = Supabase.instance.client.auth.currentUser?.id;
-    if (currentUserId == null) return;
-
+  Future<void> _sendRequest(FriendProfile profile) async {
+    final user = _user;
+    if (user == null) return;
     try {
-      await Supabase.instance.client.from('friend_requests').insert({
-        'sender_id': currentUserId,
-        'receiver_id': recipientId,
+      HapticFeedback.mediumImpact();
+      await _supabase.from('friend_requests').insert(<String, dynamic>{
+        'sender_id': user.id,
+        'receiver_id': profile.id,
         'status': 'pending',
       });
-
-      if (!mounted) return;
-      setState(() {
-        _pendingOutgoingIds.add(recipientId);
-      });
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Friend request sent.')),
+      await _loadData(showLoader: false);
+      _tabController.animateTo(1);
+      _showSnack('Friend request sent to ${profile.displayName}.');
+    } on PostgrestException catch (error) {
+      _showSnack(
+        error.code == '23505'
+            ? 'A request between you is already pending.'
+            : _friendlyError(error),
       );
     } catch (error) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Could not send the request.')),
-      );
+      _showSnack(_friendlyError(error));
     }
   }
 
-  Future<void> _acceptRequest(String requestId, String senderId) async {
-    final currentUserId = Supabase.instance.client.auth.currentUser?.id;
-    if (currentUserId == null) return;
-
+  Future<void> _acceptRequest(FriendRequestEntry entry) async {
     try {
-      await Supabase.instance.client.rpc(
+      HapticFeedback.mediumImpact();
+      await _supabase.rpc(
         'accept_friend_request',
-        params: {'request_id': requestId},
+        params: <String, dynamic>{'request_id': entry.id},
       );
-
-      if (!mounted) return;
-      final acceptedRequest = _incoming.firstWhere(
-        (request) => request['id'] == requestId,
-        orElse: () => <String, dynamic>{},
-      );
-      final acceptedProfile = acceptedRequest['profile'] is Map
-          ? Map<String, dynamic>.from(acceptedRequest['profile'] as Map)
-          : null;
-
-      setState(() {
-        _incoming.removeWhere((request) => request['id'] == requestId);
-        _pendingIncomingIds.remove(senderId);
-        _friendIds.add(senderId);
-        if (acceptedProfile != null) {
-          _friends.add({
-            'id': acceptedProfile['id'],
-            'name': _displayName(acceptedProfile),
-            'course': _courseLabel(acceptedProfile),
-            'subtitle': _profileSubtitle(acceptedProfile),
-            'level': _profileLevel(acceptedProfile),
-            'photo_url': acceptedProfile['photo_url'],
-            'profile': acceptedProfile,
-          });
-        }
-      });
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Friend request accepted.')),
-      );
+      await _loadData(showLoader: false);
+      _tabController.animateTo(2);
+      _showSnack('${entry.profile.displayName} is now your friend.');
     } catch (error) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Could not accept the request.')),
-      );
+      _showSnack(_friendlyError(error));
     }
   }
 
-  Future<void> _declineRequest(String requestId) async {
+  Future<void> _declineRequest(FriendRequestEntry entry) async {
     try {
-      final now = DateTime.now().toUtc().toIso8601String();
-      await Supabase.instance.client.from('friend_requests').update({
-        'status': 'declined',
-        'updated_at': now,
-      }).eq('id', requestId);
-
-      if (!mounted) return;
-      setState(() {
-        _incoming.removeWhere((request) => request['id'] == requestId);
-      });
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Friend request declined.')),
-      );
+      await _supabase
+          .from('friend_requests')
+          .update(<String, dynamic>{
+            'status': 'declined',
+            'updated_at': DateTime.now().toUtc().toIso8601String(),
+          })
+          .eq('id', entry.id);
+      HapticFeedback.selectionClick();
+      await _loadData(showLoader: false);
+      _showSnack('Request declined.');
     } catch (error) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Could not decline the request.')),
-      );
+      _showSnack(_friendlyError(error));
     }
   }
 
-  Future<void> _unfriend(String friendId) async {
-    final currentUserId = Supabase.instance.client.auth.currentUser?.id;
-    if (currentUserId == null) return;
-
+  Future<void> _cancelRequest(FriendRequestEntry entry) async {
     try {
-      await Supabase.instance.client.from('friendships').delete().match({
-        'user_id': currentUserId,
-        'friend_id': friendId,
-      });
-      await Supabase.instance.client.from('friendships').delete().match({
-        'user_id': friendId,
-        'friend_id': currentUserId,
-      });
-
-      if (!mounted) return;
-      setState(() {
-        _friends.removeWhere((friend) => friend['id'] == friendId);
-        _friendIds.remove(friendId);
-      });
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Friend removed.')),
-      );
+      await _supabase
+          .from('friend_requests')
+          .update(<String, dynamic>{
+            'status': 'cancelled',
+            'updated_at': DateTime.now().toUtc().toIso8601String(),
+          })
+          .eq('id', entry.id);
+      HapticFeedback.selectionClick();
+      await _loadData(showLoader: false);
+      _showSnack('Friend request cancelled.');
     } catch (error) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Could not remove friend.')),
-      );
+      _showSnack(_friendlyError(error));
     }
   }
 
-  void _showProfileDetails(Map<String, dynamic> profile) {
-    final displayName = _displayName(profile);
-    final nickname = ((profile['nickname'] ?? '') as String).trim();
-    final department = _courseLabel(profile);
-    final campus = ((profile['campus'] ?? '') as String).trim();
-    final level = _profileLevel(profile);
-    final photoUrl = ((profile['photo_url'] ?? '') as String).trim();
-
-    showModalBottomSheet(
+  Future<void> _removeFriend(FriendProfile profile) async {
+    final user = _user;
+    if (user == null) return;
+    final confirmed = await showDialog<bool>(
       context: context,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      builder: (context) => AlertDialog(
+        icon: const Icon(
+          Icons.person_remove_outlined,
+          color: AppColors.danger,
+          size: 32,
+        ),
+        title: Text('Remove ${profile.displayName}?'),
+        content: const Text(
+          'You will need to send a new request before chatting from Find Friends again.',
+        ),
+        actions: <Widget>[
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Keep friend'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: FilledButton.styleFrom(backgroundColor: AppColors.danger),
+            child: const Text('Remove'),
+          ),
+        ],
       ),
-      builder: (context) {
-        return Padding(
-          padding: const EdgeInsets.fromLTRB(20, 24, 20, 24),
+    );
+    if (confirmed != true) return;
+
+    try {
+      await _supabase.from('friendships').delete().match(<String, Object>{
+        'user_id': user.id,
+        'friend_id': profile.id,
+      });
+      await _supabase.from('friendships').delete().match(<String, Object>{
+        'user_id': profile.id,
+        'friend_id': user.id,
+      });
+      HapticFeedback.mediumImpact();
+      await _loadData(showLoader: false);
+      _showSnack('${profile.displayName} was removed.');
+    } catch (error) {
+      _showSnack(_friendlyError(error));
+    }
+  }
+
+  void _openChat(FriendProfile friend) {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) =>
+            ChatDetailScreen(chatId: friend.id, chatTitle: friend.displayName),
+      ),
+    );
+  }
+
+  void _showProfile(
+    FriendProfile profile, {
+    FriendRelationship relationship = FriendRelationship.discover,
+    FriendRequestEntry? request,
+  }) {
+    HapticFeedback.selectionClick();
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      backgroundColor: Colors.transparent,
+      builder: (sheetContext) => Material(
+        color: Colors.white,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(30)),
+        clipBehavior: Clip.antiAlias,
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(22, 14, 22, 28),
           child: Column(
-            mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  CircleAvatar(
-                    radius: 30,
-                    backgroundColor: const Color(0xFF2962FF).withOpacity(0.15),
-                    backgroundImage: photoUrl.isNotEmpty ? NetworkImage(photoUrl) : null,
-                    child: photoUrl.isEmpty
-                        ? Text(
-                            displayName.isNotEmpty ? displayName[0].toUpperCase() : 'S',
-                            style: const TextStyle(color: Color(0xFF2962FF), fontSize: 24, fontWeight: FontWeight.w700),
-                          )
-                        : null,
+            children: <Widget>[
+              Center(
+                child: Container(
+                  width: 42,
+                  height: 5,
+                  decoration: BoxDecoration(
+                    color: AppColors.glassBorder,
+                    borderRadius: AppStyles.pillRadius,
                   ),
-                  const SizedBox(width: 14),
+                ),
+              ),
+              const SizedBox(height: 20),
+              Row(
+                children: <Widget>[
+                  _ProfileAvatar(profile: profile, radius: 40),
+                  const SizedBox(width: 15),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(displayName, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
+                      children: <Widget>[
+                        Row(
+                          children: <Widget>[
+                            Flexible(
+                              child: Text(
+                                profile.displayName,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  color: AppColors.midnightInk,
+                                  fontSize: 23,
+                                  fontWeight: FontWeight.w900,
+                                ),
+                              ),
+                            ),
+                            if (profile.isVerified) ...<Widget>[
+                              const SizedBox(width: 6),
+                              const Icon(
+                                Icons.verified_rounded,
+                                color: AppColors.vibeBlue,
+                                size: 19,
+                              ),
+                            ],
+                          ],
+                        ),
                         const SizedBox(height: 6),
-                        if (nickname.isNotEmpty && nickname != displayName)
-                          Text('Nickname: $nickname', style: const TextStyle(color: Color(0xFF607D8B))),
+                        Text(
+                          profile.course,
+                          style: const TextStyle(
+                            color: AppColors.textMuted,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
                       ],
                     ),
                   ),
                 ],
               ),
-              const SizedBox(height: 20),
-              _detailRow(Icons.school_outlined, 'Department', department),
-              const SizedBox(height: 12),
-              _detailRow(Icons.location_on_outlined, 'Campus', campus.isNotEmpty ? campus : 'Not set'),
-              const SizedBox(height: 12),
-              _detailRow(Icons.bar_chart_outlined, 'Level', level),
-              const SizedBox(height: 20),
-              ElevatedButton(
-                onPressed: () => Navigator.of(context).pop(),
-                child: const Text('Close'),
+              const SizedBox(height: 22),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: <Widget>[
+                  _InfoChip(
+                    icon: Icons.location_on_outlined,
+                    label: profile.campus,
+                  ),
+                  _InfoChip(
+                    icon: Icons.account_balance_outlined,
+                    label: profile.faculty,
+                  ),
+                  _InfoChip(icon: Icons.stairs_outlined, label: profile.level),
+                  if (profile.mutualFriendCount > 0)
+                    _InfoChip(
+                      icon: Icons.people_outline_rounded,
+                      label:
+                          '${profile.mutualFriendCount} mutual friend${profile.mutualFriendCount == 1 ? '' : 's'}',
+                      highlight: true,
+                    ),
+                ],
               ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
-  Widget _detailRow(IconData icon, String label, String value) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Icon(icon, size: 20, color: const Color(0xFF2962FF)),
-        const SizedBox(width: 12),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(label, style: const TextStyle(fontWeight: FontWeight.w700)),
-              const SizedBox(height: 4),
-              Text(value, style: const TextStyle(color: Color(0xFF607D8B))),
+              const SizedBox(height: 22),
+              const Text(
+                'Campus profile',
+                style: TextStyle(
+                  color: AppColors.midnightInk,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+              const SizedBox(height: 10),
+              _ProfileInfoPanel(profile: profile),
+              const SizedBox(height: 24),
+              if (relationship == FriendRelationship.friend)
+                Row(
+                  children: <Widget>[
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: () {
+                          Navigator.pop(sheetContext);
+                          _removeFriend(profile);
+                        },
+                        icon: const Icon(Icons.person_remove_outlined),
+                        label: const Text('Remove'),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: FilledButton.icon(
+                        onPressed: () {
+                          Navigator.pop(sheetContext);
+                          _openChat(profile);
+                        },
+                        icon: const Icon(Icons.chat_bubble_outline_rounded),
+                        label: const Text('Chat'),
+                      ),
+                    ),
+                  ],
+                )
+              else if (relationship == FriendRelationship.incoming &&
+                  request != null)
+                Row(
+                  children: <Widget>[
+                    Expanded(
+                      child: OutlinedButton(
+                        onPressed: () {
+                          Navigator.pop(sheetContext);
+                          _declineRequest(request);
+                        },
+                        child: const Text('Decline'),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: FilledButton(
+                        onPressed: () {
+                          Navigator.pop(sheetContext);
+                          _acceptRequest(request);
+                        },
+                        child: const Text('Accept request'),
+                      ),
+                    ),
+                  ],
+                )
+              else if (relationship == FriendRelationship.outgoing &&
+                  request != null)
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    onPressed: () {
+                      Navigator.pop(sheetContext);
+                      _cancelRequest(request);
+                    },
+                    icon: const Icon(Icons.close_rounded),
+                    label: const Text('Cancel sent request'),
+                  ),
+                )
+              else
+                SizedBox(
+                  width: double.infinity,
+                  child: FilledButton.icon(
+                    onPressed: () {
+                      Navigator.pop(sheetContext);
+                      _sendRequest(profile);
+                    },
+                    icon: const Icon(Icons.person_add_alt_1_rounded),
+                    label: const Text('Send friend request'),
+                  ),
+                ),
             ],
           ),
         ),
-      ],
+      ),
     );
+  }
+
+  void _showSnack(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  String _friendlyError(Object error) {
+    final raw = error.toString().toLowerCase();
+    if (raw.contains('permission') || raw.contains('row-level')) {
+      return 'This action is not permitted for your account.';
+    }
+    if (raw.contains('network') || raw.contains('socket')) {
+      return 'Check your connection and try again.';
+    }
+    return 'Something went wrong. Please try again.';
   }
 
   @override
   Widget build(BuildContext context) {
     return VibeScaffold(
       appBar: AppBar(
-        title: const Text('Connections'),
-        bottom: TabBar(
-          controller: _tabController,
-          labelColor: Colors.white,
-          unselectedLabelColor: Colors.white70,
-          indicatorColor: Colors.white,
-          tabs: const [
-            Tab(text: 'Find'),
-            Tab(text: 'Requests'),
-            Tab(text: 'Friends'),
-          ],
-        ),
+        title: const Text('Find Friends'),
+        actions: <Widget>[
+          IconButton(
+            tooltip: 'Refresh connections',
+            onPressed: _refreshing ? null : () => _loadData(showLoader: false),
+            icon: _refreshing
+                ? const SizedBox.square(
+                    dimension: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.refresh_rounded),
+          ),
+          const SizedBox(width: 4),
+        ],
       ),
-      body: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
-        child: _isLoading
+      body: DecoratedBox(
+        decoration: const BoxDecoration(gradient: AppStyles.auroraGradient),
+        child: _loading
             ? const Center(child: CircularProgressIndicator())
-            : _errorMessage != null
-                ? _buildErrorState()
-                : Column(
-                    children: [
-                      _buildSearchHeader(),
-                      const SizedBox(height: 16),
-                      Expanded(
-                        child: TabBarView(
-                          controller: _tabController,
-                          children: [
-                            _buildFindFriendsTab(),
-                            _buildRequestsTab(),
-                            _buildMyFriendsTab(),
-                          ],
-                        ),
+            : _error != null
+            ? _ErrorState(message: _error!, onRetry: _loadData)
+            : RefreshIndicator(
+                onRefresh: () => _loadData(showLoader: false),
+                child: CustomScrollView(
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  slivers: <Widget>[
+                    SliverPadding(
+                      padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
+                      sliver: SliverToBoxAdapter(child: _buildHero()),
+                    ),
+                    SliverPersistentHeader(
+                      pinned: true,
+                      delegate: _FriendTabsDelegate(child: _buildTabs()),
+                    ),
+                    SliverPadding(
+                      padding: const EdgeInsets.fromLTRB(16, 14, 16, 8),
+                      sliver: SliverToBoxAdapter(child: _buildSearch()),
+                    ),
+                    if (_filtersExpanded)
+                      SliverPadding(
+                        padding: const EdgeInsets.fromLTRB(16, 4, 16, 14),
+                        sliver: SliverToBoxAdapter(child: _buildFilterPanel()),
                       ),
-                    ],
-                  ),
+                    SliverPadding(
+                      padding: const EdgeInsets.fromLTRB(16, 8, 16, 110),
+                      sliver: _buildActiveTab(),
+                    ),
+                  ],
+                ),
+              ),
       ),
     );
   }
 
-  Widget _buildSearchHeader() {
-    return Column(
-      children: [
-        TextField(
-          controller: _searchController,
-          onChanged: (value) => setState(() => _searchQuery = value),
-          decoration: InputDecoration(
-            hintText: 'Search by name or level',
-            prefixIcon: const Icon(Icons.search),
-            filled: true,
-            fillColor: Colors.white,
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(18),
-              borderSide: BorderSide.none,
+  Widget _buildHero() {
+    final reduceMotion = MediaQuery.disableAnimationsOf(context);
+    final hero = Container(
+      constraints: const BoxConstraints(minHeight: 202),
+      padding: const EdgeInsets.all(22),
+      decoration: BoxDecoration(
+        gradient: AppStyles.brandGradient,
+        borderRadius: AppStyles.bentoRadius,
+        boxShadow: AppStyles.glassShadow,
+      ),
+      child: Stack(
+        children: <Widget>[
+          const Positioned(
+            right: -35,
+            top: -45,
+            child: _HeroOrb(size: 165, color: AppColors.electricCyan),
+          ),
+          const Positioned(
+            right: 95,
+            bottom: -55,
+            child: _HeroOrb(size: 120, color: AppColors.ogGold),
+          ),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 11,
+                  vertical: 6,
+                ),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: .12),
+                  borderRadius: AppStyles.pillRadius,
+                  border: Border.all(color: Colors.white24),
+                ),
+                child: const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: <Widget>[
+                    Icon(Icons.hub_outlined, color: AppColors.ogGold, size: 16),
+                    SizedBox(width: 7),
+                    Text(
+                      'OG CAMPUS NETWORK',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 10,
+                        letterSpacing: 1.5,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 15),
+              const Text(
+                'Your people are closer\nthan you think.',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 27,
+                  height: 1.05,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+              const SizedBox(height: 17),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: <Widget>[
+                  _HeroMetric(
+                    icon: Icons.mark_email_unread_outlined,
+                    value: '${_incoming.length}',
+                    label: 'Requests',
+                    highlight: _incoming.isNotEmpty,
+                  ),
+                  _HeroMetric(
+                    icon: Icons.outgoing_mail,
+                    value: '${_outgoing.length}',
+                    label: 'Sent',
+                  ),
+                  _HeroMetric(
+                    icon: Icons.people_alt_outlined,
+                    value: '${_friends.length}',
+                    label: 'Friends',
+                  ),
+                  _HeroMetric(
+                    icon: Icons.travel_explore_rounded,
+                    value: '${_discover.length}',
+                    label: 'Discover',
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+    return reduceMotion
+        ? hero
+        : hero.animate().fadeIn(duration: 420.ms).slideY(begin: .05, end: 0);
+  }
+
+  Widget _buildTabs() {
+    return Container(
+      color: AppColors.auroraCanvas.withValues(alpha: .95),
+      padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
+      child: ClipRRect(
+        borderRadius: AppStyles.controlRadius,
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
+          child: Container(
+            padding: const EdgeInsets.all(5),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: .84),
+              borderRadius: AppStyles.controlRadius,
+              border: Border.all(color: AppColors.glassBorder),
+              boxShadow: AppStyles.softShadow,
+            ),
+            child: TabBar(
+              controller: _tabController,
+              dividerColor: Colors.transparent,
+              indicatorSize: TabBarIndicatorSize.tab,
+              indicator: BoxDecoration(
+                gradient: AppStyles.brandGradient,
+                borderRadius: BorderRadius.circular(14),
+              ),
+              labelColor: Colors.white,
+              unselectedLabelColor: AppColors.textMuted,
+              labelStyle: const TextStyle(
+                fontSize: 10,
+                fontWeight: FontWeight.w900,
+              ),
+              unselectedLabelStyle: const TextStyle(
+                fontSize: 10,
+                fontWeight: FontWeight.w700,
+              ),
+              onTap: (_) {
+                HapticFeedback.selectionClick();
+                setState(() {});
+              },
+              tabs: const <Tab>[
+                Tab(
+                  icon: Icon(Icons.mark_email_unread_outlined, size: 18),
+                  text: 'Requests',
+                ),
+                Tab(icon: Icon(Icons.outgoing_mail, size: 18), text: 'Sent'),
+                Tab(
+                  icon: Icon(Icons.people_alt_outlined, size: 18),
+                  text: 'My Friends',
+                ),
+                Tab(
+                  icon: Icon(Icons.travel_explore_rounded, size: 18),
+                  text: 'Discover',
+                ),
+              ],
             ),
           ),
         ),
-        const SizedBox(height: 12),
-        if (_levels.length > 1)
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Row(
-              children: _levels.map((level) {
-                final isSelected = _selectedLevel == level;
-                return Padding(
-                  padding: const EdgeInsets.only(right: 10),
-                  child: ChoiceChip(
-                    label: Text(level),
-                    selected: isSelected,
-                    onSelected: (_) => setState(() => _selectedLevel = level),
-                    selectedColor: const Color(0xFF2962FF),
-                    backgroundColor: const Color(0xFFE3F2FD),
-                    labelStyle: TextStyle(
-                      color: isSelected ? Colors.white : const Color(0xFF102027),
-                      fontWeight: FontWeight.w700,
+      ),
+    );
+  }
+
+  Widget _buildSearch() {
+    return Row(
+      children: <Widget>[
+        Expanded(
+          child: TextField(
+            controller: _searchController,
+            textInputAction: TextInputAction.search,
+            onChanged: (value) => setState(() => _search = value.trim()),
+            decoration: InputDecoration(
+              hintText: 'Search by name',
+              prefixIcon: const Icon(Icons.search_rounded),
+              suffixIcon: _search.isEmpty
+                  ? null
+                  : IconButton(
+                      tooltip: 'Clear search',
+                      onPressed: () {
+                        _searchController.clear();
+                        setState(() => _search = '');
+                      },
+                      icon: const Icon(Icons.close_rounded),
                     ),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                  ),
-                );
-              }).toList(),
             ),
           ),
+        ),
+        const SizedBox(width: 10),
+        Badge(
+          isLabelVisible: _activeFilterCount > 0,
+          label: Text('$_activeFilterCount'),
+          child: IconButton.filledTonal(
+            tooltip: 'Filter students',
+            onPressed: () {
+              HapticFeedback.selectionClick();
+              setState(() => _filtersExpanded = !_filtersExpanded);
+            },
+            icon: Icon(
+              _filtersExpanded
+                  ? Icons.filter_list_off_rounded
+                  : Icons.tune_rounded,
+            ),
+          ),
+        ),
       ],
     );
   }
 
-  Widget _buildFindFriendsTab() {
-    final matches = _filteredStudents;
-    return matches.isEmpty
-        ? _buildEmptyState('No students match your search.', 'Try another name or level filter.')
-        : RefreshIndicator(
-            onRefresh: _loadData,
-            child: ListView.separated(
-              padding: EdgeInsets.zero,
-              itemCount: matches.length,
-              separatorBuilder: (_, _) => const SizedBox(height: 12),
-              itemBuilder: (context, index) {
-                final student = matches[index];
-                final profileId = student['id'].toString();
-                final isFriend = _isFriend(profileId);
-                final hasOutgoing = _hasOutgoingRequest(profileId);
-                final hasIncoming = _hasIncomingRequest(profileId);
-                final status = isFriend
-                    ? 'Friend'
-                    : hasOutgoing
-                        ? 'Request sent'
-                        : hasIncoming
-                            ? 'Incoming request'
-                            : 'Available';
-
-                return _StudentCard(
-                  student: {
-                    ...student,
-                    'status': status,
-                  },
-                  onTap: () {
-                    Navigator.of(context).push(MaterialPageRoute(
-                      builder: (_) => ChatDetailScreen(
-                        chatId: profileId,
-                        chatTitle: student['name'].toString(),
-                      ),
-                    ));
-                  },
-                  onRequest: isFriend || hasOutgoing || hasIncoming
-                      ? () => _showProfileDetails(student['profile'] as Map<String, dynamic>)
-                      : () => _sendFriendRequest(profileId),
-                );
-              },
-            ),
-          );
-  }
-
-  Widget _buildRequestsTab() {
-    final requests = _filteredIncoming;
-    return requests.isEmpty
-        ? _buildEmptyState('No pending friend requests.', 'Ask classmates to connect with you.')
-        : RefreshIndicator(
-            onRefresh: _loadData,
-            child: ListView.separated(
-              padding: EdgeInsets.zero,
-              itemCount: requests.length,
-              separatorBuilder: (_, _) => const SizedBox(height: 12),
-              itemBuilder: (context, index) {
-                final request = requests[index];
-                return _RequestCard(
-                  request: request,
-                  onAccept: () => _acceptRequest(request['id'].toString(), request['sender_id'].toString()),
-                  onDecline: () => _declineRequest(request['id'].toString()),
-                  onViewProfile: () => _showProfileDetails(request['profile'] as Map<String, dynamic>),
-                );
-              },
-            ),
-          );
-  }
-
-  Widget _buildMyFriendsTab() {
-    final friends = _filteredFriends;
-    return friends.isEmpty
-        ? _buildEmptyState('You do not have any friends yet.', 'Accept a request or send one to start connecting.')
-        : RefreshIndicator(
-            onRefresh: _loadData,
-            child: ListView.separated(
-              padding: EdgeInsets.zero,
-              itemCount: friends.length,
-              separatorBuilder: (_, _) => const SizedBox(height: 12),
-              itemBuilder: (context, index) {
-                final friend = friends[index];
-                return _FriendCard(
-                  friend: friend,
-                  onChat: () {
-                    Navigator.of(context).push(MaterialPageRoute(
-                      builder: (_) => ChatDetailScreen(
-                        chatId: friend['id'].toString(),
-                        chatTitle: friend['name'].toString(),
-                      ),
-                    ));
-                  },
-                  onViewProfile: () => _showProfileDetails(friend['profile'] as Map<String, dynamic>),
-                  onUnfriend: () => _unfriend(friend['id'].toString()),
-                );
-              },
-            ),
-          );
-  }
-
-  Widget _buildErrorState() {
-    return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const Icon(Icons.error_outline, size: 54, color: Colors.black38),
-          const SizedBox(height: 10),
-          Text(
-            _errorMessage ?? 'Could not load friend data.',
-            textAlign: TextAlign.center,
-            style: const TextStyle(fontWeight: FontWeight.w700),
+  Widget _buildFilterPanel() {
+    return ClipRRect(
+      borderRadius: AppStyles.bentoRadius,
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 14, sigmaY: 14),
+        child: Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: .83),
+            borderRadius: AppStyles.bentoRadius,
+            border: Border.all(color: AppColors.glassBorder),
+            boxShadow: AppStyles.softShadow,
           ),
-          const SizedBox(height: 12),
-          ElevatedButton.icon(
-            onPressed: _loadData,
-            icon: const Icon(Icons.refresh),
-            label: const Text('Try again'),
+          child: Column(
+            children: <Widget>[
+              Row(
+                children: <Widget>[
+                  const Icon(
+                    Icons.tune_rounded,
+                    color: AppColors.vibeBlue,
+                    size: 19,
+                  ),
+                  const SizedBox(width: 8),
+                  const Expanded(
+                    child: Text(
+                      'Refine your campus network',
+                      style: TextStyle(
+                        color: AppColors.midnightInk,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                  ),
+                  if (_activeFilterCount > 0)
+                    TextButton(
+                      onPressed: _clearFilters,
+                      child: const Text('Clear all'),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              LayoutBuilder(
+                builder: (context, constraints) {
+                  final twoColumns = constraints.maxWidth >= 620;
+                  final width = twoColumns
+                      ? (constraints.maxWidth - 10) / 2
+                      : constraints.maxWidth;
+                  return Wrap(
+                    spacing: 10,
+                    runSpacing: 10,
+                    children: <Widget>[
+                      SizedBox(
+                        width: width,
+                        child: _FilterDropdown(
+                          label: 'Campus',
+                          icon: Icons.location_on_outlined,
+                          value: _campus,
+                          options: _options((profile) => profile.campus),
+                          onChanged: (value) => setState(() => _campus = value),
+                        ),
+                      ),
+                      SizedBox(
+                        width: width,
+                        child: _FilterDropdown(
+                          label: 'Faculty',
+                          icon: Icons.account_balance_outlined,
+                          value: _faculty,
+                          options: _options((profile) => profile.faculty),
+                          onChanged: (value) =>
+                              setState(() => _faculty = value),
+                        ),
+                      ),
+                      SizedBox(
+                        width: width,
+                        child: _FilterDropdown(
+                          label: 'Course',
+                          icon: Icons.school_outlined,
+                          value: _course,
+                          options: _options((profile) => profile.course),
+                          onChanged: (value) => setState(() => _course = value),
+                        ),
+                      ),
+                      SizedBox(
+                        width: width,
+                        child: _FilterDropdown(
+                          label: 'Level',
+                          icon: Icons.stairs_outlined,
+                          value: _level,
+                          options: _options((profile) => profile.level),
+                          onChanged: (value) => setState(() => _level = value),
+                        ),
+                      ),
+                    ],
+                  );
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildActiveTab() {
+    return switch (_tabController.index) {
+      0 => _buildRequestsGrid(),
+      1 => _buildSentGrid(),
+      2 => _buildFriendsGrid(),
+      _ => _buildDiscoverGrid(),
+    };
+  }
+
+  Widget _buildRequestsGrid() {
+    final entries = _incoming
+        .where((entry) => _matches(entry.profile))
+        .toList();
+    return _entryGrid(
+      entries: entries,
+      empty: _EmptyState(
+        icon: Icons.mark_email_read_outlined,
+        title: _searchOrFiltersActive
+            ? 'No requests match your filters'
+            : 'Your request inbox is clear',
+        subtitle: _searchOrFiltersActive
+            ? 'Try another name or broaden the filters.'
+            : 'New friend requests will appear here.',
+      ),
+      builder: (entry) => _ConnectionCard(
+        profile: entry.profile,
+        eyebrow: 'WANTS TO CONNECT',
+        accent: AppColors.vibeBlue,
+        onTap: () => _showProfile(
+          entry.profile,
+          relationship: FriendRelationship.incoming,
+          request: entry,
+        ),
+        actions: <Widget>[
+          Expanded(
+            child: OutlinedButton(
+              onPressed: () => _declineRequest(entry),
+              child: const Text('Decline'),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: FilledButton(
+              onPressed: () => _acceptRequest(entry),
+              child: const Text('Accept'),
+            ),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildEmptyState(String title, String subtitle) {
-    return ListView(
-      physics: const AlwaysScrollableScrollPhysics(),
-      padding: const EdgeInsets.symmetric(vertical: 40),
-      children: [
-        Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(Icons.search_off_outlined, size: 54, color: Colors.black38),
-            const SizedBox(height: 10),
-            Text(
-              title,
-              textAlign: TextAlign.center,
-              style: const TextStyle(fontWeight: FontWeight.w700),
-            ),
-            const SizedBox(height: 6),
-            Text(
-              subtitle,
-              textAlign: TextAlign.center,
-              style: const TextStyle(color: Color(0xFF607D8B)),
-            ),
-          ],
+  Widget _buildSentGrid() {
+    final entries = _outgoing
+        .where((entry) => _matches(entry.profile))
+        .toList();
+    return _entryGrid(
+      entries: entries,
+      empty: _EmptyState(
+        icon: Icons.outgoing_mail,
+        title: _searchOrFiltersActive
+            ? 'No sent requests match'
+            : 'No requests waiting',
+        subtitle: _searchOrFiltersActive
+            ? 'Adjust your search or filters.'
+            : 'Discover students and send your first request.',
+        actionLabel: _searchOrFiltersActive ? null : 'Discover students',
+        onAction: _searchOrFiltersActive
+            ? null
+            : () => _tabController.animateTo(3),
+      ),
+      builder: (entry) => _ConnectionCard(
+        profile: entry.profile,
+        eyebrow: 'REQUEST PENDING',
+        accent: AppColors.warning,
+        onTap: () => _showProfile(
+          entry.profile,
+          relationship: FriendRelationship.outgoing,
+          request: entry,
         ),
-      ],
+        actions: <Widget>[
+          Expanded(
+            child: OutlinedButton.icon(
+              onPressed: () => _cancelRequest(entry),
+              icon: const Icon(Icons.close_rounded),
+              label: const Text('Cancel request'),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFriendsGrid() {
+    final friends = _friends.where(_matches).toList();
+    return _profileGrid(
+      profiles: friends,
+      empty: _EmptyState(
+        icon: Icons.people_outline_rounded,
+        title: _searchOrFiltersActive
+            ? 'No friends match your filters'
+            : 'Build your campus circle',
+        subtitle: _searchOrFiltersActive
+            ? 'Try another name or broader filters.'
+            : 'Accept a request or discover someone new.',
+        actionLabel: _searchOrFiltersActive ? null : 'Discover students',
+        onAction: _searchOrFiltersActive
+            ? null
+            : () => _tabController.animateTo(3),
+      ),
+      builder: (profile) => _ConnectionCard(
+        profile: profile,
+        eyebrow: 'YOUR FRIEND',
+        accent: AppColors.success,
+        onTap: () =>
+            _showProfile(profile, relationship: FriendRelationship.friend),
+        actions: <Widget>[
+          Expanded(
+            child: OutlinedButton.icon(
+              onPressed: () => _showProfile(
+                profile,
+                relationship: FriendRelationship.friend,
+              ),
+              icon: const Icon(Icons.person_outline_rounded),
+              label: const Text('Profile'),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: FilledButton.icon(
+              onPressed: () => _openChat(profile),
+              icon: const Icon(Icons.chat_bubble_outline_rounded),
+              label: const Text('Chat'),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDiscoverGrid() {
+    final profiles = _discover.where(_matches).toList();
+    return _profileGrid(
+      profiles: profiles,
+      empty: _EmptyState(
+        icon: Icons.travel_explore_rounded,
+        title: _searchOrFiltersActive
+            ? 'No students match your search'
+            : 'You have explored everyone',
+        subtitle: _searchOrFiltersActive
+            ? 'Try another name or broaden the filters.'
+            : 'Pull to refresh when more students join OG Vibes.',
+      ),
+      builder: (profile) => _ConnectionCard(
+        profile: profile,
+        eyebrow: profile.mutualFriendCount > 0
+            ? '${profile.mutualFriendCount} MUTUAL CONNECTION${profile.mutualFriendCount == 1 ? '' : 'S'}'
+            : 'DISCOVER',
+        accent: AppColors.electricCyan,
+        onTap: () => _showProfile(profile),
+        actions: <Widget>[
+          Expanded(
+            child: FilledButton.icon(
+              onPressed: () => _sendRequest(profile),
+              icon: const Icon(Icons.person_add_alt_1_rounded),
+              label: const Text('Connect'),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  bool get _searchOrFiltersActive =>
+      _search.isNotEmpty || _activeFilterCount > 0;
+
+  Widget _entryGrid({
+    required List<FriendRequestEntry> entries,
+    required Widget empty,
+    required Widget Function(FriendRequestEntry) builder,
+  }) {
+    if (entries.isEmpty) return SliverToBoxAdapter(child: empty);
+    return _responsiveGrid(
+      count: entries.length,
+      builder: (index) => builder(entries[index]),
+    );
+  }
+
+  Widget _profileGrid({
+    required List<FriendProfile> profiles,
+    required Widget empty,
+    required Widget Function(FriendProfile) builder,
+  }) {
+    if (profiles.isEmpty) return SliverToBoxAdapter(child: empty);
+    return _responsiveGrid(
+      count: profiles.length,
+      builder: (index) => builder(profiles[index]),
+    );
+  }
+
+  Widget _responsiveGrid({
+    required int count,
+    required Widget Function(int) builder,
+  }) {
+    return SliverLayoutBuilder(
+      builder: (context, constraints) {
+        final columns = constraints.crossAxisExtent >= 1080
+            ? 3
+            : constraints.crossAxisExtent >= 700
+            ? 2
+            : 1;
+        return SliverGrid(
+          delegate: SliverChildBuilderDelegate((context, index) {
+            final card = builder(index);
+            if (MediaQuery.disableAnimationsOf(context)) return card;
+            return card
+                .animate(delay: (45 * (index % 6)).ms)
+                .fadeIn(duration: 320.ms)
+                .slideY(begin: .06, end: 0);
+          }, childCount: count),
+          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: columns,
+            mainAxisSpacing: 14,
+            crossAxisSpacing: 14,
+            childAspectRatio: columns == 1 ? 1.25 : 1.15,
+          ),
+        );
+      },
     );
   }
 }
 
-class _StudentCard extends StatelessWidget {
-  const _StudentCard({
-    required this.student,
+enum FriendRelationship { discover, incoming, outgoing, friend }
+
+class _ConnectionCard extends StatelessWidget {
+  const _ConnectionCard({
+    required this.profile,
+    required this.eyebrow,
+    required this.accent,
     required this.onTap,
-    required this.onRequest,
+    required this.actions,
   });
 
-  final Map<String, dynamic> student;
+  final FriendProfile profile;
+  final String eyebrow;
+  final Color accent;
   final VoidCallback onTap;
-  final VoidCallback onRequest;
+  final List<Widget> actions;
 
   @override
   Widget build(BuildContext context) {
-    final name = student['name']?.toString() ?? 'Student';
-    final course = student['course']?.toString() ?? 'No department set';
-    final subtitle = student['subtitle']?.toString() ?? '';
-    final level = student['level']?.toString() ?? 'Unspecified';
-    final status = student['status']?.toString() ?? 'Available';
-    final photoUrl = student['photo_url']?.toString() ?? '';
-
-    final actionLabel = status == 'Request sent'
-        ? 'Pending'
-        : status == 'Incoming request'
-            ? 'View'
-            : status == 'Friend'
-                ? 'View'
-                : 'Connect';
-
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(20),
-      child: Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(20),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.05),
-              blurRadius: 12,
-              offset: const Offset(0, 5),
-            ),
-          ],
-        ),
-        child: Row(
-          children: [
-            CircleAvatar(
-              radius: 26,
-              backgroundColor: const Color(0xFF2962FF).withOpacity(0.15),
-              backgroundImage: photoUrl.isNotEmpty ? NetworkImage(photoUrl) : null,
-              child: photoUrl.isEmpty
-                  ? Text(
-                      name.isNotEmpty ? name[0].toUpperCase() : 'S',
-                      style: const TextStyle(color: Color(0xFF2962FF), fontWeight: FontWeight.w800),
-                    )
-                  : null,
-            ),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    name,
-                    style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    course,
-                    style: const TextStyle(color: Color(0xFF607D8B), fontWeight: FontWeight.w600),
-                  ),
-                  if (subtitle.isNotEmpty) ...[
-                    const SizedBox(height: 4),
+    return Semantics(
+      button: true,
+      label:
+          '${profile.displayName}, ${profile.course}, ${profile.campus}, ${profile.mutualFriendCount} mutual friends',
+      child: ClipRRect(
+        borderRadius: AppStyles.bentoRadius,
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15),
+          child: Material(
+            color: Colors.white.withValues(alpha: .86),
+            child: InkWell(
+              onTap: onTap,
+              child: Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  borderRadius: AppStyles.bentoRadius,
+                  border: Border.all(color: AppColors.glassBorder),
+                  boxShadow: AppStyles.softShadow,
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    Row(
+                      children: <Widget>[
+                        _ProfileAvatar(profile: profile, radius: 32),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: <Widget>[
+                              Row(
+                                children: <Widget>[
+                                  Flexible(
+                                    child: Text(
+                                      profile.displayName,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: const TextStyle(
+                                        color: AppColors.midnightInk,
+                                        fontSize: 17,
+                                        fontWeight: FontWeight.w900,
+                                      ),
+                                    ),
+                                  ),
+                                  if (profile.isVerified) ...<Widget>[
+                                    const SizedBox(width: 5),
+                                    const Icon(
+                                      Icons.verified_rounded,
+                                      color: AppColors.vibeBlue,
+                                      size: 17,
+                                    ),
+                                  ],
+                                ],
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                eyebrow,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  color: accent,
+                                  fontSize: 9,
+                                  letterSpacing: .8,
+                                  fontWeight: FontWeight.w900,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const Icon(
+                          Icons.arrow_forward_ios_rounded,
+                          color: AppColors.textMuted,
+                          size: 14,
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 15),
                     Text(
-                      subtitle,
-                      style: const TextStyle(color: Color(0xFF607D8B)),
+                      profile.course,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: AppColors.midnightInk,
+                        fontWeight: FontWeight.w800,
+                      ),
                     ),
+                    const SizedBox(height: 5),
+                    Text(
+                      '${profile.faculty} • ${profile.level}',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: AppColors.textMuted,
+                        fontSize: 11,
+                      ),
+                    ),
+                    const Spacer(),
+                    Wrap(
+                      spacing: 6,
+                      runSpacing: 6,
+                      children: <Widget>[
+                        _MiniChip(
+                          icon: Icons.location_on_outlined,
+                          label: profile.campus,
+                        ),
+                        if (profile.mutualFriendCount > 0)
+                          _MiniChip(
+                            icon: Icons.people_outline_rounded,
+                            label: '${profile.mutualFriendCount} mutual',
+                            highlight: true,
+                          ),
+                      ],
+                    ),
+                    const SizedBox(height: 14),
+                    Row(children: actions),
                   ],
-                  const SizedBox(height: 6),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFE3F2FD),
-                      borderRadius: BorderRadius.circular(14),
-                    ),
-                    child: Text(
-                      level,
-                      style: const TextStyle(color: Color(0xFF1565C0), fontWeight: FontWeight.w700),
-                    ),
-                  ),
-                ],
+                ),
               ),
             ),
-            const SizedBox(width: 10),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                Text(
-                  status,
-                  style: const TextStyle(fontSize: 12, color: Color(0xFF607D8B), fontWeight: FontWeight.w700),
-                ),
-                const SizedBox(height: 8),
-                ElevatedButton(
-                  onPressed: status == 'Request sent' ? null : onRequest,
-                  style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF2962FF)),
-                  child: Text(actionLabel),
-                ),
-              ],
-            ),
-          ],
+          ),
         ),
       ),
     );
   }
 }
 
-class _RequestCard extends StatelessWidget {
-  const _RequestCard({
-    required this.request,
-    required this.onAccept,
-    required this.onDecline,
-    required this.onViewProfile,
+class _ProfileAvatar extends StatelessWidget {
+  const _ProfileAvatar({required this.profile, required this.radius});
+
+  final FriendProfile profile;
+  final double radius;
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      clipBehavior: Clip.none,
+      children: <Widget>[
+        CircleAvatar(
+          radius: radius,
+          backgroundColor: AppColors.vibeBlue.withValues(alpha: .12),
+          backgroundImage: profile.photoUrl == null
+              ? null
+              : NetworkImage(profile.photoUrl!),
+          child: profile.photoUrl == null
+              ? Text(
+                  profile.initials,
+                  style: TextStyle(
+                    color: AppColors.vibeBlue,
+                    fontSize: radius * .55,
+                    fontWeight: FontWeight.w900,
+                  ),
+                )
+              : null,
+        ),
+        Positioned(
+          right: -1,
+          bottom: -1,
+          child: Container(
+            width: radius * .38,
+            height: radius * .38,
+            decoration: BoxDecoration(
+              color: profile.isOnline ? AppColors.success : AppColors.textMuted,
+              shape: BoxShape.circle,
+              border: Border.all(color: Colors.white, width: 2),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _MiniChip extends StatelessWidget {
+  const _MiniChip({
+    required this.icon,
+    required this.label,
+    this.highlight = false,
   });
 
-  final Map<String, dynamic> request;
-  final VoidCallback onAccept;
-  final VoidCallback onDecline;
-  final VoidCallback onViewProfile;
+  final IconData icon;
+  final String label;
+  final bool highlight;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = highlight ? AppColors.vibeBlue : AppColors.textMuted;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: .09),
+        borderRadius: AppStyles.pillRadius,
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: <Widget>[
+          Icon(icon, color: color, size: 13),
+          const SizedBox(width: 5),
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 135),
+            child: Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                color: color,
+                fontSize: 9,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _InfoChip extends StatelessWidget {
+  const _InfoChip({
+    required this.icon,
+    required this.label,
+    this.highlight = false,
+  });
+
+  final IconData icon;
+  final String label;
+  final bool highlight;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = highlight ? AppColors.vibeBlue : AppColors.textMuted;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 8),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: .09),
+        borderRadius: AppStyles.pillRadius,
+        border: Border.all(
+          color: highlight
+              ? AppColors.vibeBlue.withValues(alpha: .24)
+              : AppColors.glassBorder,
+        ),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: <Widget>[
+          Icon(icon, color: color, size: 15),
+          const SizedBox(width: 6),
+          Text(
+            label,
+            style: TextStyle(
+              color: color,
+              fontSize: 11,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ProfileInfoPanel extends StatelessWidget {
+  const _ProfileInfoPanel({required this.profile});
+
+  final FriendProfile profile;
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(15),
       decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 12,
-            offset: const Offset(0, 5),
-          ),
-        ],
+        color: const Color(0xFFF6F8FC),
+        borderRadius: AppStyles.controlRadius,
+        border: Border.all(color: AppColors.glassBorder),
       ),
       child: Column(
-        children: [
-          Row(
-            children: [
-              CircleAvatar(
-                radius: 26,
-                backgroundColor: const Color(0xFF2962FF).withOpacity(0.15),
-                child: Text(
-                  request['name'].toString().split(' ').map((part) => part[0]).take(2).join(),
-                  style: const TextStyle(color: Color(0xFF2962FF), fontWeight: FontWeight.w800),
-                ),
+        children: <Widget>[
+          _ProfileInfoRow(label: 'Campus', value: profile.campus),
+          _ProfileInfoRow(label: 'Faculty', value: profile.faculty),
+          _ProfileInfoRow(label: 'Course', value: profile.course),
+          _ProfileInfoRow(label: 'Level', value: profile.level),
+        ],
+      ),
+    );
+  }
+}
+
+class _ProfileInfoRow extends StatelessWidget {
+  const _ProfileInfoRow({required this.label, required this.value});
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Row(
+        children: <Widget>[
+          SizedBox(
+            width: 75,
+            child: Text(
+              label,
+              style: const TextStyle(
+                color: AppColors.textMuted,
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
               ),
-              const SizedBox(width: 14),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      request['name'].toString(),
-                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      request['course'].toString(),
-                      style: const TextStyle(color: Color(0xFF607D8B), fontWeight: FontWeight.w600),
-                    ),
-                    const SizedBox(height: 6),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFE3F2FD),
-                        borderRadius: BorderRadius.circular(14),
-                      ),
-                      child: Text(
-                        request['level'].toString(),
-                        style: const TextStyle(color: Color(0xFF1565C0), fontWeight: FontWeight.w700),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              IconButton(
-                onPressed: onViewProfile,
-                icon: const Icon(Icons.person, color: Color(0xFF2962FF)),
-                tooltip: 'View profile',
-              ),
-            ],
+            ),
           ),
-          const SizedBox(height: 14),
-          Row(
-            children: [
-              Expanded(
-                child: ElevatedButton(
-                  onPressed: onAccept,
-                  style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF2962FF)),
-                  child: const Text('Accept'),
-                ),
+          Expanded(
+            child: Text(
+              value,
+              textAlign: TextAlign.right,
+              style: const TextStyle(
+                color: AppColors.midnightInk,
+                fontWeight: FontWeight.w800,
               ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: OutlinedButton(
-                  onPressed: onDecline,
-                  child: const Text('Decline'),
-                ),
-              ),
-            ],
+            ),
           ),
         ],
       ),
@@ -932,95 +1545,359 @@ class _RequestCard extends StatelessWidget {
   }
 }
 
-class _FriendCard extends StatelessWidget {
-  const _FriendCard({
-    required this.friend,
-    required this.onChat,
-    required this.onViewProfile,
-    required this.onUnfriend,
+class _FilterDropdown extends StatelessWidget {
+  const _FilterDropdown({
+    required this.label,
+    required this.icon,
+    required this.value,
+    required this.options,
+    required this.onChanged,
   });
 
-  final Map<String, dynamic> friend;
-  final VoidCallback onChat;
-  final VoidCallback onViewProfile;
-  final VoidCallback onUnfriend;
+  final String label;
+  final IconData icon;
+  final String value;
+  final List<String> options;
+  final ValueChanged<String> onChanged;
 
   @override
   Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onChat,
-      borderRadius: BorderRadius.circular(20),
-      child: Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(20),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.05),
-              blurRadius: 12,
-              offset: const Offset(0, 5),
+    final safeValue = options.contains(value) ? value : 'All';
+    return DropdownButtonFormField<String>(
+      initialValue: safeValue,
+      isExpanded: true,
+      decoration: InputDecoration(
+        labelText: label,
+        prefixIcon: Icon(icon),
+        isDense: true,
+      ),
+      items: options
+          .map(
+            (option) => DropdownMenuItem<String>(
+              value: option,
+              child: Text(option, overflow: TextOverflow.ellipsis),
+            ),
+          )
+          .toList(),
+      onChanged: (selected) {
+        if (selected != null) onChanged(selected);
+      },
+    );
+  }
+}
+
+class _EmptyState extends StatelessWidget {
+  const _EmptyState({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    this.actionLabel,
+    this.onAction,
+  });
+
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final String? actionLabel;
+  final VoidCallback? onAction;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 52),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: .8),
+        borderRadius: AppStyles.bentoRadius,
+        border: Border.all(color: AppColors.glassBorder),
+      ),
+      child: Column(
+        children: <Widget>[
+          Container(
+            width: 74,
+            height: 74,
+            decoration: BoxDecoration(
+              color: AppColors.vibeBlue.withValues(alpha: .09),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(icon, color: AppColors.vibeBlue, size: 34),
+          ),
+          const SizedBox(height: 16),
+          Text(
+            title,
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              color: AppColors.midnightInk,
+              fontSize: 18,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+          const SizedBox(height: 7),
+          Text(
+            subtitle,
+            textAlign: TextAlign.center,
+            style: const TextStyle(color: AppColors.textMuted),
+          ),
+          if (actionLabel != null && onAction != null) ...<Widget>[
+            const SizedBox(height: 18),
+            FilledButton.icon(
+              onPressed: onAction,
+              icon: const Icon(Icons.travel_explore_rounded),
+              label: Text(actionLabel!),
             ),
           ],
-        ),
-        child: Row(
-          children: [
-            CircleAvatar(
-              radius: 26,
-              backgroundColor: const Color(0xFF2962FF).withOpacity(0.15),
-              child: Text(
-                friend['name'].toString().split(' ').map((part) => part[0]).take(2).join(),
-                style: const TextStyle(color: Color(0xFF2962FF), fontWeight: FontWeight.w800),
+        ],
+      ),
+    );
+  }
+}
+
+class _ErrorState extends StatelessWidget {
+  const _ErrorState({required this.message, required this.onRetry});
+
+  final String message;
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[
+            const Icon(
+              Icons.cloud_off_outlined,
+              size: 52,
+              color: AppColors.textMuted,
+            ),
+            const SizedBox(height: 14),
+            Text(
+              message,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                color: AppColors.midnightInk,
+                fontWeight: FontWeight.w800,
               ),
             ),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    friend['name'].toString(),
-                    style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    friend['course'].toString(),
-                    style: const TextStyle(color: Color(0xFF607D8B), fontWeight: FontWeight.w600),
-                  ),
-                  const SizedBox(height: 6),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFE3F2FD),
-                      borderRadius: BorderRadius.circular(14),
-                    ),
-                    child: Text(
-                      friend['level'].toString(),
-                      style: const TextStyle(color: Color(0xFF1565C0), fontWeight: FontWeight.w700),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(width: 12),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                IconButton(
-                  onPressed: onViewProfile,
-                  icon: const Icon(Icons.person, color: Color(0xFF2962FF)),
-                  tooltip: 'View profile',
-                ),
-                const SizedBox(height: 4),
-                OutlinedButton(
-                  onPressed: onUnfriend,
-                  child: const Text('Unfriend'),
-                ),
-              ],
+            const SizedBox(height: 16),
+            FilledButton.icon(
+              onPressed: onRetry,
+              icon: const Icon(Icons.refresh_rounded),
+              label: const Text('Try again'),
             ),
           ],
         ),
       ),
     );
   }
+}
+
+class _FriendTabsDelegate extends SliverPersistentHeaderDelegate {
+  const _FriendTabsDelegate({required this.child});
+
+  final Widget child;
+
+  @override
+  double get minExtent => 82;
+
+  @override
+  double get maxExtent => 82;
+
+  @override
+  Widget build(
+    BuildContext context,
+    double shrinkOffset,
+    bool overlapsContent,
+  ) => child;
+
+  @override
+  bool shouldRebuild(covariant _FriendTabsDelegate oldDelegate) =>
+      oldDelegate.child != child;
+}
+
+class _HeroOrb extends StatelessWidget {
+  const _HeroOrb({required this.size, required this.color});
+
+  final double size;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: color.withValues(alpha: .12),
+        boxShadow: <BoxShadow>[
+          BoxShadow(
+            color: color.withValues(alpha: .16),
+            blurRadius: 40,
+            spreadRadius: 4,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _HeroMetric extends StatelessWidget {
+  const _HeroMetric({
+    required this.icon,
+    required this.value,
+    required this.label,
+    this.highlight = false,
+  });
+
+  final IconData icon;
+  final String value;
+  final String label;
+  final bool highlight;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 9),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: .09),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: Colors.white12),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: <Widget>[
+          Icon(
+            icon,
+            color: highlight ? AppColors.ogGold : AppColors.electricCyan,
+            size: 17,
+          ),
+          const SizedBox(width: 7),
+          Text(
+            value,
+            style: const TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+          const SizedBox(width: 5),
+          Text(
+            label,
+            style: const TextStyle(color: Colors.white60, fontSize: 10),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class FriendProfile {
+  const FriendProfile({
+    required this.id,
+    required this.displayName,
+    required this.campus,
+    required this.faculty,
+    required this.course,
+    required this.level,
+    required this.photoUrl,
+    required this.isVerified,
+    required this.isOnline,
+    this.mutualFriendCount = 0,
+  });
+
+  factory FriendProfile.fromRow(Map<String, dynamic> row) {
+    final nickname = row['nickname']?.toString().trim() ?? '';
+    final fullName = '${row['name'] ?? ''} ${row['surname'] ?? ''}'.trim();
+    final department = row['department']?.toString().trim() ?? '';
+    final course = row['course']?.toString().trim() ?? '';
+    final faculty = row['faculty']?.toString().trim() ?? '';
+    return FriendProfile(
+      id: row['id'].toString(),
+      displayName: nickname.isNotEmpty
+          ? nickname
+          : fullName.isNotEmpty
+          ? fullName
+          : 'OG Student',
+      campus: _valueOr(row['campus'], 'Campus not set'),
+      faculty: faculty.isNotEmpty ? faculty : 'Faculty not set',
+      course: course.isNotEmpty
+          ? course
+          : department.isNotEmpty
+          ? department
+          : 'Course not set',
+      level: _valueOr(row['level'], 'Level not set'),
+      photoUrl: _optional(row['photo_url']),
+      isVerified: row['is_verified'] == true,
+      isOnline: row['is_online'] == true,
+    );
+  }
+
+  final String id;
+  final String displayName;
+  final String campus;
+  final String faculty;
+  final String course;
+  final String level;
+  final String? photoUrl;
+  final bool isVerified;
+  final bool isOnline;
+  final int mutualFriendCount;
+
+  FriendProfile copyWith({int? mutualFriendCount}) => FriendProfile(
+    id: id,
+    displayName: displayName,
+    campus: campus,
+    faculty: faculty,
+    course: course,
+    level: level,
+    photoUrl: photoUrl,
+    isVerified: isVerified,
+    isOnline: isOnline,
+    mutualFriendCount: mutualFriendCount ?? this.mutualFriendCount,
+  );
+
+  String get initials => displayName
+      .split(RegExp(r'\s+'))
+      .where((part) => part.isNotEmpty)
+      .take(2)
+      .map((part) => part[0].toUpperCase())
+      .join();
+}
+
+class FriendRequestEntry {
+  const FriendRequestEntry({
+    required this.id,
+    required this.senderId,
+    required this.receiverId,
+    required this.profile,
+    required this.createdAt,
+  });
+
+  factory FriendRequestEntry.fromRow(
+    Map<String, dynamic> row,
+    FriendProfile profile,
+  ) => FriendRequestEntry(
+    id: row['id'].toString(),
+    senderId: row['sender_id'].toString(),
+    receiverId: row['receiver_id'].toString(),
+    profile: profile,
+    createdAt:
+        DateTime.tryParse(row['created_at']?.toString() ?? '')?.toLocal() ??
+        DateTime.now(),
+  );
+
+  final String id;
+  final String senderId;
+  final String receiverId;
+  final FriendProfile profile;
+  final DateTime createdAt;
+}
+
+String _valueOr(dynamic value, String fallback) {
+  final text = value?.toString().trim() ?? '';
+  return text.isEmpty ? fallback : text;
+}
+
+String? _optional(dynamic value) {
+  final text = value?.toString().trim() ?? '';
+  return text.isEmpty ? null : text;
 }

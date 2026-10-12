@@ -4,7 +4,6 @@ import 'dart:ui';
 
 
 import 'package:flutter/material.dart';
-import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -222,22 +221,14 @@ class _SplashScreenState extends State<SplashScreen>
 
   Future<void> _initApp() async {
     try {
-      var supabaseUrl = dotenv.isInitialized ? dotenv.env['SUPABASE_URL'] : null;
-      var supabaseAnonKey = dotenv.isInitialized ? dotenv.env['SUPABASE_ANON_KEY'] : null;
-      
-      // Fallback: try String.fromEnvironment (set via --dart-define at build time)
-      if (supabaseUrl == null || supabaseUrl.isEmpty) {
-        supabaseUrl = const String.fromEnvironment('SUPABASE_URL');
-      }
-      if (supabaseAnonKey == null || supabaseAnonKey.isEmpty) {
-        supabaseAnonKey = const String.fromEnvironment('SUPABASE_ANON_KEY');
-      }
+      const supabaseUrl = String.fromEnvironment('SUPABASE_URL');
+      const supabaseAnonKey = String.fromEnvironment('SUPABASE_ANON_KEY');
       
       // Log for debugging
       // ignore: avoid_print
-      print('Supabase URL: ${supabaseUrl.isNotEmpty == true ? "set" : "NOT SET"}');
+      print('Supabase URL: ${supabaseUrl.isNotEmpty ? "set" : "NOT SET"}');
       // ignore: avoid_print
-      print('Supabase Key: ${supabaseAnonKey.isNotEmpty == true ? "set" : "NOT SET"}');
+      print('Supabase Key: ${supabaseAnonKey.isNotEmpty ? "set" : "NOT SET"}');
       
       if (supabaseUrl.isEmpty || supabaseAnonKey.isEmpty) {
         throw Exception('Supabase credentials not found. Set SUPABASE_URL and SUPABASE_ANON_KEY.');

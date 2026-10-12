@@ -1,8 +1,11 @@
+import 'dart:ui';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
-import 'package:webview_flutter/webview_flutter.dart';
+import 'package:og_vibes_student/widgets/portal_web_frame.dart';
 import 'package:og_vibes_student/widgets/vibe_scaffold.dart';
+import 'package:url_launcher/url_launcher.dart';
+import 'package:webview_flutter/webview_flutter.dart';
 
 class PortalScreen extends StatefulWidget {
   const PortalScreen({super.key});
@@ -12,326 +15,213 @@ class PortalScreen extends StatefulWidget {
 }
 
 class _PortalScreenState extends State<PortalScreen> {
-  static const String _initialUrl =
-      'https://ienabler.gscollege.edu.za/pls/prodi41/w99pkg.mi_login';
-
-  late final WebViewController _controller;
+  static final _portalUri = Uri.parse(
+    'https://ienabler.gscollege.edu.za/pls/prodi41/w99pkg.mi_login',
+  );
+  WebViewController? _controller;
+  Key _webKey = UniqueKey();
   double _progress = 0;
   bool _canGoBack = false;
-  bool _canGoForward = false;
-  final List<String> _historyLog = <String>[];
+  bool _failed = false;
 
   @override
   void initState() {
     super.initState();
-    _controller = WebViewController()
-      ..setBackgroundColor(Colors.white)
-      ..setJavaScriptMode(JavaScriptMode.unrestricted)
-      ..setNavigationDelegate(
-        NavigationDelegate(
+    if (!kIsWeb) {
+      _controller = WebViewController()
+        ..setBackgroundColor(Colors.white)
+        ..setJavaScriptMode(JavaScriptMode.unrestricted)
+        ..setNavigationDelegate(NavigationDelegate(
           onProgress: (value) {
-            setState(() => _progress = (value.clamp(0, 100) / 100));
+            if (mounted) setState(() => _progress = value / 100);
           },
-          onPageFinished: (url) async {
-            if (!mounted) return;
-            await _updateNavigationState();
-            setState(() {
-              _progress = 1;
-              _historyLog.add(url);
-            });
-            _applyPortalReadabilityStyles();
+          onPageStarted: (_) {
+            if (mounted) setState(() => _failed = false);
+          },
+          onPageFinished: (_) async {
+            final back = await _controller?.canGoBack() ?? false;
+            if (mounted) setState(() { _progress = 1; _canGoBack = back; });
           },
           onNavigationRequest: (request) {
-            if (!request.url.startsWith('https://')) {
-              return NavigationDecision.prevent;
-            }
-            return NavigationDecision.navigate;
+            return Uri.tryParse(request.url)?.scheme == 'https'
+                ? NavigationDecision.navigate
+                : NavigationDecision.prevent;
           },
           onWebResourceError: (error) {
-            if (!mounted) return;
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text('Portal load failed: ${error.errorCode}')),
-            );
+            if (mounted && error.isForMainFrame == true) setState(() => _failed = true);
           },
-        ),
-      )
-      ..loadRequest(Uri.parse(_initialUrl));
-  }
-
-  Future<void> _updateNavigationState() async {
-    final canGoBack = await _controller.canGoBack();
-    final canGoForward = await _controller.canGoForward();
-    if (!mounted) return;
-    setState(() {
-      _canGoBack = canGoBack;
-      _canGoForward = canGoForward;
-    });
-  }
-
-  void _applyPortalReadabilityStyles() {
-    const script = '''
-      const body = document.body;
-      if (body) {
-        body.style.backgroundColor = '#ffffff';
-        body.style.color = '#111111';
-        body.style.fontSize = '16px';
-        body.style.lineHeight = '1.6';
-      }
-      const headings = document.querySelectorAll('h1, h2, h3, h4, h5, h6');
-      headings.forEach(h => {
-        h.style.color = '#0b2545';
-        h.style.fontWeight = '700';
-      });
-      const links = document.querySelectorAll('a');
-      links.forEach(a => {
-        a.style.color = '#1a73e8';
-      });
-      const inputs = document.querySelectorAll('input, textarea, select');
-      inputs.forEach(i => {
-        i.style.color = '#111111';
-        i.style.fontSize = '16px';
-      });
-    ''';
-    _controller.runJavaScript(script);
+        ))
+        ..loadRequest(_portalUri);
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    final child = kIsWeb
-        ? const Center(
-            child: Padding(
-              padding: EdgeInsets.all(24),
-              child: Text(
-                'The portal experience is best on mobile. Please use the OG Vibes app on your phone for the full portal webview.',
-                textAlign: TextAlign.center,
-              ),
-            ),
-          )
-        : Stack(
-            children: [
-              Positioned.fill(child: WebViewWidget(controller: _controller)),
-              _buildSecureHeader(),
-              _buildWatermark(),
-              _buildBottomNavigation(),
-              _buildSmartTools(),
-            ],
-          );
-
+    final wide = MediaQuery.sizeOf(context).width > 900;
     return VibeScaffold(
       appBar: AppBar(
-        title: const Text('Student Portal'),
-        backgroundColor: Colors.white,
-        foregroundColor: Colors.black87,
-        elevation: 0,
-      ),
-      body: Container(
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(24),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.08),
-              blurRadius: 24,
-              offset: const Offset(0, 12),
+        titleSpacing: 8,
+        title: Row(children: [
+          ClipRRect(
+            borderRadius: BorderRadius.circular(10),
+            child: Image.asset(
+              'assets/images/logo.jpeg', width: 36, height: 36, fit: BoxFit.cover,
+              errorBuilder: (_, _, _) => const Icon(Icons.school_rounded),
             ),
-          ],
-        ),
-        margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-        clipBehavior: Clip.hardEdge,
-        child: ClipRRect(borderRadius: BorderRadius.circular(24), child: child),
-      ),
-    );
-  }
-
-  Widget _buildSecureHeader() {
-    final headerColor = Colors.green.shade800;
-    final isLoading = _progress < 1;
-    return Positioned(
-      top: 0,
-      left: 0,
-      right: 0,
-      child: Container(
-        height: 56,
-        color: headerColor,
-        padding: const EdgeInsets.symmetric(horizontal: 16),
-        child: Stack(
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: const [
-                Icon(Icons.lock, color: Colors.white, size: 14),
-                SizedBox(width: 6),
-                Text(
-                  'Encrypted Connection to GS College',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w700,
-                    fontSize: 13,
-                  ),
-                ),
-              ],
-            ),
-            Positioned(
-              bottom: 0,
-              left: 0,
-              right: 0,
-              child: isLoading
-                  ? LinearProgressIndicator(
-                      value: _progress,
-                      minHeight: 3,
-                      color: Colors.amber,
-                      backgroundColor: Colors.transparent,
-                    )
-                  : const SizedBox(height: 3),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildWatermark() {
-    return Positioned(
-      bottom: 80,
-      left: 0,
-      right: 0,
-      child: Text(
-        'Powered by OG Vibes',
-        textAlign: TextAlign.center,
-        style: TextStyle(
-          color: Colors.white.withValues(alpha: 0.3),
-          fontWeight: FontWeight.w600,
-        ),
-      ),
-    );
-  }
-
-  Widget _buildBottomNavigation() {
-    return Positioned(
-      left: 20,
-      right: 20,
-      bottom: 20,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-        decoration: BoxDecoration(
-          color: Colors.white.withValues(alpha: 0.16),
-          borderRadius: BorderRadius.circular(24),
-          border: Border.all(color: Colors.white.withValues(alpha: 0.24)),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.18),
-              blurRadius: 16,
-              offset: const Offset(0, 8),
-            ),
-          ],
-        ),
-        child: Row(
-          children: [
-            _portalButton(
-              icon: Icons.arrow_back,
-              label: 'Back',
-              enabled: _canGoBack,
-              onPressed: _goBack,
-            ),
-            const SizedBox(width: 8),
-            _portalButton(
-              icon: Icons.refresh,
-              label: 'Refresh',
-              enabled: true,
-              onPressed: _controller.reload,
-            ),
-            const SizedBox(width: 8),
-            _portalButton(
-              icon: Icons.arrow_forward,
-              label: 'Forward',
-              enabled: _canGoForward,
-              onPressed: _goForward,
-            ),
-            const Spacer(),
-            _portalButton(
-              icon: Icons.home_filled,
-              label: 'Portal',
-              enabled: true,
-              onPressed: () => _controller.loadRequest(Uri.parse(_initialUrl)),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _portalButton({
-    required IconData icon,
-    required String label,
-    required bool enabled,
-    required VoidCallback onPressed,
-  }) {
-    return Expanded(
-      child: TextButton.icon(
-        style: TextButton.styleFrom(
-          padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
-          backgroundColor: enabled ? Colors.white.withValues(alpha: 0.2) : Colors.white10,
-          foregroundColor: Colors.white,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        ),
-        icon: Icon(icon, size: 18),
-        label: Text(label, style: const TextStyle(fontSize: 12)),
-        onPressed: enabled ? onPressed : null,
-      ),
-    );
-  }
-
-  Widget _buildSmartTools() {
-    return Positioned(
-      right: 16,
-      bottom: 140,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          FloatingActionButton.small(
-            backgroundColor: Colors.black.withValues(alpha: 0.7),
-            onPressed: () => _runZoom('1.1'),
-            child: const Icon(Icons.add, color: Colors.white),
           ),
-          const SizedBox(height: 12),
-          FloatingActionButton.small(
-            backgroundColor: Colors.black.withValues(alpha: 0.7),
-            onPressed: () => _runZoom('1.0'),
-            child: const Icon(Icons.remove, color: Colors.white),
-          ),
-          const SizedBox(height: 12),
-          FloatingActionButton(
-            backgroundColor: const Color(0xFFFFC857),
-            onPressed: _copyStudentNumber,
-            child: const Icon(Icons.vpn_key_rounded, color: Colors.black87),
-          ),
+          const SizedBox(width: 10),
+          const Expanded(child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Student Portal', overflow: TextOverflow.ellipsis),
+              Text('Powered by OG Vibes', style: TextStyle(fontSize: 11)),
+            ],
+          )),
+        ]),
+        actions: [
+          IconButton(tooltip: 'Refresh portal', onPressed: _refresh, icon: const Icon(Icons.refresh_rounded)),
+          IconButton(tooltip: 'Open in browser', onPressed: _openExternal, icon: const Icon(Icons.open_in_new_rounded)),
         ],
       ),
+      body: Padding(
+        padding: EdgeInsets.fromLTRB(wide ? 24 : 10, 8, wide ? 24 : 10, 12),
+        child: Semantics(
+          label: 'Gert Sibande TVET College student portal',
+          container: true,
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(24),
+            child: BackdropFilter(
+              filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+              child: Container(
+                decoration: BoxDecoration(
+                  color: Theme.of(context).colorScheme.surface.withValues(alpha: .9),
+                  border: Border.all(color: Colors.white.withValues(alpha: .2)),
+                  borderRadius: BorderRadius.circular(24),
+                  boxShadow: [BoxShadow(
+                    color: Colors.black.withValues(alpha: .16),
+                    blurRadius: 28, offset: const Offset(0, 14),
+                  )],
+                ),
+                child: Column(children: [
+                  _brandBar(),
+                  if (!kIsWeb && _progress < 1)
+                    LinearProgressIndicator(
+                      value: _progress == 0 ? null : _progress,
+                      minHeight: 3, color: const Color(0xFF50E3C2),
+                    ),
+                  Expanded(child: _failed ? _errorView() : _portalView()),
+                  _controls(),
+                ]),
+              ),
+            ),
+          ),
+        ),
+      ),
     );
+  }
+
+  Widget _brandBar() => Container(
+    width: double.infinity,
+    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+    decoration: const BoxDecoration(gradient: LinearGradient(
+      colors: [Color(0xFF071323), Color(0xFF123965), Color(0xFF075E63)],
+    )),
+    child: const Row(children: [
+      Icon(Icons.verified_user_rounded, color: Color(0xFF50E3C2), size: 19),
+      SizedBox(width: 8),
+      Expanded(child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Gert Sibande TVET College', overflow: TextOverflow.ellipsis,
+            style: TextStyle(color: Colors.white, fontWeight: FontWeight.w800)),
+          Text('Secure iEnabler • ienabler.gscollege.edu.za', overflow: TextOverflow.ellipsis,
+            style: TextStyle(color: Color(0xFFB6D5E9), fontSize: 11)),
+        ],
+      )),
+    ]),
+  );
+
+  Widget _portalView() {
+    if (kIsWeb) {
+      return PortalWebFrame(key: _webKey, url: _portalUri.toString());
+    }
+    return ColoredBox(
+      color: Colors.white,
+      child: WebViewWidget(controller: _controller!),
+    );
+  }
+
+  Widget _controls() => SafeArea(
+    top: false,
+    child: Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+      child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+        if (!kIsWeb)
+          IconButton(
+            tooltip: 'Portal back', onPressed: _canGoBack ? _goBack : null,
+            icon: const Icon(Icons.arrow_back_rounded),
+          ),
+        IconButton(tooltip: 'Portal login page', onPressed: _home, icon: const Icon(Icons.home_rounded)),
+        IconButton(tooltip: 'Refresh portal', onPressed: _refresh, icon: const Icon(Icons.refresh_rounded)),
+        FilledButton.tonalIcon(
+          onPressed: _openExternal,
+          icon: const Icon(Icons.open_in_new_rounded, size: 17),
+          label: const Text('Open in browser'),
+        ),
+      ]),
+    ),
+  );
+
+  Widget _errorView() => Center(
+    child: Padding(
+      padding: const EdgeInsets.all(24),
+      child: Column(mainAxisSize: MainAxisSize.min, children: [
+        const Icon(Icons.cloud_off_rounded, size: 48),
+        const SizedBox(height: 12),
+        Text('The college portal could not be loaded', style: Theme.of(context).textTheme.titleLarge),
+        const SizedBox(height: 8),
+        const Text('Try again or continue securely in your browser.', textAlign: TextAlign.center),
+        const SizedBox(height: 16),
+        Wrap(spacing: 10, runSpacing: 10, alignment: WrapAlignment.center, children: [
+          OutlinedButton.icon(onPressed: _refresh, icon: const Icon(Icons.refresh_rounded), label: const Text('Try again')),
+          FilledButton.icon(onPressed: _openExternal, icon: const Icon(Icons.open_in_new_rounded), label: const Text('Open in browser')),
+        ]),
+      ]),
+    ),
+  );
+
+  Future<void> _refresh() async {
+    setState(() => _failed = false);
+    if (kIsWeb) {
+      setState(() => _webKey = UniqueKey());
+    } else {
+      await _controller?.reload();
+    }
+  }
+
+  Future<void> _home() async {
+    if (kIsWeb) {
+      setState(() => _webKey = UniqueKey());
+    } else {
+      await _controller?.loadRequest(_portalUri);
+    }
   }
 
   Future<void> _goBack() async {
-    if (await _controller.canGoBack()) {
-      await _controller.goBack();
-    }
+    if (await _controller?.canGoBack() ?? false) await _controller?.goBack();
   }
 
-  Future<void> _goForward() async {
-    if (await _controller.canGoForward()) {
-      await _controller.goForward();
-    }
-  }
-
-  Future<void> _runZoom(String level) async {
-    await _controller.runJavaScript("document.body.style.zoom = '$level';");
-  }
-
-  Future<void> _copyStudentNumber() async {
-    await Clipboard.setData(const ClipboardData(text: '12345678'));
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Student Number Copied! Long press input to paste.'),
-      ),
+  Future<void> _openExternal() async {
+    final opened = await launchUrl(
+      _portalUri,
+      mode: LaunchMode.externalApplication,
+      webOnlyWindowName: '_blank',
     );
+    if (!opened && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not open the college portal.')),
+      );
+    }
   }
 }

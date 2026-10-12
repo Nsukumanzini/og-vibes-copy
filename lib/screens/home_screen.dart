@@ -5,7 +5,6 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_staggered_animations/flutter_staggered_animations.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:og_vibes_student/screens/home/widgets/home_bottom_navigation_bar.dart';
 import 'package:shimmer/shimmer.dart';
 
@@ -21,9 +20,11 @@ import 'document_wallet_screen.dart';
 import 'friend_requests_screen.dart';
 import 'assignment_submission_screen.dart';
 import 'assessments_calendar_screen.dart';
+import 'exam_timetable_screen.dart';
 import 'portal_screen.dart';
+import 'quiz_screen.dart';
 import 'timetable_screen.dart';
-import 'trivia_game_screen.dart';
+
 import 'online_classes_screen.dart';
 import 'group_chats_screen.dart';
 import 'icass_checker_screen.dart';
@@ -31,6 +32,8 @@ import 'past_question_papers_screen.dart';
 import 'slides_screen.dart';
 import 'career_screen.dart';
 import 'market_screen.dart';
+import 'src_voting_screen.dart';
+import 'lift_club_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -52,9 +55,48 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _isLoadingPosts = true;
   List<Map<String, dynamic>> _posts = [];
   String? _feedError;
-  StreamSubscription<List<Map<String, dynamic>>>? _postSubscription;
-  StreamSubscription<List<Map<String, dynamic>>>? _likesSubscription;
-  StreamSubscription<List<Map<String, dynamic>>>? _commentsSubscription;
+
+  static final List<Map<String, dynamic>> _mockPosts = [
+    {
+      'id': 'post_001',
+      'author_name': 'Anele Sibiya',
+      'content': 'Sharing my notes from today\'s lecture. Hope this helps!',
+      'department': 'Information Systems',
+      'campus': 'Soweto Campus',
+      'photo_url': '',
+      'is_verified': true,
+      'is_online': true,
+      'likes': 28,
+      'comments': [],
+      'created_at': DateTime.now().subtract(const Duration(hours: 2)),
+    },
+    {
+      'id': 'post_002',
+      'author_name': 'Nokuthula Zulu',
+      'content': 'Anyone up for a group study session in the library tonight?',
+      'department': 'Business Management',
+      'campus': 'Johannesburg Campus',
+      'photo_url': '',
+      'is_verified': false,
+      'is_online': false,
+      'likes': 15,
+      'comments': [],
+      'created_at': DateTime.now().subtract(const Duration(hours: 3, minutes: 20)),
+    },
+    {
+      'id': 'post_003',
+      'author_name': 'Mbali Khumalo',
+      'content': 'Does anyone have the timetable for next week\'s practical sessions?',
+      'department': 'Civil Engineering',
+      'campus': 'Durban Campus',
+      'photo_url': '',
+      'is_verified': false,
+      'is_online': true,
+      'likes': 9,
+      'comments': [],
+      'created_at': DateTime.now().subtract(const Duration(hours: 5, minutes: 42)),
+    },
+  ];
 
   @override
   void initState() {
@@ -62,7 +104,6 @@ class _HomeScreenState extends State<HomeScreen> {
     _scrollController = ScrollController();
     _scrollController.addListener(_handleScroll);
     _loadPosts();
-    _listenForPosts();
   }
 
   Future<void> _loadPosts({bool reset = false}) async {
@@ -78,43 +119,17 @@ class _HomeScreenState extends State<HomeScreen> {
       });
     }
 
-    try {
-      final response = await Supabase.instance.client
-          .from('posts')
-          .select(
-            '*, profiles!posts_author_id_fkey(name, surname, nickname, photo_url, campus, department)',
-          )
-          .eq('is_deleted', false)
-          .order('created_at', ascending: false)
-          .limit(_postLimit);
+    await Future.delayed(const Duration(milliseconds: 700));
 
-      final rows = <Map<String, dynamic>>[];
-      for (final item in response) {
-        rows.add(Map<String, dynamic>.from(item));
-      }
-
-      if (!mounted) return;
-
-      setState(() {
-        _posts = rows;
-        _isLoadingPosts = false;
-      });
-    } catch (e, st) {
-      debugPrint('Feed load error: $e');
-      debugPrint('$st');
-      if (!mounted) return;
-      setState(() {
-        _isLoadingPosts = false;
-        _feedError = e.toString();
-      });
-    }
+    if (!mounted) return;
+    setState(() {
+      _posts = List<Map<String, dynamic>>.from(_mockPosts.take(_postLimit));
+      _isLoadingPosts = false;
+    });
   }
 
   @override
   void dispose() {
-    _postSubscription?.cancel();
-    _likesSubscription?.cancel();
-    _commentsSubscription?.cancel();
     _scrollController.removeListener(_handleScroll);
     _scrollController.dispose();
     super.dispose();
@@ -124,36 +139,6 @@ class _HomeScreenState extends State<HomeScreen> {
     await _loadPosts(reset: true);
   }
 
-  void _listenForPosts() {
-    _postSubscription = Supabase.instance.client
-        .from('posts')
-        .stream(primaryKey: ['id'])
-        .listen((_) {
-      if (!mounted) return;
-      _loadPosts();
-    }, onError: (_) {
-      if (!mounted) return;
-      setState(() {
-        _isLoadingPosts = false;
-      });
-    });
-
-    _likesSubscription = Supabase.instance.client
-        .from('post_likes')
-        .stream(primaryKey: ['id'])
-        .listen((_) {
-      if (!mounted) return;
-      _loadPosts();
-    });
-
-    _commentsSubscription = Supabase.instance.client
-        .from('comments')
-        .stream(primaryKey: ['id'])
-        .listen((_) {
-      if (!mounted) return;
-      _loadPosts();
-    });
-  }
 
   Future<void> _handleScroll() async {
     if (!_scrollController.hasClients) return;
@@ -192,10 +177,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   String _getDynamicGreeting() {
     final hour = DateTime.now().hour;
-    final user = Supabase.instance.client.auth.currentUser;
-    final name = user?.userMetadata?['name']?.toString().split(' ').first ??
-        user?.email?.split('@').first ??
-        'Viber';
+    const name = 'Viber';
     if (hour < 12) return 'Good morning, $name ☀️';
     if (hour < 17) return 'Good afternoon, $name 🌤️';
     return 'Good evening, $name 🌙';
@@ -535,11 +517,25 @@ class _HomeScreenState extends State<HomeScreen> {
         onTap: (context) => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const PortalScreen())),
       ),
       _HubCardInfo(
-        title: 'Assessment Submission',
+        title: 'Assignment Submission',
         icon: Icons.upload_file,
         color: Colors.orange,
         gradientColors: const [Color(0xFFF57C00), Color(0xFFFFB300)],
         onTap: (context) => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const AssignmentSubmissionScreen())),
+      ),
+      _HubCardInfo(
+        title: 'Exam Timetable',
+        icon: Icons.schedule,
+        color: Colors.teal,
+        gradientColors: const [Color(0xFF00796B), Color(0xFF26A69A)],
+        onTap: (context) => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const ExamTimetableSeatPlanScreen())),
+      ),
+      _HubCardInfo(
+        title: 'Quiz',
+        icon: Icons.quiz_rounded,
+        color: Colors.redAccent,
+        gradientColors: const [Color(0xFFC62828), Color(0xFFD32F2F)],
+        onTap: (context) => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const QuizScreen())),
       ),
       _HubCardInfo(
         title: 'Assessment Schedule',
@@ -547,13 +543,6 @@ class _HomeScreenState extends State<HomeScreen> {
         color: Colors.pink,
         gradientColors: const [Color(0xFFD81B60), Color(0xFFE91E63)],
         onTap: (context) => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const AssessmentsCalendarScreen())),
-      ),
-      _HubCardInfo(
-        title: 'Quiz',
-        icon: Icons.quiz_rounded,
-        color: Colors.redAccent,
-        gradientColors: const [Color(0xFFC62828), Color(0xFFD32F2F)],
-        onTap: (context) => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const TriviaGameScreen())),
       ),
       _HubCardInfo(
         title: 'Group Chats',
@@ -601,6 +590,20 @@ class _HomeScreenState extends State<HomeScreen> {
         color: Colors.indigo,
         gradientColors: const [Color(0xFF3949AB), Color(0xFF5C6BC0)],
         onTap: (context) => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const MarketScreen())),
+      ),
+      _HubCardInfo(
+        title: 'SRC Voting Booth',
+        icon: Icons.how_to_vote,
+        color: Colors.deepOrange,
+        gradientColors: const [Color(0xFFE64A19), Color(0xFFF57C00)],
+        onTap: (context) => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const SrcVotingScreen())),
+      ),
+      _HubCardInfo(
+        title: 'Lift Club',
+        icon: Icons.directions_car,
+        color: Colors.green,
+        gradientColors: const [Color(0xFF2E7D32), Color(0xFF66BB6A)],
+        onTap: (context) => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const LiftClubScreen())),
       ),
       _HubCardInfo(
         title: 'Document Wallet',

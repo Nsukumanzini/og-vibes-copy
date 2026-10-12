@@ -1,0 +1,5 @@
+name: supabase_flutter
+version: 2.0.0
+description: Local stub package for supabase_flutter.
+environment:
+  sdk: '>=3.10.0 <4.0.0'

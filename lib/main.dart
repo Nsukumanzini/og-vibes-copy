@@ -1,23 +1,39 @@
 ﻿import 'dart:async';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:flutter_dotenv/flutter_dotenv.dart';
 
+import 'firebase_options.dart';
 import 'screens/splash_screen.dart';
 import 'screens/incoming_call_screen.dart';
+import 'screens/active_call_screen.dart';
 import 'services/call_service.dart';
+import 'services/push_notification_service.dart';
+import 'services/theme_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'utils/app_theme.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  
-  await _loadDotEnv();
+  await ThemePreferences.initialise();
 
-  final supabaseUrl = _getEnvValue('SUPABASE_URL');
-  final supabaseAnonKey = _getEnvValue('SUPABASE_ANON_KEY');
+  try {
+    final supported = kIsWeb || defaultTargetPlatform == TargetPlatform.android;
+    if (supported && (!kIsWeb || DefaultFirebaseOptions.webIsConfigured)) {
+      await Firebase.initializeApp(
+        options: DefaultFirebaseOptions.currentPlatform,
+      );
+    }
+  } catch (error, stackTrace) {
+    debugPrint('Firebase initialization failed: $error');
+    debugPrintStack(stackTrace: stackTrace);
+  }
+  
+  const supabaseUrl = String.fromEnvironment('SUPABASE_URL');
+  const supabaseAnonKey = String.fromEnvironment('SUPABASE_ANON_KEY');
   // ignore: avoid_print
-  print('Loaded env: SUPABASE_URL=${supabaseUrl.isEmpty ? "NOT SET" : "set"}, SUPABASE_ANON_KEY=${supabaseAnonKey.isEmpty ? "NOT SET" : "set"}, dotenvInitialized=${dotenv.isInitialized}');
+  print('Loaded web configuration: SUPABASE_URL=${supabaseUrl.isEmpty ? "NOT SET" : "set"}, SUPABASE_ANON_KEY=${supabaseAnonKey.isEmpty ? "NOT SET" : "set"}');
 
   // Initialize Supabase early so screens and services can safely use it.
   try {
@@ -49,51 +65,6 @@ Future<void> main() async {
   runApp(const MyApp());
 }
 
-String _getEnvValue(String key) {
-  if (dotenv.isInitialized) {
-    final value = dotenv.env[key];
-    if (value != null && value.isNotEmpty) {
-      return value;
-    }
-  }
-  return String.fromEnvironment(key);
-}
-
-Future<void> _loadDotEnv() async {
-  const envPaths = ['assets/env.local'];
-  for (final envFile in envPaths) {
-    try {
-      final envContent = await rootBundle.loadString(envFile);
-      // ignore: avoid_print
-      print('Loaded $envFile asset content length: ${envContent.length}');
-      dotenv.loadFromString(envString: envContent);
-      // ignore: avoid_print
-      print('Loaded env from asset file: $envFile');
-      return;
-    } catch (e) {
-      // ignore: avoid_print
-      print('Could not load asset $envFile: $e');
-    }
-  }
-
-  const dotenvPaths = ['assets/env.local'];
-  for (final envFile in dotenvPaths) {
-    try {
-      await dotenv.load(fileName: envFile);
-      // ignore: avoid_print
-      print('Loaded $envFile via flutter_dotenv.');
-      return;
-    } catch (e) {
-      // ignore: avoid_print
-      print('Could not load $envFile with flutter_dotenv: $e');
-    }
-  }
-
-  // ignore: avoid_print
-  print('No dotenv file loaded. Using compile-time defines if provided.');
-}
-
-
 class MyApp extends StatefulWidget {
   const MyApp({super.key});
 
@@ -104,13 +75,38 @@ class MyApp extends StatefulWidget {
 class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   final CallService _callService = CallService();
   final GlobalKey<NavigatorState> _navigatorKey = GlobalKey<NavigatorState>();
+  StreamSubscription<AuthState>? _authSubscription;
+  StreamSubscription<CallNotificationAction>? _callActionSubscription;
   bool _isShowingIncomingCall = false;
+  String? _incomingUserId;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    _listenForIncomingCalls();
+    _callActionSubscription = PushNotificationService.actions.listen(
+      (action) => unawaited(_handleCallNotificationAction(action)),
+    );
+    if (Firebase.apps.isNotEmpty) {
+      unawaited(PushNotificationService.initialise());
+    }
+    _authSubscription = Supabase.instance.client.auth.onAuthStateChange.listen((state) {
+      if (state.session?.user.id == null) {
+        _incomingUserId = null;
+        _callService.dispose();
+      } else {
+        _listenForIncomingCalls();
+        if (Firebase.apps.isNotEmpty) {
+          unawaited(PushNotificationService.registerCurrentDevice());
+        }
+      }
+    });
+    if (Supabase.instance.client.auth.currentUser != null) {
+      _listenForIncomingCalls();
+      if (Firebase.apps.isNotEmpty) {
+        unawaited(PushNotificationService.registerCurrentDevice());
+      }
+    }
   }
 
   @override
@@ -123,38 +119,134 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   void _listenForIncomingCalls() {
     final currentUserId = Supabase.instance.client.auth.currentUser?.id;
     if (currentUserId == null) return;
+    if (_incomingUserId == currentUserId) return;
+    _incomingUserId = currentUserId;
 
     _callService.listenForIncomingCalls(
       currentUserId: currentUserId,
-      onIncoming: (call) {
-        if (_isShowingIncomingCall) return;
-        _isShowingIncomingCall = true;
-        final navigator = _navigatorKey.currentState;
-        if (navigator == null) return;
-
-        navigator.push(
-          MaterialPageRoute(
-            builder: (_) => IncomingCallScreen(
-              contactName: call['caller_id']?.toString() ?? 'Someone',
-              callType: call['type']?.toString() ?? 'audio',
-              onAccept: () {
-                navigator.pop();
-                _isShowingIncomingCall = false;
-              },
-              onDecline: () {
-                navigator.pop();
-                _isShowingIncomingCall = false;
-              },
-            ),
-          ),
-        );
-      },
+      onIncoming: (call) => unawaited(_showIncomingCall(call)),
     );
+    unawaited(_restorePendingCall());
+  }
+
+  Future<void> _restorePendingCall() async {
+    final pending = await _callService.pendingIncomingCalls();
+    if (pending.isNotEmpty) await _showIncomingCall(pending.first);
+  }
+
+  Future<void> _handleCallNotificationAction(
+    CallNotificationAction action,
+  ) async {
+    if (Supabase.instance.client.auth.currentUser == null) return;
+    try {
+      final call = await Supabase.instance.client
+          .from('calls')
+          .select()
+          .eq('id', action.callId)
+          .maybeSingle();
+      if (call == null || call['status'] != 'ringing') return;
+      if (action.action == 'decline') {
+        await _callService.declineCall(action.callId);
+        return;
+      }
+      await _showIncomingCall(
+        Map<String, dynamic>.from(call),
+        autoAccept: action.action == 'accept',
+      );
+    } catch (error) {
+      debugPrint('Unable to process call notification action: $error');
+    }
+  }
+
+  Future<void> _showIncomingCall(
+    Map<String, dynamic> call, {
+    bool autoAccept = false,
+  }) async {
+    if (_isShowingIncomingCall || call['status'] != 'ringing') return;
+    final navigator = _navigatorKey.currentState;
+    if (navigator == null) return;
+    _isShowingIncomingCall = true;
+    var name = 'OG Vibes student';
+    try {
+      final profile = await Supabase.instance.client
+          .from('profiles')
+          .select('name,surname,nickname')
+          .eq('id', call['caller_id'])
+          .maybeSingle();
+      final nickname = profile?['nickname']?.toString().trim() ?? '';
+      final full = [profile?['name'], profile?['surname']]
+          .whereType<String>()
+          .where((part) => part.trim().isNotEmpty)
+          .join(' ');
+      name = nickname.isNotEmpty ? nickname : (full.isNotEmpty ? full : name);
+    } catch (_) {}
+    if (!mounted) {
+      _isShowingIncomingCall = false;
+      return;
+    }
+    if (autoAccept) {
+      try {
+        final session = await _callService.acceptIncomingCall(call);
+        await navigator.push(MaterialPageRoute(
+          builder: (_) => ActiveCallScreen(
+            session: session,
+            contactName: name,
+          ),
+        ));
+      } catch (_) {
+        final context = _navigatorKey.currentContext;
+        if (context != null && context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Unable to connect this call. Please try again.'),
+            ),
+          );
+        }
+      } finally {
+        _isShowingIncomingCall = false;
+      }
+      return;
+    }
+    navigator.push(MaterialPageRoute(
+      fullscreenDialog: true,
+      builder: (_) => IncomingCallScreen(
+        contactName: name,
+        callType: call['type']?.toString() ?? 'audio',
+        onAccept: () async {
+          navigator.pop();
+          try {
+            final session = await _callService.acceptIncomingCall(call);
+            await navigator.push(MaterialPageRoute(
+              builder: (_) => ActiveCallScreen(
+                session: session,
+                contactName: name,
+              ),
+            ));
+          } catch (_) {
+            final context = _navigatorKey.currentContext;
+            if (context != null && context.mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Unable to connect this call. Please try again.')),
+              );
+            }
+          } finally {
+            _isShowingIncomingCall = false;
+          }
+        },
+        onDecline: () async {
+          navigator.pop();
+          await _callService.declineCall(call['id'].toString());
+          _isShowingIncomingCall = false;
+        },
+      ),
+    ));
   }
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _authSubscription?.cancel();
+    _callActionSubscription?.cancel();
     _callService.dispose();
     super.dispose();
   }
@@ -277,21 +369,31 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
       ),
     );
 
-    return MaterialApp(
-      title: 'OG Vibes',
-      debugShowCheckedModeBanner: false,
-      navigatorKey: _navigatorKey,
-      theme: themed,
-      home: const SplashScreen(),
-      builder: (context, child) {
-        // Error boundary wrapper
-        return MediaQuery(
-          data: MediaQuery.of(
-            context,
-          ).copyWith(textScaler: TextScaler.linear(1.0)),
-          child: child ?? const SizedBox(),
-        );
-      },
+    final darkBase = ThemeData(
+      useMaterial3: true,
+      brightness: Brightness.dark,
+      colorScheme: ColorScheme.fromSeed(
+        seedColor: primaryBlue,
+        brightness: Brightness.dark,
+        primary: const Color(0xFF7FA2FF),
+        secondary: accentCyan,
+        surface: const Color(0xFF0D1B31),
+      ),
+      textTheme: GoogleFonts.poppinsTextTheme(ThemeData.dark().textTheme),
+    );
+
+    return ValueListenableBuilder<ThemeMode>(
+      valueListenable: ThemePreferences.mode,
+      builder: (context, themeMode, _) => MaterialApp(
+        title: 'OG Vibes',
+        debugShowCheckedModeBanner: false,
+        navigatorKey: _navigatorKey,
+        theme: AppTheme.decorate(themed),
+        darkTheme: AppTheme.decorate(darkBase),
+        themeMode: themeMode,
+        home: const SplashScreen(),
+        builder: (context, child) => child ?? const SizedBox(),
+      ),
     );
   }
 }

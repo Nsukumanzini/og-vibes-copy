@@ -1,0 +1,5 @@
+name: firebase_core
+version: 4.12.1
+description: Local stub package for firebase_core.
+environment:
+  sdk: '>=3.10.0 <4.0.0'

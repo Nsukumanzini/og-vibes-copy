@@ -1,10 +1,14 @@
+import 'dart:async';
+import 'dart:ui';
+
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:shimmer/shimmer.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:timeago/timeago.dart' as timeago;
+import 'package:url_launcher/url_launcher.dart';
 
+import '../utils/theme_constants.dart';
 import 'comment_sheet.dart';
 
 class PostCard extends StatefulWidget {
@@ -17,358 +21,840 @@ class PostCard extends StatefulWidget {
 }
 
 class _PostCardState extends State<PostCard> {
-  late final PageController _pageController;
-  int _currentImageIndex = 0;
-  bool _isExpanded = false;
-  final List<TapGestureRecognizer> _tagRecognizers = [];
-  bool _hasLiked = false;
+  final _db = Supabase.instance.client;
+  late PageController _pageController;
+
+  StreamSubscription<List<Map<String, dynamic>>>? _likesSubscription;
+  StreamSubscription<List<Map<String, dynamic>>>? _commentsSubscription;
+  StreamSubscription<List<Map<String, dynamic>>>? _pollSubscription;
+  StreamSubscription<List<Map<String, dynamic>>>? _optionsSubscription;
+  StreamSubscription<List<Map<String, dynamic>>>? _votesSubscription;
+
+  int _mediaIndex = 0;
+  bool _expanded = false;
+  bool _liked = false;
+  bool _likeBusy = false;
+  bool _deleted = false;
+  bool _commentsLoading = true;
+  bool _pollLoading = true;
   int _likeCount = 0;
-  bool _likesLoading = false;
+  int _commentCount = 0;
+  String? _pollQuestion;
+  String? _selectedOptionId;
+  List<_PollOption> _pollOptions = const [];
+  List<Map<String, dynamic>> _pollVotes = const [];
+  List<_CommentPreview> _commentPreviews = const [];
+
+  String get _postId =>
+      widget.data['id']?.toString() ??
+      widget.data['post_id']?.toString() ??
+      '';
+  String? get _currentUserId => _db.auth.currentUser?.id;
+  String? get _authorId => widget.data['user_id']?.toString();
+  bool get _isOwner =>
+      _currentUserId != null && _currentUserId == _authorId;
 
   @override
   void initState() {
     super.initState();
     _pageController = PageController();
-    final postId = widget.data['id']?.toString() ?? widget.data['post_id']?.toString() ?? '';
-    if (postId.isNotEmpty) {
-      _loadLikeState(postId);
+    _startRealtime();
+  }
+
+  @override
+  void didUpdateWidget(covariant PostCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    final oldId = oldWidget.data['id']?.toString() ??
+        oldWidget.data['post_id']?.toString() ??
+        '';
+    if (oldId != _postId) {
+      _cancelRealtime();
+      _mediaIndex = 0;
+      _expanded = false;
+      _deleted = false;
+      _pageController.dispose();
+      _pageController = PageController();
+      _startRealtime();
     }
   }
 
   @override
   void dispose() {
-    _resetTagRecognizers();
+    _cancelRealtime();
     _pageController.dispose();
     super.dispose();
   }
 
+  void _cancelRealtime() {
+    _likesSubscription?.cancel();
+    _commentsSubscription?.cancel();
+    _pollSubscription?.cancel();
+    _optionsSubscription?.cancel();
+    _votesSubscription?.cancel();
+  }
+
+  void _startRealtime() {
+    if (_postId.isEmpty) return;
+    _likesSubscription = _db
+        .from('post_likes')
+        .stream(primaryKey: ['post_id', 'user_id'])
+        .eq('post_id', _postId)
+        .listen(
+          (rows) {
+            if (!mounted || _likeBusy) return;
+            final userId = _currentUserId;
+            setState(() {
+              _likeCount = rows.length;
+              _liked = userId != null &&
+                  rows.any((row) => row['user_id']?.toString() == userId);
+            });
+          },
+          onError: (Object error) => debugPrint('Post likes stream: $error'),
+        );
+
+    _commentsSubscription = _db
+        .from('comments')
+        .stream(primaryKey: ['id'])
+        .eq('post_id', _postId)
+        .listen(
+          (rows) {
+            if (!mounted) return;
+            setState(() {
+              _commentCount = rows.length;
+              _commentsLoading = false;
+            });
+            unawaited(_loadCommentPreviews());
+          },
+          onError: (Object error) {
+            if (mounted) setState(() => _commentsLoading = false);
+          },
+        );
+
+    _pollSubscription = _db
+        .from('post_polls')
+        .stream(primaryKey: ['post_id'])
+        .eq('post_id', _postId)
+        .listen(
+          (rows) {
+            if (!mounted) return;
+            setState(() {
+              _pollQuestion = rows.isEmpty
+                  ? null
+                  : rows.first['question']?.toString();
+              _pollLoading = false;
+            });
+          },
+          onError: (Object error) {
+            if (mounted) setState(() => _pollLoading = false);
+          },
+        );
+
+    _optionsSubscription = _db
+        .from('post_poll_options')
+        .stream(primaryKey: ['id'])
+        .eq('post_id', _postId)
+        .order('position')
+        .listen(
+          (rows) {
+            if (!mounted) return;
+            setState(() {
+              _pollOptions = rows.map(_PollOption.fromRow).toList();
+              _pollLoading = false;
+            });
+          },
+          onError: (Object error) {
+            if (mounted) setState(() => _pollLoading = false);
+          },
+        );
+
+    _votesSubscription = _db
+        .from('post_poll_votes')
+        .stream(primaryKey: ['post_id', 'user_id'])
+        .eq('post_id', _postId)
+        .listen(
+          (rows) {
+            if (!mounted) return;
+            final userId = _currentUserId;
+            final ownVote = userId == null
+                ? null
+                : rows.cast<Map<String, dynamic>?>().firstWhere(
+                      (row) => row?['user_id']?.toString() == userId,
+                      orElse: () => null,
+                    );
+            setState(() {
+              _pollVotes = rows;
+              _selectedOptionId = ownVote?['option_id']?.toString();
+              _pollLoading = false;
+            });
+          },
+          onError: (Object error) {
+            if (mounted) setState(() => _pollLoading = false);
+          },
+        );
+  }
+
+  Future<void> _loadCommentPreviews() async {
+    if (_postId.isEmpty) return;
+    try {
+      final rows = await _db
+          .from('comments')
+          .select(
+            'id,text,author_id,created_at,'
+            'profiles!comments_author_id_fkey(name,surname,nickname,photo_url)',
+          )
+          .eq('post_id', _postId)
+          .order('created_at', ascending: false)
+          .limit(2);
+      if (!mounted) return;
+      setState(() {
+        _commentPreviews = (rows as List)
+            .map((row) => _CommentPreview.fromRow(
+                  Map<String, dynamic>.from(row as Map),
+                ))
+            .toList()
+            .reversed
+            .toList();
+        _commentsLoading = false;
+      });
+    } catch (error) {
+      if (mounted) setState(() => _commentsLoading = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    if (_deleted) return const SizedBox.shrink();
+
     final data = widget.data;
-
-    final authorOverride = (data['author_name'] as String?)?.trim();
-    final content = (data['content'] as String?)?.trim() ?? '';
-    final department = (data['department'] as String?)?.trim() ?? 'General';
-    final campus = (data['campus'] as String?)?.trim() ?? 'Campus';
+    final content = _string(data['content']);
     final isAnonymous = data['is_anonymous'] == true;
-    final isVerified = data['is_verified'] == true;
-    final isOnline = data['is_online'] == true;
-    final poll = data['poll'] as Map<String, dynamic>?;
-    final timestamp = data['created_at'];
+    final authorName = isAnonymous
+        ? 'Anonymous student'
+        : _authorName(data);
+    final authorPhoto = isAnonymous ? null : _authorPhoto(data);
+    final media = _extractMedia(data);
+    final reduceMotion = MediaQuery.maybeOf(context)?.disableAnimations ?? false;
+    final cached = data['is_offline_cached'] == true;
 
-    final rawLikes = data['likes'];
-    if (_likeCount == 0) {
-      if (rawLikes is List) {
-        _likeCount = rawLikes.whereType<String>().length;
-      } else if (rawLikes is int) {
-        _likeCount = rawLikes;
-      } else if (rawLikes is Iterable) {
-        _likeCount = List<String>.from(rawLikes).length;
-      }
-    }
-
-    final postId = data['id']?.toString() ?? data['post_id']?.toString() ?? '';
-    final authorName = _extractAuthorName(data) ?? authorOverride;
-    final authorPhoto = _extractAuthorPhoto(data);
-    final authorCampus = _extractAuthorCampus(data) ?? campus;
-    final authorDepartment = _extractAuthorDepartment(data) ?? department;
-    final commentCount = data['comments'] is List
-        ? (data['comments'] as List).length
-        : (data['comments_count'] as int?) ?? 0;
-
-    final images = _extractImages(data);
-    final imageCount = images.length;
-    final targetIndex = imageCount == 0
-        ? 0
-        : (_currentImageIndex >= imageCount
-              ? imageCount - 1
-              : _currentImageIndex);
-    if (targetIndex != _currentImageIndex) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted) return;
-        setState(() => _currentImageIndex = targetIndex);
-      });
-    }
-
-    final bool shouldTrimText = content.length > 100 && !_isExpanded;
-
-    final textTheme = Theme.of(context).textTheme;
-    final colorScheme = Theme.of(context).colorScheme;
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: Colors.grey.shade200),
-        boxShadow: const [
-          BoxShadow(color: Colors.black12, blurRadius: 12, offset: Offset(0, 6)),
-        ],
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _buildHeader(
-              author: authorName,
-              authorPhotoUrl: authorPhoto,
-              campus: authorCampus,
-              isAnonymous: isAnonymous,
-              isVerified: isVerified,
-              isOnline: isOnline,
-              department: authorDepartment,
-              timestamp: timestamp,
-              textTheme: textTheme,
-              colorScheme: colorScheme,
+    return Semantics(
+      container: true,
+      label: 'Post by $authorName. $content',
+      child: TweenAnimationBuilder<double>(
+        tween: Tween(begin: 0, end: 1),
+        duration: reduceMotion ? Duration.zero : const Duration(milliseconds: 380),
+        curve: Curves.easeOutCubic,
+        builder: (context, value, child) => Transform.translate(
+          offset: Offset(0, 10 * (1 - value)),
+          child: Opacity(opacity: value, child: child),
+        ),
+        child: Container(
+          margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          child: _GlassSurface(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _buildHeader(
+                  authorName: authorName,
+                  authorPhoto: authorPhoto,
+                  anonymous: isAnonymous,
+                  cached: cached,
+                ),
+                if (content.isNotEmpty) ...[
+                  const SizedBox(height: 14),
+                  _ExpandablePostText(
+                    text: content,
+                    expanded: _expanded,
+                    onToggle: () => setState(() => _expanded = !_expanded),
+                  ),
+                ],
+                if (media.isNotEmpty) ...[
+                  const SizedBox(height: 16),
+                  _MediaCarousel(
+                    items: media,
+                    controller: _pageController,
+                    currentIndex: _mediaIndex,
+                    onChanged: (index) => setState(() => _mediaIndex = index),
+                    onOpen: (index) => _openMedia(media, index),
+                  ),
+                ],
+                if (_pollLoading) ...[
+                  const SizedBox(height: 16),
+                  const _PollSkeleton(),
+                ] else if (_pollQuestion != null && _pollOptions.isNotEmpty) ...[
+                  const SizedBox(height: 16),
+                  _PollCard(
+                    question: _pollQuestion!,
+                    options: _pollOptions,
+                    votes: _pollVotes,
+                    selectedOptionId: _selectedOptionId,
+                    onVote: _vote,
+                  ),
+                ],
+                if (_commentsLoading || _commentPreviews.isNotEmpty) ...[
+                  const SizedBox(height: 14),
+                  _CommentsPreview(
+                    comments: _commentPreviews,
+                    loading: _commentsLoading,
+                    total: _commentCount,
+                    onOpen: _openComments,
+                  ),
+                ],
+                const SizedBox(height: 14),
+                _InteractionBar(
+                  liked: _liked,
+                  likeCount: _likeCount,
+                  commentCount: _commentCount,
+                  busy: _likeBusy,
+                  onLike: _toggleLike,
+                  onComment: _openComments,
+                ),
+              ],
             ),
-            if (content.isNotEmpty) ...[
-              const SizedBox(height: 12),
-              _buildPostText(content, shouldTrimText, textTheme),
-            ],
-            if (images.isNotEmpty) ...[
-              const SizedBox(height: 16),
-              _buildImageCarousel(images),
-            ],
-            if (poll != null) ...[const SizedBox(height: 16), _buildPoll(poll)],
-            const SizedBox(height: 12),
-            _buildFooter(
-              likeCount: _likeCount,
-              hasLiked: _hasLiked,
-              commentCount: commentCount,
-              postId: postId,
-              data: data,
-              textTheme: textTheme,
-              colorScheme: colorScheme,
-            ),
-          ],
+          ),
         ),
       ),
     );
   }
 
   Widget _buildHeader({
-    required String? author,
-    required String? authorPhotoUrl,
-    required String campus,
-    required bool isAnonymous,
-    required bool isVerified,
-    required bool isOnline,
-    required String department,
-    required dynamic timestamp,
-    required TextTheme textTheme,
-    required ColorScheme colorScheme,
+    required String authorName,
+    required String? authorPhoto,
+    required bool anonymous,
+    required bool cached,
   }) {
-    final displayName = isAnonymous
-        ? 'Spotted @ $campus'
-        : (author?.isNotEmpty == true ? author! : 'OG Vibester');
-
-    final deptIcon = _getDeptIcon(department);
-
     return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Container(
-          padding: const EdgeInsets.all(2),
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            border: Border.all(
-              color: isOnline ? Colors.green : colorScheme.secondary,
-              width: 2,
-            ),
-          ),
-          child: CircleAvatar(
-            radius: 24,
-            backgroundColor: Theme.of(context).cardTheme.color,
-            backgroundImage: authorPhotoUrl != null && authorPhotoUrl.isNotEmpty
-                ? NetworkImage(authorPhotoUrl)
-                : null,
-            child: authorPhotoUrl == null || authorPhotoUrl.isEmpty
-                ? isAnonymous
-                    ? Icon(
-                        Icons.emoji_emotions_outlined,
-                        color: colorScheme.secondary,
-                      )
-                    : Text(
-                        displayName[0].toUpperCase(),
-                        style: textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.bold,
-                        ),
-                      )
-                : null,
-          ),
+        _AuthorAvatar(
+          name: authorName,
+          photoUrl: authorPhoto,
+          anonymous: anonymous,
         ),
         const SizedBox(width: 12),
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      displayName,
-                      style: textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.w700,
-                      ),
-                      overflow: TextOverflow.ellipsis,
+              Text(
+                authorName,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w800,
                     ),
+              ),
+              const SizedBox(height: 3),
+              Wrap(
+                spacing: 7,
+                runSpacing: 4,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  Text(
+                    _formatTimestamp(widget.data['created_at']),
+                    style: Theme.of(context).textTheme.bodySmall,
                   ),
-                  if (isVerified)
-                    Icon(
-                      Icons.verified,
-                      color: colorScheme.secondary,
-                      size: 16,
+                  if (cached)
+                    const _HeaderPill(
+                      icon: Icons.offline_pin_rounded,
+                      label: 'Offline copy',
                     ),
                 ],
-              ),
-              const SizedBox(height: 4),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: colorScheme.secondary.withOpacity(0.12),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Text(
-                  '$deptIcon $department',
-                  style: textTheme.labelSmall?.copyWith(
-                    color: colorScheme.secondary,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
               ),
             ],
           ),
         ),
-        const SizedBox(width: 12),
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.end,
-          children: [
-            Text(
-              _formatTimestamp(timestamp),
-              style: textTheme.labelSmall?.copyWith(color: Colors.grey[600]),
-            ),
-            IconButton(
-              icon: Icon(Icons.more_vert, color: Colors.grey[400]),
-              splashRadius: 20,
-              onPressed: () {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('More actions coming soon.')),
-                );
-              },
-            ),
+        PopupMenuButton<_PostMenuAction>(
+          tooltip: 'Post actions',
+          icon: const Icon(Icons.more_horiz_rounded),
+          onSelected: _handleMenuAction,
+          itemBuilder: (context) => [
+            if (!_isOwner)
+              const PopupMenuItem(
+                value: _PostMenuAction.report,
+                child: _MenuLabel(
+                  icon: Icons.flag_outlined,
+                  label: 'Report post',
+                ),
+              ),
+            if (!_isOwner && _authorId != null)
+              const PopupMenuItem(
+                value: _PostMenuAction.block,
+                child: _MenuLabel(
+                  icon: Icons.block_rounded,
+                  label: 'Block author',
+                ),
+              ),
+            if (_isOwner)
+              const PopupMenuItem(
+                value: _PostMenuAction.delete,
+                child: _MenuLabel(
+                  icon: Icons.delete_outline_rounded,
+                  label: 'Delete post',
+                  danger: true,
+                ),
+              ),
           ],
         ),
       ],
     );
   }
 
-  Widget _buildPostText(
-    String content,
-    bool shouldTrimText,
-    TextTheme textTheme,
-  ) {
-    _resetTagRecognizers();
+  Future<void> _toggleLike() async {
+    final userId = _currentUserId;
+    if (userId == null) {
+      _showSnack('Sign in to like posts.');
+      return;
+    }
+    if (_postId.isEmpty || _likeBusy) return;
+
+    final previousLiked = _liked;
+    final previousCount = _likeCount;
+    setState(() {
+      _likeBusy = true;
+      _liked = !previousLiked;
+      _likeCount = (previousCount + (previousLiked ? -1 : 1))
+          .clamp(0, 1 << 30)
+          .toInt();
+    });
+    try {
+      if (previousLiked) {
+        await _db
+            .from('post_likes')
+            .delete()
+            .eq('post_id', _postId)
+            .eq('user_id', userId);
+      } else {
+        await _db.from('post_likes').insert({
+          'post_id': _postId,
+          'user_id': userId,
+        });
+      }
+      if (mounted) setState(() => _likeBusy = false);
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _likeBusy = false;
+        _liked = previousLiked;
+        _likeCount = previousCount;
+      });
+      _showSnack('Your like could not be saved. Please try again.');
+    }
+  }
+
+  Future<void> _vote(_PollOption option) async {
+    final userId = _currentUserId;
+    if (userId == null) {
+      _showSnack('Sign in to vote.');
+      return;
+    }
+    final previous = _selectedOptionId;
+    setState(() {
+      _selectedOptionId = option.id;
+      _pollVotes = [
+        ..._pollVotes.where((row) => row['user_id']?.toString() != userId),
+        {'post_id': _postId, 'option_id': option.id, 'user_id': userId},
+      ];
+    });
+    try {
+      await _db.from('post_poll_votes').upsert(
+        {'post_id': _postId, 'option_id': option.id, 'user_id': userId},
+        onConflict: 'post_id,user_id',
+      );
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _selectedOptionId = previous;
+        _pollVotes = [
+          ..._pollVotes.where((row) => row['user_id']?.toString() != userId),
+          if (previous != null)
+            {'post_id': _postId, 'option_id': previous, 'user_id': userId},
+        ];
+      });
+      _showSnack('Your vote could not be saved.');
+    }
+  }
+
+  Future<void> _openComments() async {
+    if (_postId.isEmpty) return;
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (_) => CommentSheet(postId: _postId),
+    );
+    await _loadCommentPreviews();
+  }
+
+  Future<void> _openMedia(List<_MediaItem> media, int index) async {
+    final item = media[index];
+    if (item.isVideo) {
+      final uri = Uri.tryParse(item.url);
+      if (uri == null || !await launchUrl(uri, mode: LaunchMode.externalApplication)) {
+        _showSnack('This video could not be opened.');
+      }
+      return;
+    }
+    await Navigator.of(context).push(
+      PageRouteBuilder<void>(
+        opaque: false,
+        transitionDuration: const Duration(milliseconds: 240),
+        pageBuilder: (_, _, _) => _FullScreenGallery(
+          media: media,
+          initialIndex: index,
+        ),
+      ),
+    );
+  }
+
+  void _handleMenuAction(_PostMenuAction action) {
+    switch (action) {
+      case _PostMenuAction.report:
+        _reportPost();
+        return;
+      case _PostMenuAction.block:
+        _blockAuthor();
+        return;
+      case _PostMenuAction.delete:
+        _deletePost();
+        return;
+    }
+  }
+
+  Future<void> _reportPost() async {
+    final userId = _currentUserId;
+    if (userId == null) {
+      _showSnack('Sign in to report posts.');
+      return;
+    }
+    final reason = await _reportReason();
+    if (reason == null || reason.isEmpty) return;
+    try {
+      await _db.from('reports').insert({
+        'reporter_id': userId,
+        'post_id': _postId,
+        'reason': reason,
+      });
+      _showSnack('Report submitted for review.');
+    } catch (error) {
+      _showSnack('Could not submit this report.');
+    }
+  }
+
+  Future<String?> _reportReason() async {
+    final controller = TextEditingController();
+    final result = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        icon: const Icon(Icons.flag_outlined),
+        title: const Text('Report this post'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          maxLines: 4,
+          maxLength: 500,
+          decoration: const InputDecoration(
+            hintText: 'Tell us what is wrong with this post…',
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () {
+              final reason = controller.text.trim();
+              if (reason.isNotEmpty) Navigator.pop(dialogContext, reason);
+            },
+            child: const Text('Submit report'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    return result;
+  }
+
+  Future<void> _blockAuthor() async {
+    final userId = _currentUserId;
+    final authorId = _authorId;
+    if (userId == null || authorId == null || userId == authorId) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        icon: const Icon(Icons.block_rounded, color: AppColors.danger),
+        title: const Text('Block this author?'),
+        content: const Text(
+          'They will no longer be able to message or interact with you. You can manage blocked users in Settings.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: AppColors.danger),
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('Block author'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    try {
+      await _db.from('blocked_users').upsert(
+        {'user_id': userId, 'blocked_user_id': authorId, 'reason': 'post'},
+        onConflict: 'user_id,blocked_user_id',
+      );
+      if (mounted) setState(() => _deleted = true);
+      _showSnack('Author blocked.');
+    } catch (error) {
+      _showSnack('Could not block this author.');
+    }
+  }
+
+  Future<void> _deletePost() async {
+    if (!_isOwner) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        icon: const Icon(Icons.delete_outline_rounded, color: AppColors.danger),
+        title: const Text('Delete this post?'),
+        content: const Text('This removes the post from the student feed.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Keep post'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: AppColors.danger),
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('Delete post'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    setState(() => _deleted = true);
+    try {
+      await _db.from('posts').delete().eq('id', _postId);
+      _showSnack('Post deleted.');
+    } catch (error) {
+      if (mounted) setState(() => _deleted = false);
+      _showSnack('The post could not be deleted.');
+    }
+  }
+
+  void _showSnack(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+  }
+}
+
+class _GlassSurface extends StatelessWidget {
+  const _GlassSurface({required this.child});
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    return ClipRRect(
+      borderRadius: AppStyles.bentoRadius,
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+        child: Container(
+          padding: const EdgeInsets.all(17),
+          decoration: BoxDecoration(
+            color: dark
+                ? const Color(0xD9182B47)
+                : Colors.white.withValues(alpha: 0.82),
+            borderRadius: AppStyles.bentoRadius,
+            border: Border.all(
+              color: dark
+                  ? const Color(0xFF304663)
+                  : Colors.white.withValues(alpha: 0.94),
+            ),
+            boxShadow: AppStyles.glassShadow,
+          ),
+          child: child,
+        ),
+      ),
+    );
+  }
+}
+
+class _AuthorAvatar extends StatelessWidget {
+  const _AuthorAvatar({
+    required this.name,
+    required this.photoUrl,
+    required this.anonymous,
+  });
+  final String name;
+  final String? photoUrl;
+  final bool anonymous;
+
+  @override
+  Widget build(BuildContext context) => Container(
+        width: 50,
+        height: 50,
+        padding: const EdgeInsets.all(2),
+        decoration: const BoxDecoration(
+          shape: BoxShape.circle,
+          gradient: LinearGradient(
+            colors: [AppColors.electricCyan, AppColors.vibeBlue],
+          ),
+        ),
+        child: ClipOval(
+          child: Container(
+            color: Theme.of(context).colorScheme.surface,
+            child: photoUrl != null && photoUrl!.isNotEmpty
+                ? CachedNetworkImage(
+                    imageUrl: photoUrl!,
+                    fit: BoxFit.cover,
+                    errorWidget: (_, _, _) => _AvatarFallback(
+                      name: name,
+                      anonymous: anonymous,
+                    ),
+                  )
+                : _AvatarFallback(name: name, anonymous: anonymous),
+          ),
+        ),
+      );
+}
+
+class _AvatarFallback extends StatelessWidget {
+  const _AvatarFallback({required this.name, required this.anonymous});
+  final String name;
+  final bool anonymous;
+
+  @override
+  Widget build(BuildContext context) => Center(
+        child: anonymous
+            ? const Icon(Icons.person_outline_rounded, color: AppColors.vibeBlue)
+            : Text(
+                name.isEmpty ? 'O' : name[0].toUpperCase(),
+                style: const TextStyle(
+                  color: AppColors.vibeBlue,
+                  fontWeight: FontWeight.w900,
+                  fontSize: 17,
+                ),
+              ),
+      );
+}
+
+class _ExpandablePostText extends StatelessWidget {
+  const _ExpandablePostText({
+    required this.text,
+    required this.expanded,
+    required this.onToggle,
+  });
+  final String text;
+  final bool expanded;
+  final VoidCallback onToggle;
+
+  @override
+  Widget build(BuildContext context) {
+    final long = text.length > 180;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        RichText(
-          maxLines: shouldTrimText ? 3 : null,
-          overflow: shouldTrimText
-              ? TextOverflow.ellipsis
-              : TextOverflow.visible,
-          text: TextSpan(
-            style: textTheme.bodyLarge?.copyWith(height: 1.5),
-            children: _buildBodySpans(content),
+        AnimatedSize(
+          duration: MediaQuery.maybeOf(context)?.disableAnimations == true
+              ? Duration.zero
+              : const Duration(milliseconds: 220),
+          curve: Curves.easeOutCubic,
+          child: Text(
+            text,
+            maxLines: long && !expanded ? 4 : null,
+            overflow: long && !expanded ? TextOverflow.ellipsis : null,
+            style: Theme.of(context).textTheme.bodyLarge?.copyWith(height: 1.52),
           ),
         ),
-        if (shouldTrimText) ...[
-          const SizedBox(height: 6),
-          GestureDetector(
-            onTap: () => setState(() => _isExpanded = true),
-            child: Text(
-              'Read More',
-              style: textTheme.bodySmall?.copyWith(
-                fontWeight: FontWeight.w600,
-                color: Colors.blue,
-              ),
+        if (long) ...[
+          const SizedBox(height: 5),
+          TextButton(
+            onPressed: onToggle,
+            style: TextButton.styleFrom(
+              padding: EdgeInsets.zero,
+              minimumSize: const Size(0, 34),
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
             ),
+            child: Text(expanded ? 'Show less' : 'Read more'),
           ),
         ],
       ],
     );
   }
+}
 
-  Widget _buildImageCarousel(List<String> images) {
+class _MediaCarousel extends StatelessWidget {
+  const _MediaCarousel({
+    required this.items,
+    required this.controller,
+    required this.currentIndex,
+    required this.onChanged,
+    required this.onOpen,
+  });
+  final List<_MediaItem> items;
+  final PageController controller;
+  final int currentIndex;
+  final ValueChanged<int> onChanged;
+  final ValueChanged<int> onOpen;
+
+  @override
+  Widget build(BuildContext context) {
+    final reduceMotion = MediaQuery.maybeOf(context)?.disableAnimations ?? false;
     return Column(
       children: [
-        SizedBox(
-          height: 300,
-          child: PageView.builder(
-            controller: _pageController,
-            itemCount: images.length,
-            onPageChanged: (index) =>
-                setState(() => _currentImageIndex = index),
-            itemBuilder: (context, index) {
-              final imageUrl = images[index];
-              return ClipRRect(
-                borderRadius: BorderRadius.circular(14),
-                child: CachedNetworkImage(
-                  imageUrl: imageUrl,
-                  fit: BoxFit.cover,
-                  placeholder: (context, url) => Shimmer.fromColors(
-                    baseColor: Colors.grey[300]!,
-                    highlightColor: Colors.grey[100]!,
-                    child: Container(
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(14),
-                      ),
-                      padding: const EdgeInsets.all(12),
-                      child: Column(
-                        children: [
-                          Container(
-                            height: 40,
-                            decoration: BoxDecoration(
-                              color: Colors.grey[200],
-                              borderRadius: BorderRadius.circular(12),
+        AspectRatio(
+          aspectRatio: 4 / 3,
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(20),
+            child: PageView.builder(
+              controller: controller,
+              itemCount: items.length,
+              onPageChanged: onChanged,
+              itemBuilder: (context, index) {
+                final item = items[index];
+                return Semantics(
+                  button: true,
+                  label: item.isVideo
+                      ? 'Open video ${index + 1} of ${items.length}'
+                      : 'Open image ${index + 1} of ${items.length}',
+                  child: InkWell(
+                    onTap: () => onOpen(index),
+                    child: item.isVideo
+                        ? _VideoPreview(url: item.url)
+                        : Hero(
+                            tag: 'post-media-${item.url}-$index',
+                            child: CachedNetworkImage(
+                              imageUrl: item.url,
+                              fit: BoxFit.cover,
+                              placeholder: (_, _) => const _MediaLoading(),
+                              errorWidget: (_, _, _) => const _MediaError(),
                             ),
                           ),
-                          const SizedBox(height: 12),
-                          Expanded(
-                            child: Container(
-                              width: double.infinity,
-                              decoration: BoxDecoration(
-                                color: Colors.grey[200],
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
                   ),
-                  errorWidget: (_, _, _) => const Center(
-                    child: Icon(Icons.broken_image, color: Colors.grey),
-                  ),
-                ),
-              );
-            },
+                );
+              },
+            ),
           ),
         ),
-        if (images.length > 1) ...[
-          const SizedBox(height: 8),
+        if (items.length > 1) ...[
+          const SizedBox(height: 10),
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
-            children: List.generate(images.length, (index) {
-              final isActive = index == _currentImageIndex;
+            children: List.generate(items.length, (index) {
+              final active = index == currentIndex;
               return AnimatedContainer(
-                duration: const Duration(milliseconds: 200),
-                margin: const EdgeInsets.symmetric(horizontal: 4),
-                width: isActive ? 10 : 8,
-                height: isActive ? 10 : 8,
+                duration: reduceMotion
+                    ? Duration.zero
+                    : const Duration(milliseconds: 180),
+                margin: const EdgeInsets.symmetric(horizontal: 3),
+                width: active ? 20 : 7,
+                height: 7,
                 decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: isActive ? Colors.blue : Colors.grey[400],
+                  color: active ? AppColors.vibeBlue : AppColors.glassBorder,
+                  borderRadius: AppStyles.pillRadius,
                 ),
               );
             }),
@@ -377,323 +863,401 @@ class _PostCardState extends State<PostCard> {
       ],
     );
   }
+}
 
-  Widget _buildPoll(Map<String, dynamic> poll) {
-    final optionA = (poll['optionA'] as String?)?.trim();
-    final optionB = (poll['optionB'] as String?)?.trim();
+class _VideoPreview extends StatelessWidget {
+  const _VideoPreview({required this.url});
+  final String url;
 
-    if ((optionA == null || optionA.isEmpty) &&
-        (optionB == null || optionB.isEmpty)) {
-      return const SizedBox.shrink();
-    }
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text(
-          'Poll',
-          style: TextStyle(fontWeight: FontWeight.w700, color: Colors.black),
-        ),
-        const SizedBox(height: 8),
-        if (optionA != null && optionA.isNotEmpty) _PollChoice(label: optionA),
-        if (optionB != null && optionB.isNotEmpty) ...[
-          const SizedBox(height: 8),
-          _PollChoice(label: optionB),
-        ],
-      ],
-    );
-  }
-
-  Widget _buildFooter({
-    required int likeCount,
-    required bool hasLiked,
-    required int commentCount,
-    required String postId,
-    required Map<String, dynamic> data,
-    required TextTheme textTheme,
-    required ColorScheme colorScheme,
-  }) {
-    final likeLabel = likeCount == 0 ? 'Like' : 'Like ($likeCount)';
-
-    return Column(
-      children: [
-        Divider(color: Colors.grey[200], thickness: 1, height: 24),
-        Row(
+  @override
+  Widget build(BuildContext context) => Container(
+        decoration: const BoxDecoration(gradient: AppStyles.brandGradient),
+        child: Stack(
+          fit: StackFit.expand,
           children: [
-            _ActionButton(
-              icon: _likesLoading
-                  ? Icons.hourglass_empty
-                  : (hasLiked ? Icons.favorite : Icons.favorite_border),
-              label: likeLabel,
-              highlighted: hasLiked,
-              onTap: () => _togglePostLike(postId),
+            const Center(
+              child: Icon(Icons.movie_creation_outlined, color: Colors.white24, size: 110),
             ),
-            _ActionButton(
-              icon: Icons.chat_bubble_outline,
-              label: commentCount == 0 ? 'Comment' : 'Comment ($commentCount)',
-              onTap: () => _openComments(postId),
+            Center(
+              child: Container(
+                width: 68,
+                height: 68,
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.18),
+                  shape: BoxShape.circle,
+                  border: Border.all(color: Colors.white38),
+                ),
+                child: const Icon(Icons.play_arrow_rounded, color: Colors.white, size: 40),
+              ),
+            ),
+            const Positioned(
+              left: 14,
+              bottom: 12,
+              child: _HeaderPill(icon: Icons.play_circle_outline, label: 'VIDEO'),
             ),
           ],
         ),
-      ],
-    );
-  }
-
-  Future<void> _togglePostLike(String postId) async {
-    final userId = Supabase.instance.client.auth.currentUser?.id;
-    if (userId == null) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Sign in to like posts.')));
-      return;
-    }
-
-    if (postId.isEmpty) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Unable to identify the post.')));
-      return;
-    }
-
-    final hasLiked = _hasLiked;
-    try {
-      if (hasLiked) {
-        await Supabase.instance.client
-            .from('post_likes')
-            .delete()
-              .eq('post_id', postId)
-              .eq('user_id', userId);
-      } else {
-            await Supabase.instance.client
-              .from('post_likes')
-              .insert({'post_id': postId, 'user_id': userId});
-      }
-
-      if (!mounted) return;
-      await _loadLikeState(postId);
-    } catch (error) {
-      if (!mounted) {
-        return;
-      }
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Failed to update like: $error')));
-    }
-  }
-
-  void _openComments(String postId) {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      builder: (_) => CommentSheet(postId: postId),
-    );
-  }
-
-  Future<void> _loadLikeState(String postId) async {
-    if (postId.isEmpty) return;
-    setState(() {
-      _likesLoading = true;
-    });
-
-    final res = await Supabase.instance.client
-      .from('post_likes')
-      .select('user_id')
-      .eq('post_id', postId);
-
-    if (!mounted) return;
-
-    setState(() {
-      _likesLoading = false;
-    });
-
-    // Handle multiple shapes returned by different Supabase client versions
-    final dynamicDyn = res as dynamic;
-    try {
-      final err = dynamicDyn.error;
-      if (err != null) return;
-    } catch (_) {}
-
-    List<dynamic> rows = [];
-    if (dynamicDyn is List) {
-      rows = dynamicDyn;
-    } else if (dynamicDyn is Map && dynamicDyn['data'] is List) {
-      rows = dynamicDyn['data'] as List<dynamic>;
-    }
-
-    final likedUsers = rows
-            .map((item) => item['user_id']?.toString())
-            .whereType<String>()
-            .toList();
-
-    final currentUserId = Supabase.instance.client.auth.currentUser?.id;
-    setState(() {
-      _likeCount = likedUsers.length;
-      _hasLiked = currentUserId != null && likedUsers.contains(currentUserId);
-    });
-  }
-
-
-  List<String> _extractImages(Map<String, dynamic> data) {
-    final images = <String>[];
-    final rawList = data['images'];
-    if (rawList is List) {
-      images.addAll(
-        rawList
-            .whereType<String>()
-            .map((url) => url.trim())
-            .where((url) => url.isNotEmpty),
       );
-    }
+}
 
-    final legacy = (data['imageUrl'] as String?)?.trim();
-    if (legacy != null && legacy.isNotEmpty && !images.contains(legacy)) {
-      images.add(legacy);
-    }
-
-    return images;
-  }
-
-  String _formatTimestamp(dynamic timestamp) {
-    if (timestamp is String) {
-      final parsed = DateTime.tryParse(timestamp);
-      if (parsed != null) {
-        return timeago.format(parsed);
-      }
-    }
-    if (timestamp is DateTime) {
-      return timeago.format(timestamp);
-    }
-    return 'Moments ago';
-  }
-
-  void _resetTagRecognizers() {
-    for (final recognizer in _tagRecognizers) {
-      recognizer.dispose();
-    }
-    _tagRecognizers.clear();
-  }
-
-  List<InlineSpan> _buildBodySpans(String content) {
-    if (content.isEmpty) {
-      return const [TextSpan(text: '')];
-    }
-    final spans = <InlineSpan>[];
-    final spaceRegex = RegExp(r'(\s+)');
-    var lastEnd = 0;
-    for (final match in spaceRegex.allMatches(content)) {
-      if (match.start > lastEnd) {
-        final segment = content.substring(lastEnd, match.start);
-        spans.add(_buildWordSpan(segment));
-      }
-      spans.add(TextSpan(text: content.substring(match.start, match.end)));
-      lastEnd = match.end;
-    }
-    if (lastEnd < content.length) {
-      spans.add(_buildWordSpan(content.substring(lastEnd)));
-    }
-    return spans;
-  }
-
-  InlineSpan _buildWordSpan(String word) {
-    if (word.startsWith('#') && word.length > 1) {
-      final recognizer = TapGestureRecognizer()
-        ..onTap = () => _showTagToast(word);
-      _tagRecognizers.add(recognizer);
-      return TextSpan(
-        text: word,
-        style: const TextStyle(
-          color: Color(0xFF1E5CFF),
-          fontWeight: FontWeight.w700,
-        ),
-        recognizer: recognizer,
-      );
-    }
-    return TextSpan(text: word);
-  }
-
-  void _showTagToast(String word) {
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(const SnackBar(content: Text('Searching tag...')));
-  }
-
-  String _getDeptIcon(String dept) {
-    final lower = dept.toLowerCase();
-    if (lower.contains('civil')) return '🏗️';
-    if (lower.contains('electrical')) return '⚡';
-    if (lower.contains('office') || lower.contains('it')) return '💻';
-    if (lower.contains('finance') || lower.contains('business')) return '💰';
-    if (lower.contains('education') || lower.contains('primary')) return '📚';
-    if (lower.contains('health')) return '🩺';
-    if (lower.contains('tourism')) return '🧭';
-    if (lower.contains('hospitality')) return '🍽️';
-    return '🎓';
-  }
-
-  String? _extractAuthorName(Map<String, dynamic> data) {
-    final profiles = data['profiles'];
-    if (profiles is Map) {
-      final nickname = ((profiles['nickname'] ?? '') as String).trim();
-      if (nickname.isNotEmpty) return nickname;
-      final name = (profiles['name'] as String?)?.trim();
-      final surname = (profiles['surname'] as String?)?.trim();
-      final full = [if (name != null && name.isNotEmpty) name, if (surname != null && surname.isNotEmpty) surname].join(' ');
-      if (full.isNotEmpty) return full;
-    }
-    return (data['author_name'] as String?)?.trim() ?? (data['author'] as String?)?.trim();
-  }
-
-  String? _extractAuthorPhoto(Map<String, dynamic> data) {
-    final profiles = data['profiles'];
-    if (profiles is Map) {
-      final photo = (profiles['photo_url'] as String?)?.trim();
-      if (photo != null && photo.isNotEmpty) return photo;
-    }
-    return (data['author_photo'] as String?)?.trim() ?? (data['avatarUrl'] as String?)?.trim();
-  }
-
-  String? _extractAuthorCampus(Map<String, dynamic> data) {
-    final profiles = data['profiles'];
-    if (profiles is Map) {
-      final campus = (profiles['campus'] as String?)?.trim();
-      if (campus != null && campus.isNotEmpty) return campus;
-    }
-    return (data['campus'] as String?)?.trim();
-  }
-
-  String? _extractAuthorDepartment(Map<String, dynamic> data) {
-    final profiles = data['profiles'];
-    if (profiles is Map) {
-      final dept = (profiles['department'] as String?)?.trim();
-      if (dept != null && dept.isNotEmpty) return dept;
-    }
-    return (data['department'] as String?)?.trim();
+class _MediaLoading extends StatelessWidget {
+  const _MediaLoading();
+  @override
+  Widget build(BuildContext context) {
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    return Shimmer.fromColors(
+      baseColor: dark ? const Color(0xFF172944) : Colors.grey.shade300,
+      highlightColor: dark ? const Color(0xFF29415F) : Colors.grey.shade100,
+      child: Container(color: Colors.white),
+    );
   }
 }
 
-class _ActionButton extends StatelessWidget {
-  const _ActionButton({
+class _MediaError extends StatelessWidget {
+  const _MediaError();
+  @override
+  Widget build(BuildContext context) => Container(
+        color: AppColors.vibeBlue.withValues(alpha: 0.08),
+        child: const Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.broken_image_outlined, color: AppColors.textMuted, size: 38),
+            SizedBox(height: 8),
+            Text('Media unavailable offline'),
+          ],
+        ),
+      );
+}
+
+class _FullScreenGallery extends StatefulWidget {
+  const _FullScreenGallery({required this.media, required this.initialIndex});
+  final List<_MediaItem> media;
+  final int initialIndex;
+
+  @override
+  State<_FullScreenGallery> createState() => _FullScreenGalleryState();
+}
+
+class _FullScreenGalleryState extends State<_FullScreenGallery> {
+  late final PageController _controller = PageController(initialPage: widget.initialIndex);
+  late int _index = widget.initialIndex;
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+        backgroundColor: const Color(0xF2071323),
+        appBar: AppBar(
+          foregroundColor: Colors.white,
+          title: Text('${_index + 1} of ${widget.media.length}'),
+        ),
+        body: PageView.builder(
+          controller: _controller,
+          itemCount: widget.media.length,
+          onPageChanged: (index) => setState(() => _index = index),
+          itemBuilder: (context, index) {
+            final item = widget.media[index];
+            if (item.isVideo) {
+              return Center(
+                child: FilledButton.icon(
+                  onPressed: () async {
+                    final uri = Uri.tryParse(item.url);
+                    if (uri != null) {
+                      await launchUrl(uri, mode: LaunchMode.externalApplication);
+                    }
+                  },
+                  icon: const Icon(Icons.play_arrow_rounded),
+                  label: const Text('Play video'),
+                ),
+              );
+            }
+            return InteractiveViewer(
+              minScale: 0.8,
+              maxScale: 5,
+              child: Center(
+                child: Hero(
+                  tag: 'post-media-${item.url}-$index',
+                  child: CachedNetworkImage(
+                    imageUrl: item.url,
+                    fit: BoxFit.contain,
+                    placeholder: (_, _) => const Center(
+                      child: CircularProgressIndicator(),
+                    ),
+                    errorWidget: (_, _, _) => const _MediaError(),
+                  ),
+                ),
+              ),
+            );
+          },
+        ),
+      );
+}
+
+class _InteractionBar extends StatelessWidget {
+  const _InteractionBar({
+    required this.liked,
+    required this.likeCount,
+    required this.commentCount,
+    required this.busy,
+    required this.onLike,
+    required this.onComment,
+  });
+  final bool liked;
+  final int likeCount;
+  final int commentCount;
+  final bool busy;
+  final VoidCallback onLike;
+  final VoidCallback onComment;
+
+  @override
+  Widget build(BuildContext context) => Container(
+        padding: const EdgeInsets.all(5),
+        decoration: BoxDecoration(
+          color: AppColors.vibeBlue.withValues(alpha: 0.055),
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(color: AppColors.vibeBlue.withValues(alpha: 0.09)),
+        ),
+        child: Row(
+          children: [
+            Expanded(
+              child: _InteractionButton(
+                icon: liked ? Icons.favorite_rounded : Icons.favorite_border_rounded,
+                label: 'Like',
+                count: likeCount,
+                active: liked,
+                busy: busy,
+                onTap: onLike,
+              ),
+            ),
+            Container(width: 1, height: 28, color: AppColors.glassBorder),
+            Expanded(
+              child: _InteractionButton(
+                icon: Icons.chat_bubble_outline_rounded,
+                label: 'Comment',
+                count: commentCount,
+                onTap: onComment,
+              ),
+            ),
+          ],
+        ),
+      );
+}
+
+class _InteractionButton extends StatelessWidget {
+  const _InteractionButton({
     required this.icon,
     required this.label,
+    required this.count,
     required this.onTap,
-    this.highlighted = false,
+    this.active = false,
+    this.busy = false,
   });
-
   final IconData icon;
   final String label;
+  final int count;
   final VoidCallback onTap;
-  final bool highlighted;
+  final bool active;
+  final bool busy;
 
   @override
   Widget build(BuildContext context) {
-    final color = highlighted ? Colors.blue : Colors.black54;
-    return Expanded(
+    final color = active ? AppColors.danger : AppColors.vibeBlue;
+    return Semantics(
+      button: true,
+      selected: active,
+      label: '$label. $count',
       child: TextButton.icon(
-        onPressed: onTap,
-        icon: Icon(icon, color: color),
+        onPressed: busy ? null : onTap,
+        icon: AnimatedSwitcher(
+          duration: MediaQuery.maybeOf(context)?.disableAnimations == true
+              ? Duration.zero
+              : const Duration(milliseconds: 180),
+          child: busy
+              ? const SizedBox.square(
+                  key: ValueKey('busy'),
+                  dimension: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : Icon(icon, key: ValueKey(active), color: color, size: 21),
+        ),
         label: Text(
-          label,
-          style: TextStyle(color: color, fontWeight: FontWeight.w600),
+          '$label${count > 0 ? ' · $count' : ''}',
+          style: TextStyle(color: color, fontWeight: FontWeight.w700),
+        ),
+      ),
+    );
+  }
+}
+
+class _CommentsPreview extends StatelessWidget {
+  const _CommentsPreview({
+    required this.comments,
+    required this.loading,
+    required this.total,
+    required this.onOpen,
+  });
+  final List<_CommentPreview> comments;
+  final bool loading;
+  final int total;
+  final VoidCallback onOpen;
+
+  @override
+  Widget build(BuildContext context) {
+    if (loading) {
+      return Column(
+        children: List.generate(
+          2,
+          (_) => const Padding(
+            padding: EdgeInsets.only(bottom: 8),
+            child: _CommentSkeleton(),
+          ),
+        ),
+      );
+    }
+    return Container(
+      padding: const EdgeInsets.all(13),
+      decoration: BoxDecoration(
+        color: AppColors.vibeBlue.withValues(alpha: 0.045),
+        borderRadius: BorderRadius.circular(17),
+      ),
+      child: Column(
+        children: [
+          for (final comment in comments)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 9),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  CircleAvatar(
+                    radius: 14,
+                    backgroundColor: AppColors.vibeBlue.withValues(alpha: 0.12),
+                    backgroundImage: comment.photoUrl == null
+                        ? null
+                        : CachedNetworkImageProvider(comment.photoUrl!),
+                    child: comment.photoUrl == null
+                        ? Text(
+                            comment.name[0].toUpperCase(),
+                            style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w800),
+                          )
+                        : null,
+                  ),
+                  const SizedBox(width: 9),
+                  Expanded(
+                    child: RichText(
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      text: TextSpan(
+                        style: Theme.of(context).textTheme.bodySmall,
+                        children: [
+                          TextSpan(
+                            text: '${comment.name}  ',
+                            style: const TextStyle(fontWeight: FontWeight.w800),
+                          ),
+                          TextSpan(text: comment.text),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          if (total > comments.length)
+            Align(
+              alignment: Alignment.centerLeft,
+              child: TextButton(
+                onPressed: onOpen,
+                child: Text('View all $total comments'),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _CommentSkeleton extends StatelessWidget {
+  const _CommentSkeleton();
+  @override
+  Widget build(BuildContext context) => Shimmer.fromColors(
+        baseColor: Colors.grey.shade300,
+        highlightColor: Colors.grey.shade100,
+        child: Row(
+          children: [
+            const CircleAvatar(radius: 14, backgroundColor: Colors.white),
+            const SizedBox(width: 9),
+            Expanded(
+              child: Container(
+                height: 24,
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+}
+
+class _PollCard extends StatelessWidget {
+  const _PollCard({
+    required this.question,
+    required this.options,
+    required this.votes,
+    required this.selectedOptionId,
+    required this.onVote,
+  });
+  final String question;
+  final List<_PollOption> options;
+  final List<Map<String, dynamic>> votes;
+  final String? selectedOptionId;
+  final ValueChanged<_PollOption> onVote;
+
+  @override
+  Widget build(BuildContext context) {
+    final total = votes.length;
+    return Semantics(
+      container: true,
+      label: 'Poll. $question. $total votes.',
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: [
+              AppColors.vibeBlue.withValues(alpha: 0.10),
+              AppColors.electricCyan.withValues(alpha: 0.07),
+            ],
+          ),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: AppColors.vibeBlue.withValues(alpha: 0.13)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const _HeaderPill(icon: Icons.poll_outlined, label: 'POLL'),
+            const SizedBox(height: 10),
+            Text(question, style: Theme.of(context).textTheme.titleMedium),
+            const SizedBox(height: 12),
+            for (final option in options) ...[
+              _PollChoice(
+                option: option,
+                selected: option.id == selectedOptionId,
+                votes: votes.where((row) => row['option_id']?.toString() == option.id).length,
+                total: total,
+                onTap: () => onVote(option),
+              ),
+              if (option != options.last) const SizedBox(height: 9),
+            ],
+            const SizedBox(height: 10),
+            Text(
+              '$total vote${total == 1 ? '' : 's'} · Results update live',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+          ],
         ),
       ),
     );
@@ -701,34 +1265,265 @@ class _ActionButton extends StatelessWidget {
 }
 
 class _PollChoice extends StatelessWidget {
-  const _PollChoice({required this.label});
-
-  final String label;
+  const _PollChoice({
+    required this.option,
+    required this.selected,
+    required this.votes,
+    required this.total,
+    required this.onTap,
+  });
+  final _PollOption option;
+  final bool selected;
+  final int votes;
+  final int total;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      decoration: BoxDecoration(
-        color: Colors.blueGrey[50],
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.blueGrey[100]!),
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: Text(
-              label,
-              style: const TextStyle(
-                color: Colors.black87,
-                fontWeight: FontWeight.w600,
-              ),
+    final progress = total == 0 ? 0.0 : votes / total;
+    final reduceMotion = MediaQuery.maybeOf(context)?.disableAnimations ?? false;
+    return Semantics(
+      button: true,
+      selected: selected,
+      label: '${option.label}, ${(progress * 100).round()} percent',
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(15),
+        child: Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: selected
+                ? AppColors.vibeBlue.withValues(alpha: 0.10)
+                : Theme.of(context).colorScheme.surface.withValues(alpha: 0.60),
+            borderRadius: BorderRadius.circular(15),
+            border: Border.all(
+              color: selected ? AppColors.vibeBlue : AppColors.glassBorder,
             ),
           ),
-          const Icon(Icons.how_to_vote, color: Colors.blueGrey),
-        ],
+          child: Column(
+            children: [
+              Row(
+                children: [
+                  Icon(
+                    selected ? Icons.check_circle_rounded : Icons.radio_button_unchecked_rounded,
+                    color: selected ? AppColors.vibeBlue : AppColors.textMuted,
+                    size: 20,
+                  ),
+                  const SizedBox(width: 9),
+                  Expanded(
+                    child: Text(option.label, style: const TextStyle(fontWeight: FontWeight.w700)),
+                  ),
+                  Text('${(progress * 100).round()}%'),
+                ],
+              ),
+              const SizedBox(height: 8),
+              TweenAnimationBuilder<double>(
+                tween: Tween(end: progress),
+                duration: reduceMotion ? Duration.zero : const Duration(milliseconds: 300),
+                builder: (_, value, _) => LinearProgressIndicator(
+                  value: value,
+                  minHeight: 5,
+                  borderRadius: AppStyles.pillRadius,
+                  backgroundColor: AppColors.glassBorder,
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
+}
+
+class _PollSkeleton extends StatelessWidget {
+  const _PollSkeleton();
+  @override
+  Widget build(BuildContext context) => Shimmer.fromColors(
+        baseColor: Colors.grey.shade300,
+        highlightColor: Colors.grey.shade100,
+        child: Container(
+          height: 130,
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(20),
+          ),
+        ),
+      );
+}
+
+class _HeaderPill extends StatelessWidget {
+  const _HeaderPill({required this.icon, required this.label});
+  final IconData icon;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        decoration: BoxDecoration(
+          color: AppColors.vibeBlue.withValues(alpha: 0.10),
+          borderRadius: AppStyles.pillRadius,
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 12, color: AppColors.vibeBlue),
+            const SizedBox(width: 4),
+            Text(
+              label,
+              style: const TextStyle(
+                color: AppColors.vibeBlue,
+                fontSize: 9,
+                fontWeight: FontWeight.w900,
+                letterSpacing: 0.4,
+              ),
+            ),
+          ],
+        ),
+      );
+}
+
+class _MenuLabel extends StatelessWidget {
+  const _MenuLabel({required this.icon, required this.label, this.danger = false});
+  final IconData icon;
+  final String label;
+  final bool danger;
+  @override
+  Widget build(BuildContext context) => Row(
+        children: [
+          Icon(icon, size: 20, color: danger ? AppColors.danger : null),
+          const SizedBox(width: 11),
+          Text(label, style: TextStyle(color: danger ? AppColors.danger : null)),
+        ],
+      );
+}
+
+class _MediaItem {
+  const _MediaItem({required this.url, required this.isVideo});
+  final String url;
+  final bool isVideo;
+}
+
+class _PollOption {
+  const _PollOption({required this.id, required this.label});
+  factory _PollOption.fromRow(Map<String, dynamic> row) => _PollOption(
+        id: row['id'].toString(),
+        label: _string(row['label'], fallback: 'Option'),
+      );
+  final String id;
+  final String label;
+}
+
+class _CommentPreview {
+  const _CommentPreview({required this.name, required this.text, this.photoUrl});
+  factory _CommentPreview.fromRow(Map<String, dynamic> row) {
+    final profile = row['profiles'] is Map
+        ? Map<String, dynamic>.from(row['profiles'] as Map)
+        : <String, dynamic>{};
+    final nickname = _string(profile['nickname']);
+    final fullName = [
+      _string(profile['name']),
+      _string(profile['surname']),
+    ].where((value) => value.isNotEmpty).join(' ');
+    return _CommentPreview(
+      name: nickname.isNotEmpty
+          ? nickname
+          : fullName.isNotEmpty
+              ? fullName
+              : 'Student',
+      text: _string(row['text']),
+      photoUrl: _nullableString(profile['photo_url']),
+    );
+  }
+  final String name;
+  final String text;
+  final String? photoUrl;
+}
+
+enum _PostMenuAction { report, block, delete }
+
+List<_MediaItem> _extractMedia(Map<String, dynamic> data) {
+  final items = <_MediaItem>[];
+  final seen = <String>{};
+  void add(dynamic raw, bool video) {
+    final url = _nullableString(raw);
+    if (url != null && seen.add(url)) {
+      items.add(_MediaItem(url: url, isVideo: video));
+    }
+  }
+
+  final media = data['media'];
+  if (media is List) {
+    for (final raw in media) {
+      if (raw is Map) {
+        final item = Map<String, dynamic>.from(raw);
+        final type = _string(item['type']).toLowerCase();
+        add(item['url'], type == 'video');
+      } else {
+        add(raw, _looksLikeVideo(raw?.toString() ?? ''));
+      }
+    }
+  }
+  final images = data['images'];
+  if (images is List) {
+    for (final image in images) {
+      add(image, false);
+    }
+  }
+  final videos = data['videos'];
+  if (videos is List) {
+    for (final video in videos) {
+      add(video, true);
+    }
+  }
+  add(data['imageUrl'], false);
+  add(data['videoUrl'], true);
+  return items;
+}
+
+bool _looksLikeVideo(String url) => RegExp(
+      r'\.(mp4|webm|mov|m4v)(\?|$)',
+      caseSensitive: false,
+    ).hasMatch(url);
+
+String _authorName(Map<String, dynamic> data) {
+  final profile = data['profiles'];
+  if (profile is Map) {
+    final nickname = _string(profile['nickname']);
+    if (nickname.isNotEmpty) return nickname;
+    final fullName = [
+      _string(profile['name']),
+      _string(profile['surname']),
+    ].where((value) => value.isNotEmpty).join(' ');
+    if (fullName.isNotEmpty) return fullName;
+  }
+  return _string(
+    data['author_name'] ?? data['author'],
+    fallback: 'OG Vibester',
+  );
+}
+
+String? _authorPhoto(Map<String, dynamic> data) {
+  final profile = data['profiles'];
+  if (profile is Map) {
+    final photo = _nullableString(profile['photo_url']);
+    if (photo != null) return photo;
+  }
+  return _nullableString(data['author_photo'] ?? data['avatarUrl']);
+}
+
+String _formatTimestamp(dynamic value) {
+  final date = value is DateTime
+      ? value
+      : DateTime.tryParse(value?.toString() ?? '');
+  return date == null ? 'Moments ago' : timeago.format(date.toLocal());
+}
+
+String _string(dynamic value, {String fallback = ''}) {
+  final text = value?.toString().trim() ?? '';
+  return text.isEmpty ? fallback : text;
+}
+
+String? _nullableString(dynamic value) {
+  final text = value?.toString().trim() ?? '';
+  return text.isEmpty ? null : text;
 }

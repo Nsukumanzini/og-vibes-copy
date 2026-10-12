@@ -1,11 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+
+import '../services/push_notification_service.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../screens/call_feature_screen.dart';
 import '../screens/helpful_contacts_screen.dart';
 import '../screens/login_screen.dart';
-import '../screens/notification_settings_screen.dart';
 import '../screens/profile_screen.dart';
 import '../screens/settings_screen.dart';
 import '../screens/suggestion_box_screen.dart';
@@ -193,7 +194,7 @@ class _AppDrawerState extends State<AppDrawer> {
                     Navigator.of(context).pop();
                     Navigator.of(context).push(
                       MaterialPageRoute(
-                        builder: (_) => const NotificationSettingsScreen(),
+                        builder: (_) => const SettingsScreen(),
                       ),
                     );
                   },
@@ -377,6 +378,7 @@ class _AppDrawerState extends State<AppDrawer> {
     final navigator = Navigator.of(context);
     final messenger = ScaffoldMessenger.of(context);
     try {
+      await PushNotificationService.unregisterCurrentDevice();
       await Supabase.instance.client.auth.signOut();
       if (!mounted) return;
       navigator.pushAndRemoveUntil(

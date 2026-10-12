@@ -1,5 +1,6 @@
 import 'package:confetti/confetti.dart';
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 class SuggestionBoxScreen extends StatefulWidget {
   const SuggestionBoxScreen({super.key});
@@ -121,7 +122,7 @@ class _SuggestionBoxScreenState extends State<SuggestionBoxScreen> {
     );
   }
 
-  void _sendIdea() {
+  Future<void> _sendIdea() async {
     final idea = _ideaController.text.trim();
     if (idea.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -129,10 +130,31 @@ class _SuggestionBoxScreenState extends State<SuggestionBoxScreen> {
       );
       return;
     }
-    _confettiController.play();
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Thanks! Our developers are on it.')),
-    );
-    _ideaController.clear();
+    final user = Supabase.instance.client.auth.currentUser;
+    if (user == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please sign in to send your idea.')),
+      );
+      return;
+    }
+
+    try {
+      await Supabase.instance.client.from('suggestion_submissions').insert({
+        'user_id': user.id,
+        'category': 'product_idea',
+        'message': idea,
+      });
+      if (!mounted) return;
+      _confettiController.play();
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Thanks! Your idea has been saved.')),
+      );
+      _ideaController.clear();
+    } on PostgrestException catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not send idea: ${error.message}')),
+      );
+    }
   }
 }

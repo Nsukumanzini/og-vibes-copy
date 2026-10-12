@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_animate/flutter_animate.dart';
 import 'package:shimmer/shimmer.dart';
 
+import 'package:og_vibes_student/services/content_service.dart';
+import 'package:og_vibes_student/utils/theme_constants.dart';
 import 'package:og_vibes_student/widgets/vibe_scaffold.dart';
 
 class AccreditedAccommodationScreen extends StatefulWidget {
@@ -37,47 +40,61 @@ class _AccreditedAccommodationScreenState
   }
 
   Future<List<_AccommodationProperty>> _loadProperties() async {
-    await Future<void>.delayed(const Duration(milliseconds: 800));
+    final rows = await ContentService.loadSection(
+      'accommodations',
+      fallback: const [
+        {
+          'title': 'The Block Student Res',
+          'distanceKm': 0.5,
+          'distanceLabel': '500m from Campus',
+          'priceLabel': 'R 2,500/m (NSFAS Covered)',
+          'roomType': 'Sharing Room',
+          'badges': ['NSFAS Accredited', 'Free Wi-Fi', 'Verified Landlord'],
+          'accent': 'blue',
+        },
+        {
+          'title': 'Ermelo Varsity Lodge',
+          'distanceKm': 1.2,
+          'distanceLabel': '1.2km from Campus',
+          'priceLabel': 'R 3,200/m',
+          'roomType': 'Single Room',
+          'badges': ['NSFAS Accredited', '24/7 Security'],
+          'accent': 'green',
+        },
+        {
+          'title': "Mama Joy's Commune",
+          'distanceKm': 2.0,
+          'distanceLabel': '2km from Campus',
+          'priceLabel': 'R 1,800/m',
+          'roomType': 'Sharing Room',
+          'badges': ['Pending Accreditation', 'Female Only'],
+          'accent': 'amber',
+        },
+      ],
+    );
 
-    return const <_AccommodationProperty>[
-      _AccommodationProperty(
-        name: 'The Block Student Res',
-        distanceKm: 0.5,
-        distanceLabel: '500m from Campus',
-        priceLabel: 'R 2,500/m (NSFAS Covered)',
-        roomType: 'Sharing Room',
-        badges: <String>[
-          'NSFAS Accredited',
-          'Free Wi-Fi',
-          'Verified Landlord',
-        ],
-        accent: Color(0xFF2962FF),
-      ),
-      _AccommodationProperty(
-        name: 'Ermelo Varsity Lodge',
-        distanceKm: 1.2,
-        distanceLabel: '1.2km from Campus',
-        priceLabel: 'R 3,200/m',
-        roomType: 'Single Room',
-        badges: <String>['NSFAS Accredited', '24/7 Security'],
-        accent: Color(0xFF2E7D32),
-      ),
-      _AccommodationProperty(
-        name: "Mama Joy's Commune",
-        distanceKm: 2.0,
-        distanceLabel: '2km from Campus',
-        priceLabel: 'R 1,800/m',
-        roomType: 'Sharing Room',
-        badges: <String>['Pending Accreditation', 'Female Only'],
-        accent: Color(0xFFFF8F00),
-      ),
-    ];
+    return rows.map((row) {
+      final Color accent = switch (row['accent']) {
+        'green' => AppColors.success,
+        'amber' => AppColors.warning,
+        _ => AppColors.vibeBlue,
+      };
+      return _AccommodationProperty(
+        name: row['title'] as String? ?? 'Student accommodation',
+        distanceKm: (row['distanceKm'] as num?)?.toDouble() ?? 0,
+        distanceLabel: row['distanceLabel'] as String? ?? '',
+        priceLabel: row['priceLabel'] as String? ?? '',
+        roomType: row['roomType'] as String? ?? '',
+        badges: List<String>.from(row['badges'] as List? ?? const []),
+        accent: accent,
+      );
+    }).toList();
   }
 
   @override
   Widget build(BuildContext context) {
     return VibeScaffold(
-      appBar: AppBar(title: const Text('Accredited Accommodations')),
+      appBar: AppBar(title: const Text('Verified stays')),
       body: FutureBuilder<List<_AccommodationProperty>>(
         future: _propertiesFuture,
         builder: (BuildContext context, AsyncSnapshot<List<_AccommodationProperty>> snapshot) {
@@ -103,6 +120,7 @@ class _AccreditedAccommodationScreenState
 
           return Column(
             children: <Widget>[
+              _buildDiscoveryHeader(filtered.length),
               _buildSearchField(),
               _buildFilterBar(),
               const SizedBox(height: 10),
@@ -130,7 +148,10 @@ class _AccreditedAccommodationScreenState
                                 ),
                               );
                             },
-                          );
+                          )
+                              .animate(delay: (70 * index).ms)
+                              .fadeIn(duration: 320.ms)
+                              .slideY(begin: .05, end: 0);
                         },
                       ),
               ),
@@ -141,9 +162,48 @@ class _AccreditedAccommodationScreenState
     );
   }
 
+  Widget _buildDiscoveryHeader(int resultCount) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 8, 20, 4),
+      child: Row(
+        children: [
+          Container(
+            width: 46,
+            height: 46,
+            decoration: BoxDecoration(
+              gradient: AppStyles.brandGradient,
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: const Icon(Icons.apartment_rounded, color: Colors.white),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Find a place you can trust',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
+                ),
+                Text(
+                  '$resultCount verified options match your search',
+                  style: const TextStyle(
+                    color: AppColors.textMuted,
+                    fontSize: 12,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const Icon(Icons.verified_rounded, color: AppColors.success),
+        ],
+      ),
+    );
+  }
+
   Widget _buildSearchField() {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 14, 16, 8),
+      padding: const EdgeInsets.fromLTRB(20, 14, 20, 10),
       child: TextField(
         controller: _searchController,
         onChanged: (String value) {
@@ -151,13 +211,17 @@ class _AccreditedAccommodationScreenState
         },
         decoration: InputDecoration(
           hintText: 'Search by price, distance, or room type...',
-          prefixIcon: const Icon(Icons.search),
-          filled: true,
-          fillColor: Colors.white,
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(16),
-            borderSide: BorderSide.none,
-          ),
+          prefixIcon: const Icon(Icons.search_rounded),
+          suffixIcon: _searchQuery.isEmpty
+              ? null
+              : IconButton(
+                  tooltip: 'Clear search',
+                  onPressed: () {
+                    _searchController.clear();
+                    setState(() => _searchQuery = '');
+                  },
+                  icon: const Icon(Icons.close_rounded),
+                ),
         ),
       ),
     );
@@ -167,7 +231,7 @@ class _AccreditedAccommodationScreenState
     return SizedBox(
       height: 42,
       child: ListView.separated(
-        padding: const EdgeInsets.symmetric(horizontal: 16),
+        padding: const EdgeInsets.symmetric(horizontal: 20),
         scrollDirection: Axis.horizontal,
         itemCount: _filters.length,
         separatorBuilder: (BuildContext context, int index) => const SizedBox(width: 8),
@@ -181,8 +245,8 @@ class _AccreditedAccommodationScreenState
               setState(() => _selectedFilter = filter);
             },
             showCheckmark: false,
-            selectedColor: const Color(0xFF2962FF),
-            backgroundColor: Colors.white,
+            selectedColor: AppColors.vibeBlue,
+            backgroundColor: Colors.white.withValues(alpha: .7),
             labelStyle: TextStyle(
               color: selected ? Colors.white : Colors.black87,
               fontWeight: FontWeight.w700,
@@ -296,30 +360,48 @@ class _PropertyCard extends StatelessWidget {
     final Color accent = property.accent;
 
     return Container(
-      margin: const EdgeInsets.only(bottom: 10),
-      padding: const EdgeInsets.all(14),
+      margin: const EdgeInsets.only(bottom: 14),
+      padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: accent.withValues(alpha: 0.25), width: 1.2),
+        color: Colors.white.withValues(alpha: .82),
+        borderRadius: AppStyles.bentoRadius,
+        border: Border.all(color: AppColors.glassBorder),
         boxShadow: <BoxShadow>[
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
+            color: AppColors.deepBlue.withValues(alpha: 0.07),
+            blurRadius: 24,
+            offset: const Offset(0, 12),
           ),
         ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
-          Text(
-            property.name,
-            style: const TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.w800,
-              color: Colors.black87,
-            ),
+          Row(
+            children: [
+              Container(
+                width: 42,
+                height: 42,
+                decoration: BoxDecoration(
+                  color: accent.withValues(alpha: .11),
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: Icon(Icons.home_work_rounded, color: accent),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  property.name,
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w800,
+                    color: AppColors.midnightInk,
+                  ),
+                ),
+              ),
+              const Icon(Icons.verified_rounded,
+                  color: AppColors.success, size: 20),
+            ],
           ),
           const SizedBox(height: 8),
           _line(Icons.location_on_outlined, property.distanceLabel),
@@ -357,13 +439,7 @@ class _PropertyCard extends StatelessWidget {
             width: double.infinity,
             child: ElevatedButton.icon(
               onPressed: onContact,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: accent,
-                foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-              ),
+              style: ElevatedButton.styleFrom(backgroundColor: accent),
               icon: const Icon(Icons.chat_bubble_outline_rounded),
               label: const Text('Contact Landlord'),
             ),

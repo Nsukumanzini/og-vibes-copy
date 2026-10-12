@@ -1,8 +1,10 @@
 ﻿import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'package:og_vibes_student/models/live_session.dart';
+import 'package:og_vibes_student/utils/theme_constants.dart';
 
 class LiveClassroomScreen extends StatefulWidget {
   const LiveClassroomScreen({super.key, required this.session});
@@ -14,14 +16,37 @@ class LiveClassroomScreen extends StatefulWidget {
 }
 
 class _LiveClassroomScreenState extends State<LiveClassroomScreen> {
-  // Start near the threshold so demos quickly show compliance turning green.
-  int _secondsElapsed = 1790;
-  final int _requiredSeconds = 1800;
+  int _secondsElapsed = 0;
+  bool _attendanceLoaded = false;
+  bool _isSyncingAttendance = false;
   Timer? _timer;
+
+  int get _requiredSeconds => widget.session.requiredAttendanceSeconds;
 
   @override
   void initState() {
     super.initState();
+    _loadAttendance();
+  }
+
+  Future<void> _loadAttendance() async {
+    final user = Supabase.instance.client.auth.currentUser;
+    if (user != null && widget.session.id.isNotEmpty) {
+      try {
+        final row = await Supabase.instance.client
+            .from('online_class_attendance')
+            .select('seconds_attended')
+            .eq('class_id', widget.session.id)
+            .maybeSingle();
+        _secondsElapsed =
+            int.tryParse((row?['seconds_attended'] ?? 0).toString()) ?? 0;
+        await _persistAttendance();
+      } catch (_) {
+        // Attendance continues locally if the connection is temporarily down.
+      }
+    }
+    if (!mounted) return;
+    setState(() => _attendanceLoaded = true);
     _startAttendanceTimer();
   }
 
@@ -33,12 +58,45 @@ class _LiveClassroomScreenState extends State<LiveClassroomScreen> {
       setState(() {
         _secondsElapsed++;
       });
+      if (_secondsElapsed % 10 == 0) {
+        _persistAttendance();
+      }
     });
+  }
+
+  Future<void> _persistAttendance() async {
+    final user = Supabase.instance.client.auth.currentUser;
+    if (user == null ||
+        widget.session.id.isEmpty ||
+        _isSyncingAttendance) {
+      return;
+    }
+    _isSyncingAttendance = true;
+    try {
+      await Supabase.instance.client.from('online_class_attendance').upsert(
+        <String, dynamic>{
+          'user_id': user.id,
+          'class_id': widget.session.id,
+          'seconds_attended': _secondsElapsed,
+          'required_seconds': _requiredSeconds,
+          'last_seen_at': DateTime.now().toUtc().toIso8601String(),
+          'completed_at': _secondsElapsed >= _requiredSeconds
+              ? DateTime.now().toUtc().toIso8601String()
+              : null,
+        },
+        onConflict: 'user_id,class_id',
+      );
+    } catch (_) {
+      // Keep counting locally; the next scheduled sync can recover.
+    } finally {
+      _isSyncingAttendance = false;
+    }
   }
 
   @override
   void dispose() {
     _timer?.cancel();
+    unawaited(_persistAttendance());
     super.dispose();
   }
 
@@ -57,7 +115,7 @@ class _LiveClassroomScreenState extends State<LiveClassroomScreen> {
     );
 
     return Scaffold(
-      backgroundColor: const Color(0xFF121212),
+      backgroundColor: AppColors.midnightInk,
       body: SafeArea(
         child: Column(
           children: <Widget>[
@@ -146,8 +204,18 @@ class _LiveClassroomScreenState extends State<LiveClassroomScreen> {
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: const Color(0xFF1E1E1E),
-        borderRadius: BorderRadius.circular(12),
+        gradient: LinearGradient(
+          colors: isPresent
+              ? <Color>[
+                  AppColors.success.withValues(alpha: 0.22),
+                  AppColors.midnightInk,
+                ]
+              : <Color>[
+                  AppColors.warning.withValues(alpha: 0.18),
+                  AppColors.midnightInk,
+                ],
+        ),
+        borderRadius: BorderRadius.circular(18),
         border: Border.all(
           color: isPresent
               ? Colors.green
@@ -169,9 +237,11 @@ class _LiveClassroomScreenState extends State<LiveClassroomScreen> {
                   ),
                   const SizedBox(width: 8),
                   Text(
-                    isPresent
-                        ? 'NSFAS Register: Present'
-                        : 'NSFAS Register: In Progress',
+                    !_attendanceLoaded
+                        ? 'Loading attendance record'
+                        : isPresent
+                            ? 'NSFAS Register: Present'
+                            : 'NSFAS Register: In Progress',
                     style: TextStyle(
                       color: isPresent ? Colors.green : Colors.orangeAccent,
                       fontWeight: FontWeight.w700,
@@ -181,7 +251,9 @@ class _LiveClassroomScreenState extends State<LiveClassroomScreen> {
                 ],
               ),
               Text(
-                '${_formatDuration(_secondsElapsed)} / 30:00',
+                '${_formatDuration(_secondsElapsed)} / '
+                '${_formatDuration(_requiredSeconds)} '
+                '(${(progress * 100).round()}%)',
                 style: const TextStyle(
                   color: Colors.white,
                   fontWeight: FontWeight.w600,

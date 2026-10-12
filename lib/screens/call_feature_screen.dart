@@ -1,111 +1,65 @@
+import 'dart:ui';
+
 import 'package:flutter/material.dart';
 
-import 'active_call_screen.dart';
+import '../utils/theme_constants.dart';
+import '../widgets/vibe_scaffold.dart';
 import 'call_history_screen.dart';
-import 'incoming_call_screen.dart';
-import 'outgoing_call_screen.dart';
 
 class CallFeatureScreen extends StatelessWidget {
   const CallFeatureScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('Call Feature')),
+    return VibeScaffold(
+      appBar: AppBar(title: const Text('OG Calls')),
       body: ListView(
         padding: const EdgeInsets.all(20),
         children: [
-          _CallActionCard(
-            title: 'Start outgoing call',
-            subtitle: 'Open the outgoing call screen for a demo or in-progress call UI.',
-            icon: Icons.call_outlined,
-            onTap: () {
-              Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (_) => const OutgoingCallScreen(
-                    contactName: 'Test contact',
-                    callType: 'audio',
-                  ),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(28),
+            child: BackdropFilter(
+              filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+              child: Container(
+                padding: const EdgeInsets.all(24),
+                decoration: BoxDecoration(
+                  gradient: AppStyles.brandGradient,
+                  borderRadius: BorderRadius.circular(28),
+                  border: Border.all(color: Colors.white24),
                 ),
-              );
-            },
-          ),
-          const SizedBox(height: 12),
-          _CallActionCard(
-            title: 'Simulate incoming call',
-            subtitle: 'Open the incoming-call popup UI from the app navigator.',
-            icon: Icons.phone_in_talk_rounded,
-            onTap: () {
-              Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (_) => IncomingCallScreen(
-                    contactName: 'Test contact',
-                    callType: 'video',
-                    onAccept: () => Navigator.of(context).pop(),
-                    onDecline: () => Navigator.of(context).pop(),
-                  ),
+                child: const Column(
+                  children: [
+                    Icon(Icons.video_call_rounded, color: AppColors.electricCyan, size: 58),
+                    SizedBox(height: 16),
+                    Text(
+                      'Private voice and video calls',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w800),
+                    ),
+                    SizedBox(height: 8),
+                    Text(
+                      'Open a private chat and tap the phone or video icon to call that student.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(color: Colors.white70, height: 1.5),
+                    ),
+                  ],
                 ),
-              );
-            },
+              ),
+            ),
           ),
-          const SizedBox(height: 12),
-          _CallActionCard(
-            title: 'Open active call view',
-            subtitle: 'Preview the live video/audio call interface.',
-            icon: Icons.videocam_rounded,
-            onTap: () {
-              Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (_) => ActiveCallScreen(
-                    localStream: null,
-                    remoteStream: null,
-                    onEnd: () => Navigator.of(context).pop(),
-                  ),
-                ),
-              );
-            },
-          ),
-          const SizedBox(height: 12),
-          _CallActionCard(
-            title: 'View call history',
-            subtitle: 'See past calls and their status from the app.',
-            icon: Icons.history_rounded,
-            onTap: () {
-              Navigator.of(context).push(
+          const SizedBox(height: 18),
+          Card(
+            child: ListTile(
+              leading: const CircleAvatar(child: Icon(Icons.history_rounded)),
+              title: const Text('Call history'),
+              subtitle: const Text('Review incoming, outgoing, missed, and declined calls.'),
+              trailing: const Icon(Icons.arrow_forward_ios_rounded, size: 16),
+              onTap: () => Navigator.of(context).push(
                 MaterialPageRoute(builder: (_) => const CallHistoryScreen()),
-              );
-            },
+              ),
+            ),
           ),
         ],
-      ),
-    );
-  }
-}
-
-class _CallActionCard extends StatelessWidget {
-  const _CallActionCard({
-    required this.title,
-    required this.subtitle,
-    required this.icon,
-    required this.onTap,
-  });
-
-  final String title;
-  final String subtitle;
-  final IconData icon;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      child: ListTile(
-        leading: CircleAvatar(
-          child: Icon(icon),
-        ),
-        title: Text(title),
-        subtitle: Text(subtitle),
-        trailing: const Icon(Icons.arrow_forward_ios_rounded, size: 16),
-        onTap: onTap,
       ),
     );
   }
