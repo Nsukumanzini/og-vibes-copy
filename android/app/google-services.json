@@ -1,0 +1,39 @@
+{
+  "project_info": {
+    "project_number": "949237855418",
+    "project_id": "og-vibes-1f15c",
+    "storage_bucket": "og-vibes-1f15c.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:949237855418:android:6bab423046285b31fa3e83",
+        "android_client_info": {
+          "package_name": "za.co.ogtechnologies.ogvibes"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "949237855418-ni4626rlbp9gqdp079q0b1e6pvp787gm.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDcbLLOdJEfNgslQn8TuW1vFe3sYNpgMUI"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "949237855418-ni4626rlbp9gqdp079q0b1e6pvp787gm.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
