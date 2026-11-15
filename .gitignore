@@ -52,3 +52,6 @@ app.*.map.json
 /config/release.json
 
 .env*
+
+# Local environment credentials
+/assets/env.local
