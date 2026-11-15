@@ -104,10 +104,6 @@
     }
   </style>
 
-  <script>
-    // Configure Firebase before the app loads
-    window.flutterfire_web_sdk_version = "12.7.0";
-  </script>
 </head>
 <body>
   <aside id="app_install_prompt" role="dialog" aria-modal="true" aria-labelledby="app_install_title">
@@ -126,9 +122,6 @@
       <h1>OG Vibes is waking up...</h1>
     </div>
   </div>
-  <!-- Passkeys Web SDK (required by passkeys_web plugin) -->
-  <!-- If you prefer to vendor this file, download the bundle and serve it locally. -->
-  <script src="https://github.com/corbado/flutter-passkeys/releases/download/2.4.0/bundle.js"></script>
   <script>
     (function () {
       var deferredInstallPrompt = null;
@@ -170,13 +163,6 @@
       if (isAppleMobile) show();
     }());
 
-    if ('serviceWorker' in navigator) {
-      window.addEventListener('load', function () {
-        navigator.serviceWorker.register('/firebase-messaging-sw.js', {
-          scope: '/firebase-cloud-messaging-push-scope',
-        });
-      });
-    }
   </script>
   <script src="flutter_bootstrap.js" async></script>
 </body>

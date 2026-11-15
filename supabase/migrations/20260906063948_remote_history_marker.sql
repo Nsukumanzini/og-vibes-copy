@@ -1,1 +1,0 @@
--- Historical migration marker.`r`n-- Production already records version 20260906063948, but the original source was not available in this checkout.`r`n-- The subsequent reconciliation migration captures the production schema delta for fresh environments.`r`n
