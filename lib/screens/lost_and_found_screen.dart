@@ -5,7 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
+import '../services/offline_data_adapter.dart';
 
 import '../services/diagnostics_service.dart';
 
@@ -32,8 +32,8 @@ class _LostAndFoundScreenState extends State<LostAndFoundScreen>
   bool _refreshing = false;
   String? _error;
 
-  SupabaseClient get _supabase => Supabase.instance.client;
-  User? get _user => _supabase.auth.currentUser;
+  OfflineDataClient get _offlineData => OfflineData.instance.client;
+  User? get _user => _offlineData.auth.currentUser;
 
   @override
   void initState() {
@@ -75,7 +75,7 @@ class _LostAndFoundScreenState extends State<LostAndFoundScreen>
       List<dynamic> responses;
       try {
         responses = await Future.wait<dynamic>(<Future<dynamic>>[
-          _supabase
+          _offlineData
               .from('lost_and_found_items')
               .select(
                 'id, user_id, title, found_at, collect_at, requirements, '
@@ -85,7 +85,7 @@ class _LostAndFoundScreenState extends State<LostAndFoundScreen>
               )
               .order('created_at', ascending: false)
               .limit(30),
-          _supabase
+          _offlineData
               .from('lost_and_found_claims')
               .select(
                 'id, item_id, claimant_id, verification_answer, status, '
@@ -118,7 +118,7 @@ class _LostAndFoundScreenState extends State<LostAndFoundScreen>
           final path = _optional(row['image_path']);
           if (path == null || signedUrls.containsKey(path)) return;
           try {
-            signedUrls[path] = await _supabase.storage
+            signedUrls[path] = await _offlineData.storage
                 .from('lost-and-found')
                 .createSignedUrl(path, 60 * 60);
           } catch (_) {
@@ -800,7 +800,7 @@ class _LostAndFoundScreenState extends State<LostAndFoundScreen>
 
     try {
       HapticFeedback.mediumImpact();
-      await _supabase.from('lost_and_found_claims').insert(<String, dynamic>{
+      await _offlineData.from('lost_and_found_claims').insert(<String, dynamic>{
         'item_id': report.id,
         'claimant_id': _user!.id,
         'verification_answer': answer,
@@ -808,7 +808,7 @@ class _LostAndFoundScreenState extends State<LostAndFoundScreen>
       });
       await _loadData(showLoader: false);
       _showSnack('Verification sent privately to the report owner.');
-    } on PostgrestException catch (error) {
+    } on OfflinePostgrestException catch (error) {
       _showSnack(
         error.code == '23505'
             ? 'You already submitted a claim for this item.'
@@ -953,7 +953,7 @@ class _LostAndFoundScreenState extends State<LostAndFoundScreen>
     required bool approved,
   }) async {
     try {
-      await _supabase
+      await _offlineData
           .from('lost_and_found_claims')
           .update(<String, dynamic>{
             'status': approved ? 'approved' : 'rejected',
@@ -961,7 +961,7 @@ class _LostAndFoundScreenState extends State<LostAndFoundScreen>
           })
           .eq('id', claim.id);
       if (approved) {
-        await _supabase
+        await _offlineData
             .from('lost_and_found_items')
             .update(<String, dynamic>{
               'status': 'claimed',
@@ -1005,7 +1005,7 @@ class _LostAndFoundScreenState extends State<LostAndFoundScreen>
     if (confirmed != true) return;
 
     try {
-      await _supabase
+      await _offlineData
           .from('lost_and_found_items')
           .update(<String, dynamic>{
             'status': 'returned',
@@ -1115,19 +1115,19 @@ class _LostAndFoundScreenState extends State<LostAndFoundScreen>
               if (imageBytes != null) {
                 imagePath =
                     'lost_and_found/${user.id}/${DateTime.now().microsecondsSinceEpoch}.jpg';
-                await _supabase.storage
+                await _offlineData.storage
                     .from('lost-and-found')
                     .uploadBinary(
                       imagePath,
                       imageBytes!,
-                      fileOptions: const FileOptions(
+                      fileOptions: const OfflineFileOptions(
                         contentType: 'image/jpeg',
                         upsert: false,
                       ),
                     );
               }
 
-              await _supabase
+              await _offlineData
                   .from('lost_and_found_items')
                   .insert(<String, dynamic>{
                     'user_id': user.id,

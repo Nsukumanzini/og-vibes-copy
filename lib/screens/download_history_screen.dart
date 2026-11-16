@@ -4,7 +4,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
+import '../services/offline_data_adapter.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../utils/theme_constants.dart';
@@ -26,7 +26,7 @@ class _DownloadHistoryScreenState extends State<DownloadHistoryScreen> {
   String _filter = 'All';
 
   String get _cacheKey =>
-      'download_history_cache_v2_${Supabase.instance.client.auth.currentUser?.id ?? 'signed_out'}';
+      'download_history_cache_v2_${OfflineData.instance.client.auth.currentUser?.id ?? 'signed_out'}';
 
   @override
   void initState() {
@@ -82,7 +82,7 @@ class _DownloadHistoryScreenState extends State<DownloadHistoryScreen> {
     if (mounted) setState(() => _refreshing = true);
     try {
       final rows = List<Map<String, dynamic>>.from(
-        await Supabase.instance.client
+        await OfflineData.instance.client
                 .from('download_history')
                 .select(
                   'id,source_type,source_id,title,url,storage_path,storage_bucket,file_size_bytes,downloaded_at',
@@ -134,7 +134,7 @@ class _DownloadHistoryScreenState extends State<DownloadHistoryScreen> {
       final path = entry['storage_path']?.toString().trim() ?? '';
       if (path.isNotEmpty) {
         final bucket = entry['storage_bucket']?.toString().trim();
-        link = await Supabase.instance.client.storage
+        link = await OfflineData.instance.client.storage
             .from(bucket?.isNotEmpty == true ? bucket! : 'academic-content')
             .createSignedUrl(path, 600);
       }
@@ -159,7 +159,7 @@ class _DownloadHistoryScreenState extends State<DownloadHistoryScreen> {
     final id = entry['id']?.toString();
     if (id == null || id.isEmpty) return;
     try {
-      await Supabase.instance.client
+      await OfflineData.instance.client
           .from('download_history')
           .delete()
           .eq('id', id);
@@ -198,10 +198,10 @@ class _DownloadHistoryScreenState extends State<DownloadHistoryScreen> {
       ),
     );
     if (confirmed != true) return;
-    final userId = Supabase.instance.client.auth.currentUser?.id;
+    final userId = OfflineData.instance.client.auth.currentUser?.id;
     if (userId == null) return;
     try {
-      await Supabase.instance.client
+      await OfflineData.instance.client
           .from('download_history')
           .delete()
           .eq('user_id', userId);

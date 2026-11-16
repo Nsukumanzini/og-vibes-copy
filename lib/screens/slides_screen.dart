@@ -6,7 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:og_vibes_student/utils/theme_constants.dart';
 import 'package:og_vibes_student/widgets/vibe_scaffold.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
+import '../services/offline_data_adapter.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../services/download_history_service.dart';
 import '../services/offline_cache_service.dart';
@@ -81,7 +81,7 @@ class _SlidesScreenState extends State<SlidesScreen> {
     }
 
     try {
-      var query = Supabase.instance.client
+      var query = OfflineData.instance.client
           .from('lecture_slides')
           .select(
             'id, level, subject, title, url, storage_path, created_at, updated_at, module_id',
@@ -133,7 +133,7 @@ class _SlidesScreenState extends State<SlidesScreen> {
   }
 
   void _listenForSlides() {
-    _slidesSubscription = Supabase.instance.client
+    _slidesSubscription = OfflineData.instance.client
         .from('lecture_slides')
         .stream(primaryKey: ['id'])
         .listen(
@@ -165,7 +165,7 @@ class _SlidesScreenState extends State<SlidesScreen> {
   Future<void> _loadLecturers() async {
     try {
       final raw =
-          await Supabase.instance.client
+          await OfflineData.instance.client
                   .from('module_lecturers')
                   .select(
                     'module_id, profiles!module_lecturers_lecturer_id_fkey('
@@ -392,7 +392,7 @@ class _SlidesScreenState extends State<SlidesScreen> {
     try {
     final path = slide['storage_path'] ?? '';
     if (path.isNotEmpty) {
-      return Supabase.instance.client.storage
+      return OfflineData.instance.client.storage
           .from('academic-content')
           .createSignedUrl(path, 600);
     }

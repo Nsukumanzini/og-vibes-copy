@@ -3,7 +3,7 @@ import 'dart:async';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:shimmer/shimmer.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
+import '../services/offline_data_adapter.dart';
 import 'package:timeago/timeago.dart' as timeago;
 import 'package:url_launcher/url_launcher.dart';
 
@@ -21,7 +21,7 @@ class PostCard extends StatefulWidget {
 }
 
 class _PostCardState extends State<PostCard> {
-  final _db = Supabase.instance.client;
+  final _db = OfflineData.instance.client;
   late PageController _pageController;
 
   StreamSubscription<List<Map<String, dynamic>>>? _likesSubscription;

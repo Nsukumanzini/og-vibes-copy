@@ -1,6 +1,6 @@
 import 'package:confetti/confetti.dart';
 import 'package:flutter/material.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
+import '../services/offline_data_adapter.dart';
 
 class SuggestionBoxScreen extends StatefulWidget {
   const SuggestionBoxScreen({super.key});
@@ -130,7 +130,7 @@ class _SuggestionBoxScreenState extends State<SuggestionBoxScreen> {
       );
       return;
     }
-    final user = Supabase.instance.client.auth.currentUser;
+    final user = OfflineData.instance.client.auth.currentUser;
     if (user == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Please sign in to send your idea.')),
@@ -140,7 +140,7 @@ class _SuggestionBoxScreenState extends State<SuggestionBoxScreen> {
 
     setState(() => _sending = true);
     try {
-      await Supabase.instance.client.from('suggestion_submissions').insert({
+      await OfflineData.instance.client.from('suggestion_submissions').insert({
         'user_id': user.id,
         'category': 'product_idea',
         'message': idea,

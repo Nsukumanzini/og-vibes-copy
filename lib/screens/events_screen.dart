@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:share_plus/share_plus.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
+import '../services/offline_data_adapter.dart';
 
 import '../utils/theme_constants.dart';
 import '../widgets/vibe_scaffold.dart';
@@ -25,8 +25,8 @@ class _EventsScreenState extends State<EventsScreen> {
   String _filterType = 'all';
   String? _filterValue;
 
-  SupabaseClient get _supabase => Supabase.instance.client;
-  User? get _user => _supabase.auth.currentUser;
+  OfflineDataClient get _offlineData => OfflineData.instance.client;
+  User? get _user => _offlineData.auth.currentUser;
 
   @override
   void initState() {
@@ -64,7 +64,7 @@ class _EventsScreenState extends State<EventsScreen> {
     }
     try {
       final responses = await Future.wait<dynamic>(<Future<dynamic>>[
-        _supabase
+        _offlineData
             .from('events')
             .select(
               'id, title, date_label, venue, price, image_url, contact, '
@@ -74,11 +74,11 @@ class _EventsScreenState extends State<EventsScreen> {
               'accent_color, updated_at, approval_status, submitted_by',
             )
             .order('date'),
-        _supabase
+        _offlineData
             .from('event_attendees')
             .select('event_id, user_id, created_at')
             .eq('user_id', user.id),
-        _supabase
+        _offlineData
             .from('event_invitations')
             .select(
               'id, event_id, sender_id, receiver_id, message, status, '
@@ -86,7 +86,7 @@ class _EventsScreenState extends State<EventsScreen> {
             )
             .or('sender_id.eq.${user.id},receiver_id.eq.${user.id}')
             .order('created_at', ascending: false),
-        _supabase
+        _offlineData
             .from('friendships')
             .select('user_id, friend_id')
             .or('user_id.eq.${user.id},friend_id.eq.${user.id}'),
@@ -142,7 +142,7 @@ class _EventsScreenState extends State<EventsScreen> {
   Future<List<StudentFriend>> _loadFriendProfiles(List<String> ids) async {
     if (ids.isEmpty) return <StudentFriend>[];
     final rows = List<Map<String, dynamic>>.from(
-      await _supabase
+      await _offlineData
               .from('profiles')
               .select('id, nickname, photo_url, campus, department')
               .inFilter('id', ids)
@@ -206,13 +206,13 @@ class _EventsScreenState extends State<EventsScreen> {
     HapticFeedback.mediumImpact();
     try {
       if (attending) {
-        await _supabase
+        await _offlineData
             .from('event_attendees')
             .delete()
             .eq('event_id', event.id)
             .eq('user_id', user.id);
       } else {
-        await _supabase.from('event_attendees').insert(<String, dynamic>{
+        await _offlineData.from('event_attendees').insert(<String, dynamic>{
           'event_id': event.id,
           'user_id': user.id,
         });
@@ -384,7 +384,7 @@ class _EventsScreenState extends State<EventsScreen> {
     }
     try {
       final nickname = _user!.userMetadata?['nickname']?.toString().trim();
-      await _supabase.from('events').insert({
+      await _offlineData.from('events').insert({
         'title': title.text.trim(),
         'description': description.text.trim(),
         'venue': venue.text.trim(),
@@ -515,7 +515,7 @@ class _EventsScreenState extends State<EventsScreen> {
     if (result == null || result.isEmpty || _user == null) return;
 
     try {
-      await _supabase
+      await _offlineData
           .from('event_invitations')
           .insert(
             result
@@ -1008,7 +1008,7 @@ class _EventsScreenState extends State<EventsScreen> {
       return 'You do not have permission for this action.';
     }
     return text
-        .replaceFirst('PostgrestException(message: ', '')
+        .replaceFirst('OfflinePostgrestException(message: ', '')
         .split(',')
         .first;
   }

@@ -3,7 +3,7 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
+import '../services/offline_data_adapter.dart';
 
 import '../services/notification_badge_service.dart';
 import '../utils/theme_constants.dart';
@@ -36,7 +36,7 @@ class NotificationCenterScreen extends StatefulWidget {
 class _NotificationCenterScreenState extends State<NotificationCenterScreen> {
   static const int _pageSize = 30;
   final List<Map<String, dynamic>> _items = [];
-  RealtimeChannel? _channel;
+  OfflineRealtimeChannel? _channel;
   bool _loading = true;
   bool _loadingOlder = false;
   bool _hasMore = true;
@@ -45,7 +45,7 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen> {
   String? _error;
 
   String get _cacheKey =>
-      'student_notification_inbox_cache_v3_${Supabase.instance.client.auth.currentUser?.id ?? 'signed_out'}';
+      'student_notification_inbox_cache_v3_${OfflineData.instance.client.auth.currentUser?.id ?? 'signed_out'}';
   int get _unreadCount =>
       _items.where((item) => item['read_at'] == null).length;
 
@@ -58,15 +58,15 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen> {
   Future<void> _initialise() async {
     await _restoreCache();
     await _load(reset: true);
-    final userId = Supabase.instance.client.auth.currentUser?.id;
+    final userId = OfflineData.instance.client.auth.currentUser?.id;
     if (userId == null) return;
-    _channel = Supabase.instance.client.channel('notification-inbox:$userId')
+    _channel = OfflineData.instance.client.channel('notification-inbox:$userId')
       ..onPostgresChanges(
-        event: PostgresChangeEvent.all,
+        event: OfflinePostgresChangeEvent.all,
         schema: 'public',
         table: 'student_notifications',
-        filter: PostgresChangeFilter(
-          type: PostgresChangeFilterType.eq,
+        filter: OfflinePostgresChangeFilter(
+          type: OfflinePostgresChangeFilterType.eq,
           column: 'user_id',
           value: userId,
         ),
@@ -104,7 +104,7 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen> {
       setState(() => _loadingOlder = true);
     }
     try {
-      var query = Supabase.instance.client
+      var query = OfflineData.instance.client
           .from('student_notifications')
           .select();
       final cursor = _oldestCursor;
@@ -155,7 +155,7 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen> {
   @override
   void dispose() {
     if (_channel != null) {
-      unawaited(Supabase.instance.client.removeChannel(_channel!));
+      unawaited(OfflineData.instance.client.removeChannel(_channel!));
     }
     super.dispose();
   }
@@ -192,7 +192,7 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen> {
       }
     });
     try {
-      await Supabase.instance.client
+      await OfflineData.instance.client
           .from('student_notifications')
           .update({'read_at': now})
           .inFilter('id', unreadIds);
@@ -211,7 +211,7 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen> {
     if (id != null && item['read_at'] == null) {
       final now = DateTime.now().toUtc().toIso8601String();
       setState(() => item['read_at'] = now);
-      await Supabase.instance.client
+      await OfflineData.instance.client
           .from('student_notifications')
           .update({'read_at': now})
           .eq('id', id);

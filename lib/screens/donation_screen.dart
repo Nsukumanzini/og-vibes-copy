@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
+import '../services/offline_data_adapter.dart';
 
 import '../utils/theme_constants.dart';
 import '../widgets/vibe_scaffold.dart';
@@ -39,7 +39,7 @@ class _DonationScreenState extends State<DonationScreen> {
 
   Future<void> _loadOffers() async {
     try {
-      final rows = await Supabase.instance.client
+      final rows = await OfflineData.instance.client
           .from('support_donations')
           .select('id, category, item, location, status, created_at')
           .order('created_at', ascending: false)
@@ -70,14 +70,14 @@ class _DonationScreenState extends State<DonationScreen> {
       return;
     }
 
-    final user = Supabase.instance.client.auth.currentUser;
+    final user = OfflineData.instance.client.auth.currentUser;
     if (user == null) {
       _showSnack('Sign in to share a donation.');
       return;
     }
     setState(() => _submitting = true);
     try {
-      await Supabase.instance.client.from('support_donations').insert({
+      await OfflineData.instance.client.from('support_donations').insert({
         'user_id': user.id,
         'category': _category,
         'item': _itemController.text.trim(),

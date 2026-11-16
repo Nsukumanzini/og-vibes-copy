@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
+import '../services/offline_data_adapter.dart';
 
 import 'home_screen.dart';
 import 'login_screen.dart';
@@ -11,7 +11,7 @@ class EmailConfirmedLandingScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     var signedIn = false;
     try {
-      signedIn = Supabase.instance.client.auth.currentSession != null;
+      signedIn = OfflineData.instance.client.auth.currentSession != null;
     } catch (_) {
       // The confirmation page can still render in an unconfigured preview.
     }

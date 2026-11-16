@@ -4,7 +4,7 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:shimmer/shimmer.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
+import '../services/offline_data_adapter.dart';
 
 import 'package:og_vibes_student/widgets/vibe_scaffold.dart';
 
@@ -104,7 +104,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Future<Map<String, dynamic>> _loadProfile() async {
-    final user = Supabase.instance.client.auth.currentUser;
+    final user = OfflineData.instance.client.auth.currentUser;
     if (user == null) {
       final fallback = {
         'fullName': 'Student',
@@ -130,7 +130,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
     Map<String, dynamic>? response;
     try {
-      response = await Supabase.instance.client
+      response = await OfflineData.instance.client
           .from('profiles')
           .select(
             'name, surname, nickname, campus, department, level, photo_url, '
@@ -207,7 +207,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final form = _formKey.currentState;
     if (form == null || !form.validate()) return;
 
-    final user = Supabase.instance.client.auth.currentUser;
+    final user = OfflineData.instance.client.auth.currentUser;
     if (user == null) return;
 
     setState(() => _isSaving = true);
@@ -219,15 +219,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
         final extension = mimeType.contains('png') ? 'png' : 'jpg';
         final fileName =
             '${user.id}/avatar_${DateTime.now().millisecondsSinceEpoch}.$extension';
-        await Supabase.instance.client.storage
+        await OfflineData.instance.client.storage
             .from('profile_images')
             .uploadBinary(
               fileName,
               _selectedImageBytes!,
-              fileOptions: FileOptions(upsert: true, contentType: mimeType),
+              fileOptions: OfflineFileOptions(upsert: true, contentType: mimeType),
             );
 
-        photoUrl = Supabase.instance.client.storage
+        photoUrl = OfflineData.instance.client.storage
             .from('profile_images')
             .getPublicUrl(fileName);
       }
@@ -246,14 +246,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
         updateData['photo_url'] = photoUrl;
       }
 
-      final updated = await Supabase.instance.client
+      final updated = await OfflineData.instance.client
           .from('profiles')
           .update(updateData)
           .eq('id', user.id)
           .select('id')
           .maybeSingle();
       if (updated == null) {
-        await Supabase.instance.client.from('profiles').insert({
+        await OfflineData.instance.client.from('profiles').insert({
           'id': user.id,
           'email': user.email ?? '',
           ...updateData,
@@ -261,8 +261,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
           'gender': 'Not set',
         });
       }
-      await Supabase.instance.client.auth.updateUser(
-        UserAttributes(
+      await OfflineData.instance.client.auth.updateUser(
+        OfflineUserAttributes(
           data: {
             ...?user.userMetadata,
             'nickname': _nicknameController.text.trim(),
@@ -357,7 +357,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         : _photoUrl ?? profile['photoUrl']?.toString();
     final verified =
         profile['verified'] == true ||
-        Supabase.instance.client.auth.currentUser?.emailConfirmedAt != null;
+        OfflineData.instance.client.auth.currentUser?.emailConfirmedAt != null;
 
     return SafeArea(
       child: GestureDetector(

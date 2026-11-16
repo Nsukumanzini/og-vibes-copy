@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
+import '../services/offline_data_adapter.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../screens/pdf_viewer_screen.dart';
 
@@ -24,7 +24,7 @@ class _AcademicAttachmentActionsState extends State<AcademicAttachmentActions> {
   }
   Future<Map<String, dynamic>?> _load() async {
     if (!{'quizzes', 'quiz_questions'}.contains(widget.table) || widget.recordId.isEmpty) return null;
-    return Supabase.instance.client.from(widget.table)
+    return OfflineData.instance.client.from(widget.table)
       .select('attachment_storage_path,attachment_file_name')
       .eq('id', widget.recordId).maybeSingle();
   }
@@ -33,7 +33,7 @@ class _AcademicAttachmentActionsState extends State<AcademicAttachmentActions> {
     try {
       final path = file['attachment_storage_path'].toString();
       final name = file['attachment_file_name']?.toString() ?? path.split('/').last;
-      final url = await Supabase.instance.client.storage.from('academic-content').createSignedUrl(path, 600);
+      final url = await OfflineData.instance.client.storage.from('academic-content').createSignedUrl(path, 600);
       if (!mounted) return;
       if (!download && name.toLowerCase().endsWith('.pdf')) {
         await Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => PdfViewerScreen(url: url, title: name)));

@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:shimmer/shimmer.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
+import '../services/offline_data_adapter.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import 'package:og_vibes_student/models/live_session.dart';
@@ -91,7 +91,7 @@ class _OnlineClassesScreenState extends State<OnlineClassesScreen>
   Future<void> _loadSessions() async {
     List<Map<String, dynamic>> rows;
     try {
-      final raw = await Supabase.instance.client
+      final raw = await OfflineData.instance.client
           .from('online_classes')
           .select(
             'id, module, subject, topic, scheduled_at, status, lecturer, url, '
@@ -118,22 +118,22 @@ class _OnlineClassesScreenState extends State<OnlineClassesScreen>
   }
 
   Future<void> _loadAcademicContext() async {
-    final user = Supabase.instance.client.auth.currentUser;
+    final user = OfflineData.instance.client.auth.currentUser;
     if (user == null) return;
 
     List<dynamic> results;
     try {
       results = await Future.wait<dynamic>(<Future<dynamic>>[
-        Supabase.instance.client
+        OfflineData.instance.client
             .from('profiles')
             .select('department, level')
             .eq('id', user.id)
             .maybeSingle(),
-        Supabase.instance.client.from('programmes').select('id, name'),
-        Supabase.instance.client
+        OfflineData.instance.client.from('programmes').select('id, name'),
+        OfflineData.instance.client
             .from('modules')
             .select('id, programme_id, level, name, code'),
-        Supabase.instance.client
+        OfflineData.instance.client
             .from('module_lecturers')
             .select(
               'module_id, profiles!module_lecturers_lecturer_id_fkey('
@@ -224,11 +224,11 @@ class _OnlineClassesScreenState extends State<OnlineClassesScreen>
   }
 
   Future<void> _loadReminders() async {
-    final user = Supabase.instance.client.auth.currentUser;
+    final user = OfflineData.instance.client.auth.currentUser;
     if (user == null) return;
     List<Map<String, dynamic>> reminderRows;
     try {
-      final raw = await Supabase.instance.client
+      final raw = await OfflineData.instance.client
           .from('online_class_reminders')
           .select('class_id, remind_minutes, enabled')
           .eq('enabled', true)
@@ -259,7 +259,7 @@ class _OnlineClassesScreenState extends State<OnlineClassesScreen>
   }
 
   void _listenForSessionChanges() {
-    _sessionSubscription = Supabase.instance.client
+    _sessionSubscription = OfflineData.instance.client
         .from('online_classes')
         .stream(primaryKey: <String>['id'])
         .listen(
@@ -399,7 +399,7 @@ class _OnlineClassesScreenState extends State<OnlineClassesScreen>
   Future<void> _openResource(_OnlineClassSession session) async {
     if (session.resourceStoragePath != null) {
       try {
-        final signed = await Supabase.instance.client.storage
+        final signed = await OfflineData.instance.client.storage
             .from('class-resources')
             .createSignedUrl(session.resourceStoragePath!, 120);
         await _openLink(signed);
@@ -1273,21 +1273,21 @@ class _OnlineClassesScreenState extends State<OnlineClassesScreen>
       ),
     );
     if (choice == null) return;
-    final user = Supabase.instance.client.auth.currentUser;
+    final user = OfflineData.instance.client.auth.currentUser;
     if (user == null) {
       _message('Please sign in to manage reminders.');
       return;
     }
     try {
       if (choice == 0) {
-        await Supabase.instance.client
+        await OfflineData.instance.client
             .from('online_class_reminders')
             .delete()
             .eq('class_id', session.id);
         if (mounted) setState(() => _reminders.remove(session.id));
         _message('Class reminder removed.');
       } else {
-        await Supabase.instance.client
+        await OfflineData.instance.client
             .from('online_class_reminders')
             .upsert(<String, dynamic>{
               'user_id': user.id,

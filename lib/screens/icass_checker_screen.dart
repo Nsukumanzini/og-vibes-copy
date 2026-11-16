@@ -4,7 +4,7 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
+import '../services/offline_data_adapter.dart';
 
 import '../utils/theme_constants.dart';
 import '../widgets/vibe_scaffold.dart';
@@ -28,8 +28,8 @@ class _IcassCheckerScreenState extends State<IcassCheckerScreen> {
   int? _selectedYear;
   String _selectedStatus = 'all';
 
-  SupabaseClient get _supabase => Supabase.instance.client;
-  User? get _user => _supabase.auth.currentUser;
+  OfflineDataClient get _offlineData => OfflineData.instance.client;
+  User? get _user => _offlineData.auth.currentUser;
 
   @override
   void initState() {
@@ -57,12 +57,12 @@ class _IcassCheckerScreenState extends State<IcassCheckerScreen> {
       List<dynamic> responses;
       try {
         responses = await Future.wait<dynamic>(<Future<dynamic>>[
-          _supabase
+          _offlineData
               .from('profiles')
               .select('id, name, surname, student_number, department, level')
               .eq('id', user.id)
               .maybeSingle(),
-          _supabase
+          _offlineData
               .from('student_module_registrations')
               .select(
                 'student_id, module_id, academic_year, semester, status, '
@@ -72,11 +72,11 @@ class _IcassCheckerScreenState extends State<IcassCheckerScreen> {
               .neq('status', 'cancelled')
               .order('academic_year', ascending: false)
               .limit(30),
-          _supabase
+          _offlineData
               .from('modules')
               .select('id, programme_id, level, name, code')
               .order('name'),
-          _supabase
+          _offlineData
               .from('icass_marks')
               .select(
                 'id, student_id, module_id, subject_name, lecturer_name, '
@@ -689,7 +689,7 @@ class _IcassCheckerScreenState extends State<IcassCheckerScreen> {
       return 'Your marks are protected, but this session no longer has access. Sign in again.';
     }
     return text
-        .replaceFirst('PostgrestException(message: ', '')
+        .replaceFirst('OfflinePostgrestException(message: ', '')
         .split(',')
         .first;
   }

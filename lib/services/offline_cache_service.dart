@@ -1,17 +1,16 @@
 import 'dart:convert';
 
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
+import 'offline_data_adapter.dart';
 
 /// Small, user-scoped JSON cache for read-only screen data.
 ///
-/// It is intentionally bounded. Files remain in Supabase Storage; only record
-/// metadata required to render useful offline screens is cached locally.
+/// It is intentionally bounded and keeps record metadata available offline.
 class OfflineCacheService {
   OfflineCacheService._();
 
   static String userKey(String namespace) {
-    final userId = Supabase.instance.client.auth.currentUser?.id ?? 'guest';
+    final userId = OfflineData.instance.client.auth.currentUser?.id ?? 'guest';
     return 'og_vibes_cache_v3_${namespace}_$userId';
   }
 

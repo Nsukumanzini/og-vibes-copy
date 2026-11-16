@@ -1,7 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
+import '../services/offline_data_adapter.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:youtube_player_iframe/youtube_player_iframe.dart';
 
@@ -58,10 +58,10 @@ class _LiveClassroomScreenState extends State<LiveClassroomScreen>
   }
 
   Future<void> _loadAttendance() async {
-    final user = Supabase.instance.client.auth.currentUser;
+    final user = OfflineData.instance.client.auth.currentUser;
     if (user != null) {
       try {
-        final row = await Supabase.instance.client
+        final row = await OfflineData.instance.client
             .from('online_class_attendance')
             .select('seconds_attended')
             .eq('class_id', widget.session.id)
@@ -82,11 +82,11 @@ class _LiveClassroomScreenState extends State<LiveClassroomScreen>
   }
 
   Future<void> _persistAttendance() async {
-    final user = Supabase.instance.client.auth.currentUser;
+    final user = OfflineData.instance.client.auth.currentUser;
     if (user == null || _isSyncing) return;
     _isSyncing = true;
     try {
-      await Supabase.instance.client
+      await OfflineData.instance.client
           .from('online_class_attendance')
           .upsert(<String, dynamic>{
             'user_id': user.id,

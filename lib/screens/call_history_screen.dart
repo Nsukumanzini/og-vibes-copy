@@ -3,7 +3,7 @@ import 'dart:async';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
+import '../services/offline_data_adapter.dart';
 
 import '../utils/theme_constants.dart';
 import '../widgets/vibe_scaffold.dart';
@@ -18,9 +18,9 @@ class CallHistoryScreen extends StatefulWidget {
 }
 
 class _CallHistoryScreenState extends State<CallHistoryScreen> {
-  final _db = Supabase.instance.client;
+  final _db = OfflineData.instance.client;
   List<_CallItem> _calls = const [];
-  final List<RealtimeChannel> _channels = [];
+  final List<OfflineRealtimeChannel> _channels = [];
   final TextEditingController _searchController = TextEditingController();
   bool _loading = true;
   String? _error;
@@ -35,7 +35,7 @@ class _CallHistoryScreenState extends State<CallHistoryScreen> {
     if (userId != null) {
       final directChannel = _db.channel('call-history:$userId')
         ..onPostgresChanges(
-          event: PostgresChangeEvent.all,
+          event: OfflinePostgresChangeEvent.all,
           schema: 'public',
           table: 'calls',
           callback: (_) => unawaited(_load(showLoader: false)),
@@ -43,7 +43,7 @@ class _CallHistoryScreenState extends State<CallHistoryScreen> {
         ..subscribe();
       final groupChannel = _db.channel('group-call-history:$userId')
         ..onPostgresChanges(
-          event: PostgresChangeEvent.all,
+          event: OfflinePostgresChangeEvent.all,
           schema: 'public',
           table: 'group_calls',
           callback: (_) => unawaited(_load(showLoader: false)),
@@ -51,11 +51,11 @@ class _CallHistoryScreenState extends State<CallHistoryScreen> {
         ..subscribe();
       final participantChannel = _db.channel('group-call-participation:$userId')
         ..onPostgresChanges(
-          event: PostgresChangeEvent.all,
+          event: OfflinePostgresChangeEvent.all,
           schema: 'public',
           table: 'group_call_participants',
-          filter: PostgresChangeFilter(
-            type: PostgresChangeFilterType.eq,
+          filter: OfflinePostgresChangeFilter(
+            type: OfflinePostgresChangeFilterType.eq,
             column: 'user_id',
             value: userId,
           ),

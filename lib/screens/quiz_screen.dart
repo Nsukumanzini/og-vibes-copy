@@ -8,7 +8,7 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:shimmer/shimmer.dart';
 import '../widgets/academic_attachment_actions.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
+import '../services/offline_data_adapter.dart';
 
 import 'package:og_vibes_student/screens/lms_quiz_lockdown_screen.dart';
 import 'package:og_vibes_student/utils/theme_constants.dart';
@@ -73,7 +73,7 @@ class _QuizScreenState extends State<QuizScreen>
   }
 
   Future<void> _loadDashboard({bool showLoader = true}) async {
-    final user = Supabase.instance.client.auth.currentUser;
+    final user = OfflineData.instance.client.auth.currentUser;
     if (user == null) {
       if (!mounted) return;
       setState(() {
@@ -91,19 +91,19 @@ class _QuizScreenState extends State<QuizScreen>
 
     try {
       final results = await Future.wait<dynamic>(<Future<dynamic>>[
-        Supabase.instance.client
+        OfflineData.instance.client
             .from('profiles')
             .select('department, level')
             .eq('id', user.id)
             .maybeSingle(),
-        Supabase.instance.client.from('programmes').select('id, name'),
-        Supabase.instance.client
+        OfflineData.instance.client.from('programmes').select('id, name'),
+        OfflineData.instance.client
             .from('modules')
             .select('id, programme_id, level, name, code'),
-        Supabase.instance.client
+        OfflineData.instance.client
             .from('profiles')
             .select('id, name, surname, photo_url, is_verified'),
-        Supabase.instance.client
+        OfflineData.instance.client
             .from('quizzes')
             .select('''
           id,
@@ -142,7 +142,7 @@ class _QuizScreenState extends State<QuizScreen>
         ''')
             .eq('published', true)
             .order('quiz_date', ascending: true),
-        Supabase.instance.client
+        OfflineData.instance.client
             .from('quiz_attempts')
             .select(
               'id, quiz_id, user_id, attempt_number, status, started_at, '
@@ -207,7 +207,7 @@ class _QuizScreenState extends State<QuizScreen>
     final attempts = attemptRows.map(QuizAttempt.fromRow).toList();
     final quizzes = quizRows
         .map(
-          (row) => QuizItem.fromSupabaseRow(
+          (row) => QuizItem.fromCacheRow(
             row,
             module: _moduleById(_text(row['module_id'])),
             lecturer: _lecturers[_text(row['lecturer_id'])],
@@ -340,15 +340,15 @@ class _QuizScreenState extends State<QuizScreen>
   }
 
   void _listenForChanges() {
-    final userId = Supabase.instance.client.auth.currentUser?.id;
-    _quizSubscription = Supabase.instance.client
+    final userId = OfflineData.instance.client.auth.currentUser?.id;
+    _quizSubscription = OfflineData.instance.client
         .from('quizzes')
         .stream(primaryKey: <String>['id'])
         .listen((_) {
           if (mounted) unawaited(_loadDashboard(showLoader: false));
         }, onError: (_) {});
     if (userId == null) return;
-    _attemptSubscription = Supabase.instance.client
+    _attemptSubscription = OfflineData.instance.client
         .from('quiz_attempts')
         .stream(primaryKey: <String>['id'])
         .eq('user_id', userId)
@@ -2143,7 +2143,7 @@ class QuizItem {
     };
   }
 
-  factory QuizItem.fromSupabaseRow(
+  factory QuizItem.fromCacheRow(
     Map<String, dynamic> row, {
     required ModuleRef? module,
     required LecturerProfile? lecturer,
@@ -2157,7 +2157,7 @@ class QuizItem {
     final questions =
         List<Map<String, dynamic>>.from(
             row['questions'] as List<dynamic>? ?? <dynamic>[],
-          ).map(QuizQuestion.fromSupabaseRow).toList()
+          ).map(QuizQuestion.fromCacheRow).toList()
           ..sort((a, b) => a.position.compareTo(b.position));
     return QuizItem(
       id: _QuizScreenState._text(row['id']),
@@ -2225,7 +2225,7 @@ class QuizQuestion {
     'position': position,
   };
 
-  factory QuizQuestion.fromSupabaseRow(Map<String, dynamic> row) {
+  factory QuizQuestion.fromCacheRow(Map<String, dynamic> row) {
     return QuizQuestion(
       id: _QuizScreenState._text(row['id']),
       quizId: _QuizScreenState._text(row['quiz_id']),
@@ -2413,7 +2413,7 @@ class _QuizRunnerScreenState extends State<QuizRunnerScreen>
   }
 
   Future<void> _initializeAttempt() async {
-    final user = Supabase.instance.client.auth.currentUser;
+    final user = OfflineData.instance.client.auth.currentUser;
     if (user == null) {
       setState(() {
         _isInitializing = false;
@@ -2430,7 +2430,7 @@ class _QuizRunnerScreenState extends State<QuizRunnerScreen>
         throw StateError('This quiz has no published questions.');
       }
 
-      final existingRows = await Supabase.instance.client
+      final existingRows = await OfflineData.instance.client
           .from('quiz_attempts')
           .select(
             'id, quiz_id, user_id, attempt_number, status, started_at, '
@@ -2455,7 +2455,7 @@ class _QuizRunnerScreenState extends State<QuizRunnerScreen>
       } else {
         final ordered = List<QuizQuestion>.from(sourceQuestions);
         if (_randomizeQuestions) ordered.shuffle(_random);
-        final inserted = await Supabase.instance.client
+        final inserted = await OfflineData.instance.client
             .from('quiz_attempts')
             .insert(<String, dynamic>{
               'quiz_id': _quizId,
@@ -2526,7 +2526,7 @@ class _QuizRunnerScreenState extends State<QuizRunnerScreen>
   Future<void> _restoreAnswers() async {
     if (_attempt == null) return;
     try {
-      final raw = await Supabase.instance.client
+      final raw = await OfflineData.instance.client
           .from('quiz_attempt_answers')
           .select(
             'question_id, selected_option, question_position, option_order',
@@ -2620,7 +2620,7 @@ class _QuizRunnerScreenState extends State<QuizRunnerScreen>
     HapticFeedback.selectionClick();
     await _cacheAnswers();
     try {
-      await Supabase.instance.client
+      await OfflineData.instance.client
           .from('quiz_attempt_answers')
           .upsert(<String, dynamic>{
             'attempt_id': _attempt!.id,
@@ -2629,7 +2629,7 @@ class _QuizRunnerScreenState extends State<QuizRunnerScreen>
             'question_position': _index,
             'option_order': _orderFor(question),
           }, onConflict: 'attempt_id,question_id');
-      await Supabase.instance.client
+      await OfflineData.instance.client
           .from('quiz_attempts')
           .update(<String, dynamic>{'current_question': _index})
           .eq('id', _attempt!.id);
@@ -2670,7 +2670,7 @@ class _QuizRunnerScreenState extends State<QuizRunnerScreen>
       );
       if (position < 0) continue;
       try {
-        await Supabase.instance.client
+        await OfflineData.instance.client
             .from('quiz_attempt_answers')
             .upsert(<String, dynamic>{
               'attempt_id': _attempt!.id,
@@ -2696,7 +2696,7 @@ class _QuizRunnerScreenState extends State<QuizRunnerScreen>
     HapticFeedback.selectionClick();
     setState(() => _index = index);
     unawaited(
-      Supabase.instance.client
+      OfflineData.instance.client
           .from('quiz_attempts')
           .update(<String, dynamic>{'current_question': index})
           .eq('id', _attempt!.id),
@@ -2704,11 +2704,11 @@ class _QuizRunnerScreenState extends State<QuizRunnerScreen>
   }
 
   Future<void> _recordSecurityEvent(String eventType) async {
-    final user = Supabase.instance.client.auth.currentUser;
+    final user = OfflineData.instance.client.auth.currentUser;
     if (user == null || _attempt == null) return;
     setState(() => _focusViolations++);
     try {
-      await Supabase.instance.client.from('quiz_security_events').insert(
+      await OfflineData.instance.client.from('quiz_security_events').insert(
         <String, dynamic>{
           'attempt_id': _attempt!.id,
           'user_id': user.id,
@@ -2792,7 +2792,7 @@ class _QuizRunnerScreenState extends State<QuizRunnerScreen>
       return;
     }
     try {
-      final raw = await Supabase.instance.client.rpc(
+      final raw = await OfflineData.instance.client.rpc(
         'submit_quiz_attempt',
         params: <String, dynamic>{'p_attempt_id': _attempt!.id},
       );

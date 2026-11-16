@@ -1,7 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
+import 'offline_data_adapter.dart';
 
 class NotificationBadgeCounts {
   const NotificationBadgeCounts({
@@ -23,7 +23,7 @@ class NotificationBadgeService {
 
   static final NotificationBadgeService instance = NotificationBadgeService._();
   final _controller = StreamController<NotificationBadgeCounts>.broadcast();
-  final List<RealtimeChannel> _channels = [];
+  final List<OfflineRealtimeChannel> _channels = [];
   NotificationBadgeCounts _current = const NotificationBadgeCounts();
 
   Stream<NotificationBadgeCounts> get stream async* {
@@ -32,18 +32,18 @@ class NotificationBadgeService {
   }
 
   Future<void> start() async {
-    final client = Supabase.instance.client;
+    final client = OfflineData.instance.client;
     final userId = client.auth.currentUser?.id;
     if (userId == null) return;
     await stop();
     await refresh();
     final notificationsChannel = client.channel('notification-badges:$userId')
       ..onPostgresChanges(
-        event: PostgresChangeEvent.all,
+        event: OfflinePostgresChangeEvent.all,
         schema: 'public',
         table: 'student_notifications',
-        filter: PostgresChangeFilter(
-          type: PostgresChangeFilterType.eq,
+        filter: OfflinePostgresChangeFilter(
+          type: OfflinePostgresChangeFilterType.eq,
           column: 'user_id',
           value: userId,
         ),
@@ -52,11 +52,11 @@ class NotificationBadgeService {
       ..subscribe();
     final alertReadsChannel = client.channel('alert-read-badges:$userId')
       ..onPostgresChanges(
-        event: PostgresChangeEvent.all,
+        event: OfflinePostgresChangeEvent.all,
         schema: 'public',
         table: 'alert_reads',
-        filter: PostgresChangeFilter(
-          type: PostgresChangeFilterType.eq,
+        filter: OfflinePostgresChangeFilter(
+          type: OfflinePostgresChangeFilterType.eq,
           column: 'user_id',
           value: userId,
         ),
@@ -65,7 +65,7 @@ class NotificationBadgeService {
       ..subscribe();
     final alertsChannel = client.channel('campus-alert-badges:$userId')
       ..onPostgresChanges(
-        event: PostgresChangeEvent.all,
+        event: OfflinePostgresChangeEvent.all,
         schema: 'public',
         table: 'app_content',
         callback: (_) => unawaited(refresh()),
@@ -75,7 +75,7 @@ class NotificationBadgeService {
   }
 
   Future<void> refresh() async {
-    final client = Supabase.instance.client;
+    final client = OfflineData.instance.client;
     final userId = client.auth.currentUser?.id;
     if (userId == null) return;
     try {
@@ -128,10 +128,10 @@ class NotificationBadgeService {
   }
 
   Future<void> stop() async {
-    final channels = List<RealtimeChannel>.from(_channels);
+    final channels = List<OfflineRealtimeChannel>.from(_channels);
     _channels.clear();
     for (final channel in channels) {
-      await Supabase.instance.client.removeChannel(channel);
+      await OfflineData.instance.client.removeChannel(channel);
     }
   }
 }

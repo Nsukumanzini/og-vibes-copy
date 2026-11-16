@@ -7,7 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
+import '../services/offline_data_adapter.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../utils/theme_constants.dart';
@@ -25,7 +25,7 @@ class _CareerScreenState extends State<CareerScreen> {
   static const _resourcesCacheKey = 'career_resources_cache_v1';
 
   final _searchController = TextEditingController();
-  final _client = Supabase.instance.client;
+  final _client = OfflineData.instance.client;
 
   StreamSubscription<List<Map<String, dynamic>>>? _opportunitySubscription;
   StreamSubscription<List<Map<String, dynamic>>>? _applicationSubscription;

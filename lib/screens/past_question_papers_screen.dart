@@ -6,7 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:og_vibes_student/utils/theme_constants.dart';
 import 'package:og_vibes_student/widgets/vibe_scaffold.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
+import '../services/offline_data_adapter.dart';
 import '../services/academic_file_service.dart';
 import '../services/download_history_service.dart';
 import '../services/offline_cache_service.dart';
@@ -88,7 +88,7 @@ class _PastQuestionPapersScreenState extends State<PastQuestionPapersScreen> {
     }
 
     try {
-      var query = Supabase.instance.client
+      var query = OfflineData.instance.client
           .from('past_papers')
           .select(
             'id, module_id, modules(name,level), level, subject, year, exam_type, paper_type, title, url, storage_path, created_at',
@@ -147,7 +147,7 @@ class _PastQuestionPapersScreenState extends State<PastQuestionPapersScreen> {
   }
 
   void _listenForPapers() {
-    _papersSubscription = Supabase.instance.client
+    _papersSubscription = OfflineData.instance.client
         .from('past_papers')
         .stream(primaryKey: ['id'])
         .listen(
@@ -496,7 +496,7 @@ class _PastQuestionPapersScreenState extends State<PastQuestionPapersScreen> {
     try {
       final path = paper['storage_path'] ?? '';
       if (path.isNotEmpty) {
-        return Supabase.instance.client.storage
+        return OfflineData.instance.client.storage
             .from('academic-content')
             .createSignedUrl(path, 600);
       }

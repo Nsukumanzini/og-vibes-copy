@@ -1,7 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
+import 'offline_data_adapter.dart';
 
 /// Tracks authenticated OG Vibes users who currently have the app open.
 ///
@@ -16,13 +16,13 @@ class PresenceService {
     <String>{},
   );
 
-  RealtimeChannel? _channel;
+  OfflineRealtimeChannel? _channel;
   String? _trackedUserId;
 
   bool isOnline(String userId) => onlineUserIds.value.contains(userId);
 
   Future<void> start() async {
-    final client = Supabase.instance.client;
+    final client = OfflineData.instance.client;
     final userId = client.auth.currentUser?.id;
     if (userId == null) {
       await stop();
@@ -32,17 +32,17 @@ class PresenceService {
 
     await stop();
     _trackedUserId = userId;
-    late final RealtimeChannel channel;
+    late final OfflineRealtimeChannel channel;
     channel = client
         .channel(
           'og-vibes-online-users',
-          opts: RealtimeChannelConfig(key: userId, enabled: true),
+          opts: OfflineRealtimeChannelConfig(key: userId, enabled: true),
         )
         .onPresenceSync((_) => _sync(channel))
         .onPresenceJoin((_) => _sync(channel))
         .onPresenceLeave((_) => _sync(channel))
         .subscribe((status, error) async {
-          if (status == RealtimeSubscribeStatus.subscribed) {
+          if (status == OfflineRealtimeSubscribeStatus.subscribed) {
             await channel.track(<String, dynamic>{
               'user_id': userId,
               'online_at': DateTime.now().toUtc().toIso8601String(),
@@ -89,13 +89,13 @@ class PresenceService {
     if (channel == null) return;
     try {
       await channel.untrack();
-      await Supabase.instance.client.removeChannel(channel);
+      await OfflineData.instance.client.removeChannel(channel);
     } catch (error) {
       debugPrint('Presence disconnect failed: $error');
     }
   }
 
-  void _sync(RealtimeChannel channel) {
+  void _sync(OfflineRealtimeChannel channel) {
     final online = <String>{};
     for (final state in channel.presenceState()) {
       for (final presence in state.presences) {

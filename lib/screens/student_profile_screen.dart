@@ -2,7 +2,7 @@ import 'dart:async';
 
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
+import '../services/offline_data_adapter.dart';
 
 import '../utils/theme_constants.dart';
 import '../widgets/post_card.dart';
@@ -17,7 +17,7 @@ class StudentProfileNavigator {
 
   static Future<void> open(BuildContext context, String? userId) {
     if (userId == null || userId.isEmpty) return Future.value();
-    final ownId = Supabase.instance.client.auth.currentUser?.id;
+    final ownId = OfflineData.instance.client.auth.currentUser?.id;
     return Navigator.of(context).push(
       MaterialPageRoute<void>(
         builder: (_) => ownId == userId
@@ -47,7 +47,7 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
   }
 
   Future<_StudentProfileData> _load() async {
-    final db = Supabase.instance.client;
+    final db = OfflineData.instance.client;
     List<dynamic> responses;
     try {
       responses = await Future.wait<dynamic>([

@@ -11,7 +11,7 @@ import 'package:qr_flutter/qr_flutter.dart';
 import 'package:record/record.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
+import '../services/offline_data_adapter.dart';
 
 import '../services/diagnostics_service.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -51,7 +51,7 @@ class _GroupChatsScreenState extends State<GroupChatsScreen>
   final Map<String, List<PollVote>> _pollVotes = <String, List<PollVote>>{};
 
   StreamSubscription<List<ConnectivityResult>>? _connectivitySubscription;
-  RealtimeChannel? _messageChannel;
+  OfflineRealtimeChannel? _messageChannel;
   StreamSubscription<Uint8List>? _voiceStream;
   StreamSubscription<Amplitude>? _amplitudes;
   Timer? _recordTimer;
@@ -72,8 +72,8 @@ class _GroupChatsScreenState extends State<GroupChatsScreen>
   String? _uploadStatus;
   _PendingGroupAttachment? _failedAttachment;
 
-  SupabaseClient get _supabase => Supabase.instance.client;
-  User? get _user => _supabase.auth.currentUser;
+  OfflineDataClient get _offlineData => OfflineData.instance.client;
+  User? get _user => _offlineData.auth.currentUser;
   String get _offlineQueueKey => 'group_chat_outbox_${_user?.id ?? 'guest'}';
   static const int _messagePageSize = 30;
 
@@ -147,11 +147,11 @@ class _GroupChatsScreenState extends State<GroupChatsScreen>
     if (showLoader) setState(() => _loading = true);
     try {
       final responses = await Future.wait<dynamic>(<Future<dynamic>>[
-        _supabase
+        _offlineData
             .from('group_members')
             .select('group_id, user_id, role, joined_at, last_read_at, muted')
             .eq('user_id', user.id),
-        _supabase
+        _offlineData
             .from('group_chats')
             .select(
               'id, name, description, member_count, created_by, created_at, '
@@ -222,7 +222,7 @@ class _GroupChatsScreenState extends State<GroupChatsScreen>
         .toList();
     if (ids.isEmpty) return;
     final rows = List<Map<String, dynamic>>.from(
-      await _supabase.from('modules').select('id,name,code').inFilter('id', ids)
+      await _offlineData.from('modules').select('id,name,code').inFilter('id', ids)
           as List<dynamic>,
     );
     final byId = {for (final row in rows) row['id'].toString(): row};
@@ -242,7 +242,7 @@ class _GroupChatsScreenState extends State<GroupChatsScreen>
     final joinedIds = memberships.keys.toList();
     if (joinedIds.isEmpty) return;
     final rows = List<Map<String, dynamic>>.from(
-      await _supabase
+      await _offlineData
               .from('group_messages')
               .select(
                 'id, group_id, sender_id, text, message_type, attachment_name, '
@@ -371,7 +371,7 @@ class _GroupChatsScreenState extends State<GroupChatsScreen>
     final user = _user;
     if (user == null || group.visibility != 'public') return;
     try {
-      await _supabase.from('group_members').insert(<String, dynamic>{
+      await _offlineData.from('group_members').insert(<String, dynamic>{
         'group_id': group.id,
         'user_id': user.id,
         'role': 'student',
@@ -453,7 +453,7 @@ class _GroupChatsScreenState extends State<GroupChatsScreen>
     if (!_isMember(group)) return;
     if (reset && _messages.isEmpty) setState(() => _loadingMessages = true);
     try {
-      var messageQuery = _supabase
+      var messageQuery = _offlineData
           .from('group_messages')
           .select(
             'id, group_id, sender_id, text, message_type, attachment_url, '
@@ -472,7 +472,7 @@ class _GroupChatsScreenState extends State<GroupChatsScreen>
         messageQuery
             .order('created_at', ascending: false)
             .limit(_messagePageSize),
-        _supabase
+        _offlineData
             .from('group_members')
             .select('group_id, user_id, role, joined_at, last_read_at, muted')
             .eq('group_id', group.id),
@@ -569,7 +569,7 @@ class _GroupChatsScreenState extends State<GroupChatsScreen>
     final missing = ids.where((id) => !_profiles.containsKey(id)).toList();
     if (missing.isEmpty) return;
     final rows = List<Map<String, dynamic>>.from(
-      await _supabase
+      await _offlineData
               .from('profiles')
               .select('id, nickname, photo_url, role')
               .inFilter('id', missing)
@@ -587,7 +587,7 @@ class _GroupChatsScreenState extends State<GroupChatsScreen>
     if (group == null || currentUser == null || !_isMember(group)) return;
     try {
       final rows = List<Map<String, dynamic>>.from(
-        await _supabase
+        await _offlineData
                 .from('group_members')
                 .select('user_id')
                 .eq('group_id', group.id)
@@ -739,11 +739,11 @@ class _GroupChatsScreenState extends State<GroupChatsScreen>
     final ids = messages.map((message) => message.id).toList();
     if (ids.isEmpty) return;
     final responses = await Future.wait<dynamic>(<Future<dynamic>>[
-      _supabase
+      _offlineData
           .from('group_message_reactions')
           .select('message_id, user_id, emoji, created_at')
           .inFilter('message_id', ids),
-      _supabase
+      _offlineData
           .from('group_poll_votes')
           .select('message_id, user_id, option_index, created_at')
           .inFilter('message_id', ids),
@@ -768,14 +768,14 @@ class _GroupChatsScreenState extends State<GroupChatsScreen>
 
   void _subscribeToMessages(String groupId) {
     _messageChannel?.unsubscribe();
-    _messageChannel = _supabase
+    _messageChannel = _offlineData
         .channel('group-chat-$groupId')
         .onPostgresChanges(
-          event: PostgresChangeEvent.all,
+          event: OfflinePostgresChangeEvent.all,
           schema: 'public',
           table: 'group_messages',
-          filter: PostgresChangeFilter(
-            type: PostgresChangeFilterType.eq,
+          filter: OfflinePostgresChangeFilter(
+            type: OfflinePostgresChangeFilterType.eq,
             column: 'group_id',
             value: groupId,
           ),
@@ -805,7 +805,7 @@ class _GroupChatsScreenState extends State<GroupChatsScreen>
   Future<void> _markRead(String groupId) async {
     final user = _user;
     if (user == null) return;
-    await _supabase
+    await _offlineData
         .from('group_members')
         .update(<String, dynamic>{
           'last_read_at': DateTime.now().toUtc().toIso8601String(),
@@ -855,7 +855,7 @@ class _GroupChatsScreenState extends State<GroupChatsScreen>
       'metadata': metadata ?? <String, dynamic>{},
     };
     try {
-      await _supabase.from('group_messages').insert(payload);
+      await _offlineData.from('group_messages').insert(payload);
       _replyingTo = null;
       await _loadConversation(group);
       HapticFeedback.lightImpact();
@@ -901,7 +901,7 @@ class _GroupChatsScreenState extends State<GroupChatsScreen>
         final payload = Map<String, dynamic>.from(
           jsonDecode(raw) as Map<dynamic, dynamic>,
         )..remove('queued_at');
-        await _supabase.from('group_messages').insert(payload);
+        await _offlineData.from('group_messages').insert(payload);
       } catch (_) {
         remaining.add(raw);
       }
@@ -978,12 +978,12 @@ class _GroupChatsScreenState extends State<GroupChatsScreen>
       final path =
           '${group.id}/${user.id}/${DateTime.now().microsecondsSinceEpoch}.${attachment.extension}';
       uploadedPath = path;
-      await _supabase.storage
+      await _offlineData.storage
           .from('group-media')
           .uploadBinary(
             path,
             attachment.bytes,
-            fileOptions: FileOptions(
+            fileOptions: OfflineFileOptions(
               contentType: attachment.mime,
               upsert: false,
             ),
@@ -1006,7 +1006,7 @@ class _GroupChatsScreenState extends State<GroupChatsScreen>
       );
       if (uploadedPath != null) {
         try {
-          await _supabase.storage.from('group-media').remove(<String>[
+          await _offlineData.storage.from('group-media').remove(<String>[
             uploadedPath,
           ]);
         } catch (_) {}
@@ -1096,12 +1096,12 @@ class _GroupChatsScreenState extends State<GroupChatsScreen>
         '${group.id}/${user.id}/${DateTime.now().microsecondsSinceEpoch}.wav';
     setState(() => _sending = true);
     try {
-      await _supabase.storage
+      await _offlineData.storage
           .from('group-media')
           .uploadBinary(
             path,
             bytes,
-            fileOptions: const FileOptions(contentType: 'audio/wav'),
+            fileOptions: const OfflineFileOptions(contentType: 'audio/wav'),
           );
       await _sendMessage(
         text: '',
@@ -1167,7 +1167,7 @@ class _GroupChatsScreenState extends State<GroupChatsScreen>
 
   Future<String?> _signedMediaUrl(String path) async {
     try {
-      return await _supabase.storage
+      return await _offlineData.storage
           .from('group-media')
           .createSignedUrl(path, 3600);
     } catch (_) {
@@ -1256,7 +1256,7 @@ class _GroupChatsScreenState extends State<GroupChatsScreen>
     final user = _user;
     if (user == null) return;
     try {
-      await _supabase.from('group_poll_votes').upsert(<String, dynamic>{
+      await _offlineData.from('group_poll_votes').upsert(<String, dynamic>{
         'message_id': message.id,
         'user_id': user.id,
         'option_index': optionIndex,
@@ -1276,14 +1276,14 @@ class _GroupChatsScreenState extends State<GroupChatsScreen>
     );
     try {
       if (existing) {
-        await _supabase
+        await _offlineData
             .from('group_message_reactions')
             .delete()
             .eq('message_id', message.id)
             .eq('user_id', user.id)
             .eq('emoji', emoji);
       } else {
-        await _supabase.from('group_message_reactions').insert(
+        await _offlineData.from('group_message_reactions').insert(
           <String, dynamic>{
             'message_id': message.id,
             'user_id': user.id,
@@ -1505,7 +1505,7 @@ class _GroupChatsScreenState extends State<GroupChatsScreen>
     if (user == null) return;
     try {
       final row = Map<String, dynamic>.from(
-        await _supabase
+        await _offlineData
             .from('group_chats')
             .insert(<String, dynamic>{
               'name': name.text.trim(),
@@ -1536,7 +1536,7 @@ class _GroupChatsScreenState extends State<GroupChatsScreen>
         );
       }
       if (assetUpdates.isNotEmpty) {
-        await _supabase
+        await _offlineData
             .from('group_chats')
             .update(assetUpdates)
             .eq('id', groupId);
@@ -1564,12 +1564,12 @@ class _GroupChatsScreenState extends State<GroupChatsScreen>
     final user = _user!;
     final extension = file.extension?.toLowerCase() ?? 'jpg';
     final path = '$groupId/${user.id}/$label.$extension';
-    await _supabase.storage
+    await _offlineData.storage
         .from('group-media')
         .uploadBinary(
           path,
           file.bytes!,
-          fileOptions: FileOptions(
+          fileOptions: OfflineFileOptions(
             upsert: true,
             contentType: _mimeType(extension),
           ),
@@ -1625,7 +1625,7 @@ class _GroupChatsScreenState extends State<GroupChatsScreen>
     required bool showWelcome,
   }) async {
     try {
-      final groupId = await _supabase.rpc(
+      final groupId = await _offlineData.rpc(
         'accept_group_invite',
         params: <String, dynamic>{'p_token': token},
       );
@@ -1654,7 +1654,7 @@ class _GroupChatsScreenState extends State<GroupChatsScreen>
     if (!_isManager(group) || group.visibility != 'private') return;
     try {
       final rows = List<Map<String, dynamic>>.from(
-        await _supabase.rpc(
+        await _offlineData.rpc(
               'create_group_invite',
               params: <String, dynamic>{
                 'p_group_id': group.id,
@@ -1741,7 +1741,7 @@ class _GroupChatsScreenState extends State<GroupChatsScreen>
     List<GroupMembership> members = <GroupMembership>[];
     try {
       final rows = List<Map<String, dynamic>>.from(
-        await _supabase
+        await _offlineData
                 .from('group_members')
                 .select(
                   'group_id, user_id, role, joined_at, last_read_at, muted',
@@ -1972,7 +1972,7 @@ class _GroupChatsScreenState extends State<GroupChatsScreen>
     if (membership == null || user == null) return;
     final muted = !membership.muted;
     try {
-      await _supabase
+      await _offlineData
           .from('group_members')
           .update(<String, dynamic>{'muted': muted})
           .eq('group_id', group.id)
@@ -1990,7 +1990,7 @@ class _GroupChatsScreenState extends State<GroupChatsScreen>
     String role,
   ) async {
     try {
-      await _supabase
+      await _offlineData
           .from('group_members')
           .update(<String, dynamic>{'role': role})
           .eq('group_id', group.id)
@@ -2005,7 +2005,7 @@ class _GroupChatsScreenState extends State<GroupChatsScreen>
     final reason = await _askForReason('Report ${group.name}');
     if (reason == null || _user == null) return;
     try {
-      await _supabase.from('group_reports').insert(<String, dynamic>{
+      await _offlineData.from('group_reports').insert(<String, dynamic>{
         'group_id': group.id,
         'reporter_id': _user!.id,
         'reason': reason,
@@ -2106,7 +2106,7 @@ class _GroupChatsScreenState extends State<GroupChatsScreen>
     final user = _user;
     if (group == null || user == null) return;
     try {
-      await _supabase.from('group_user_blocks').upsert(<String, dynamic>{
+      await _offlineData.from('group_user_blocks').upsert(<String, dynamic>{
         'group_id': group.id,
         'blocker_id': user.id,
         'blocked_user_id': memberId,
@@ -2125,7 +2125,7 @@ class _GroupChatsScreenState extends State<GroupChatsScreen>
     final reason = await _askForReason('Report message');
     if (reason == null) return;
     try {
-      await _supabase.from('group_reports').insert(<String, dynamic>{
+      await _offlineData.from('group_reports').insert(<String, dynamic>{
         'group_id': group.id,
         'message_id': message.id,
         'reported_user_id': message.senderId,
@@ -2175,7 +2175,7 @@ class _GroupChatsScreenState extends State<GroupChatsScreen>
 
   Future<void> _deleteMessage(GroupMessage message) async {
     try {
-      await _supabase
+      await _offlineData
           .from('group_messages')
           .update(<String, dynamic>{
             'is_deleted': true,
@@ -2947,7 +2947,7 @@ class _GroupChatsScreenState extends State<GroupChatsScreen>
       return 'You do not have permission for this action.';
     }
     return text
-        .replaceFirst('PostgrestException(message: ', '')
+        .replaceFirst('OfflinePostgrestException(message: ', '')
         .split(',')
         .first;
   }

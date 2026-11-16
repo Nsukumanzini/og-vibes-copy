@@ -6,7 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:shimmer/shimmer.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
+import '../services/offline_data_adapter.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import 'package:og_vibes_student/utils/theme_constants.dart';
@@ -31,7 +31,7 @@ class _AccreditedAccommodationScreenState
 
   final TextEditingController _searchController = TextEditingController();
   late Future<List<_AccommodationProperty>> _propertiesFuture;
-  RealtimeChannel? _channel;
+  OfflineRealtimeChannel? _channel;
   String _selectedTab = _tabs.first;
   String _searchQuery = '';
   String _roomFilter = 'All rooms';
@@ -42,9 +42,9 @@ class _AccreditedAccommodationScreenState
   void initState() {
     super.initState();
     _propertiesFuture = _loadProperties();
-    _channel = Supabase.instance.client.channel('student-accommodation')
+    _channel = OfflineData.instance.client.channel('student-accommodation')
       ..onPostgresChanges(
-        event: PostgresChangeEvent.all,
+        event: OfflinePostgresChangeEvent.all,
         schema: 'public',
         table: 'accommodations',
         callback: (_) {
@@ -60,7 +60,7 @@ class _AccreditedAccommodationScreenState
   void dispose() {
     _searchController.dispose();
     if (_channel != null) {
-      unawaited(Supabase.instance.client.removeChannel(_channel!));
+      unawaited(OfflineData.instance.client.removeChannel(_channel!));
     }
     super.dispose();
   }
@@ -69,7 +69,7 @@ class _AccreditedAccommodationScreenState
     List<Map<String, dynamic>> rows;
     try {
       rows = List<Map<String, dynamic>>.from(
-        await Supabase.instance.client
+        await OfflineData.instance.client
                 .from('accommodations')
                 .select()
                 .eq('is_active', true)
@@ -444,17 +444,17 @@ class _AccreditedAccommodationScreenState
       builder: (_) => _AccommodationReportDialog(propertyName: property.name),
     );
     if (draft == null) return;
-    final user = Supabase.instance.client.auth.currentUser;
+    final user = OfflineData.instance.client.auth.currentUser;
     if (user == null) return _message('Please sign in to report this listing.');
     try {
-      await Supabase.instance.client.from('accommodation_reports').insert({
+      await OfflineData.instance.client.from('accommodation_reports').insert({
         'accommodation_id': property.id,
         'reporter_id': user.id,
         'reason': draft.reason,
         'details': draft.details,
       });
       _message('Thanks. The administrator will review this listing.');
-    } on PostgrestException catch (error) {
+    } on OfflinePostgrestException catch (error) {
       _message(
         error.code == '23505'
             ? 'You already have an open report for this listing.'

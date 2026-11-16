@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:og_vibes_student/screens/incoming_call_screen.dart';
 import 'package:og_vibes_student/screens/settings_screen.dart';
 import 'package:og_vibes_student/screens/donation_screen.dart';
@@ -13,12 +12,7 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   setUpAll(() async {
     SharedPreferences.setMockInitialValues({});
-    await Supabase.initialize(
-      url: 'https://example.supabase.co',
-      anonKey: 'test-key',
-    );
   });
-  tearDownAll(() => Supabase.instance.dispose());
 
   Future<void> show(WidgetTester tester, Widget child) async {
     tester.view.physicalSize = const Size(320, 480);

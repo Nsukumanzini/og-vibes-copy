@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:shimmer/shimmer.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
+import '../services/offline_data_adapter.dart';
 
 import '../screens/student_profile_screen.dart';
 
@@ -34,10 +34,10 @@ class _CommentSheetState extends State<CommentSheet> {
   }
 
   Future<void> _loadCurrentUserProfile() async {
-    final user = Supabase.instance.client.auth.currentUser;
+    final user = OfflineData.instance.client.auth.currentUser;
     if (user == null) return;
     try {
-      final data = await Supabase.instance.client
+      final data = await OfflineData.instance.client
           .from('profiles')
           .select('nickname, photo_url')
           .eq('id', user.id)
@@ -58,7 +58,7 @@ class _CommentSheetState extends State<CommentSheet> {
     final text = _commentController.text.trim();
     if (text.isEmpty) return;
 
-    final user = Supabase.instance.client.auth.currentUser;
+    final user = OfflineData.instance.client.auth.currentUser;
     if (user == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Please sign in to comment.')),
@@ -69,14 +69,14 @@ class _CommentSheetState extends State<CommentSheet> {
     setState(() => _isSending = true);
 
     try {
-      final response = await Supabase.instance.client.from('comments').insert({
+      final response = await OfflineData.instance.client.from('comments').insert({
         'post_id': widget.postId,
         'author_id': user.id,
         'text': text,
         'parent_id': _replyingToId,
       });
 
-      // Newer Supabase clients often return raw data instead of a
+      // Some response types return raw data instead of a
       // PostgrestResponse. Attempt to read `.error` dynamically,
       // otherwise assume success if no exception was thrown.
       try {
@@ -104,7 +104,7 @@ class _CommentSheetState extends State<CommentSheet> {
   }
 
   Future<void> _likeComment(Map<String, dynamic> comment) async {
-    final user = Supabase.instance.client.auth.currentUser;
+    final user = OfflineData.instance.client.auth.currentUser;
     if (user == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Please sign in to like comments.')),
@@ -116,7 +116,7 @@ class _CommentSheetState extends State<CommentSheet> {
     if (commentId == null) return;
 
     try {
-      final response = await Supabase.instance.client
+      final response = await OfflineData.instance.client
           .from('comment_likes')
           .insert({'comment_id': commentId, 'user_id': user.id});
       try {
@@ -136,7 +136,7 @@ class _CommentSheetState extends State<CommentSheet> {
     if (reason == null || reason.trim().isEmpty) return;
 
     try {
-      final response = await Supabase.instance.client.from('reports').insert({
+      final response = await OfflineData.instance.client.from('reports').insert({
         'post_id': widget.postId,
         'comment_id': comment['id']?.toString(),
         'reason': reason.trim(),
@@ -271,7 +271,7 @@ class _CommentSheetState extends State<CommentSheet> {
 
   Future<List<dynamic>> _fetchComments() async {
     try {
-      final res = await Supabase.instance.client
+      final res = await OfflineData.instance.client
           .from('comments')
           .select('*, profiles!comments_author_id_fkey(name, surname, nickname, photo_url)')
           .eq('post_id', widget.postId)

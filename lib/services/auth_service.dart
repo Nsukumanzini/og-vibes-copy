@@ -1,4 +1,4 @@
-import 'package:supabase_flutter/supabase_flutter.dart';
+import 'offline_data_adapter.dart';
 
 import 'auth_persistence_service.dart';
 import 'push_notification_service.dart';
@@ -10,9 +10,9 @@ class AuthService {
     await AuthPersistenceService.clear();
     try {
       await PushNotificationService.unregisterCurrentDevice();
-      await Supabase.instance.client.auth.signOut();
+      await OfflineData.instance.client.auth.signOut();
     } on AssertionError catch (_) {
-      // If Supabase isn't initialized, treat signOut as a no-op.
+      // If No local session is active, treat signOut as a no-op.
       return;
     }
   }

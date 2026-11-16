@@ -2,7 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:permission_handler/permission_handler.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
+import '../services/offline_data_adapter.dart';
 
 import '../services/diagnostics_service.dart';
 import '../services/push_notification_service.dart';
@@ -52,7 +52,7 @@ class NotificationEnrollmentGate extends StatefulWidget {
 
 class _NotificationEnrollmentGateState
     extends State<NotificationEnrollmentGate> {
-  StreamSubscription<AuthState>? _authSubscription;
+  StreamSubscription<OfflineAuthState>? _authSubscription;
   final Set<_AppPermission> _answeredThisSession = {};
   List<_AppPermission> _pending = const [];
   bool _busy = false;
@@ -63,7 +63,7 @@ class _NotificationEnrollmentGateState
   void initState() {
     super.initState();
     if (!widget.enabled) return;
-    _authSubscription = Supabase.instance.client.auth.onAuthStateChange.listen((
+    _authSubscription = OfflineData.instance.client.auth.onAuthStateChange.listen((
       _,
     ) {
       _answeredThisSession.clear();
@@ -90,7 +90,7 @@ class _NotificationEnrollmentGateState
   }
 
   Future<void> _refresh() async {
-    if (!widget.enabled || Supabase.instance.client.auth.currentUser == null) {
+    if (!widget.enabled || OfflineData.instance.client.auth.currentUser == null) {
       if (mounted) setState(() => _pending = const []);
       return;
     }

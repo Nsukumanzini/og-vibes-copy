@@ -3,7 +3,7 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
+import '../services/offline_data_adapter.dart';
 
 import '../utils/theme_constants.dart';
 
@@ -24,7 +24,7 @@ class AppNoticeGate extends StatefulWidget {
 class _AppNoticeGateState extends State<AppNoticeGate> {
   static const _cacheKey = 'og_vibes_last_app_notice';
   static const _dismissedKey = 'og_vibes_dismissed_app_notice';
-  RealtimeChannel? _channel;
+  OfflineRealtimeChannel? _channel;
   Timer? _expiryTimer;
   Timer? _pollTimer;
   Map<String, dynamic>? _notice;
@@ -56,10 +56,10 @@ class _AppNoticeGateState extends State<AppNoticeGate> {
       const Duration(seconds: 20),
       (_) => unawaited(_refresh()),
     );
-    _channel = Supabase.instance.client
+    _channel = OfflineData.instance.client
         .channel('app-takeover-notices')
         .onPostgresChanges(
-          event: PostgresChangeEvent.all,
+          event: OfflinePostgresChangeEvent.all,
           schema: 'public',
           table: 'app_takeover_notices',
           callback: (_) => unawaited(_refresh()),
@@ -71,7 +71,7 @@ class _AppNoticeGateState extends State<AppNoticeGate> {
   void dispose() {
     final channel = _channel;
     if (channel != null && widget.enabled) {
-      unawaited(Supabase.instance.client.removeChannel(channel));
+      unawaited(OfflineData.instance.client.removeChannel(channel));
     }
     _expiryTimer?.cancel();
     _pollTimer?.cancel();
@@ -92,7 +92,7 @@ class _AppNoticeGateState extends State<AppNoticeGate> {
 
   Future<void> _refresh() async {
     try {
-      final rows = await Supabase.instance.client
+      final rows = await OfflineData.instance.client
           .from('app_takeover_notices')
           .select()
           .order('is_blocking', ascending: false)
@@ -101,7 +101,7 @@ class _AppNoticeGateState extends State<AppNoticeGate> {
       final currentRows = List<Map<String, dynamic>>.from(rows)
           .where(_isCurrent)
           .toList();
-      final userId = Supabase.instance.client.auth.currentUser?.id;
+      final userId = OfflineData.instance.client.auth.currentUser?.id;
       currentRows.sort((a, b) {
         final aTargeted = a['target_user_id'] == userId ? 1 : 0;
         final bTargeted = b['target_user_id'] == userId ? 1 : 0;
@@ -123,13 +123,13 @@ class _AppNoticeGateState extends State<AppNoticeGate> {
   }
 
   Future<void> _refreshAdminAccess() async {
-    final userId = Supabase.instance.client.auth.currentUser?.id;
+    final userId = OfflineData.instance.client.auth.currentUser?.id;
     if (_accessUserId == userId) return;
     _accessUserId = userId;
     _isAdmin = false;
     if (userId == null) return;
     try {
-      final profile = await Supabase.instance.client
+      final profile = await OfflineData.instance.client
           .from('profiles')
           .select('role')
           .eq('id', userId)

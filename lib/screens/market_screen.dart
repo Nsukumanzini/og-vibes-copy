@@ -8,7 +8,7 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
+import '../services/offline_data_adapter.dart';
 
 import '../utils/theme_constants.dart';
 import '../services/feature_flag_service.dart';
@@ -36,8 +36,8 @@ class _MarketScreenState extends State<MarketScreen> {
 
   final List<_MarketProduct> _products = <_MarketProduct>[];
   final List<_MarketOrder> _orders = <_MarketOrder>[];
-  RealtimeChannel? _productChannel;
-  RealtimeChannel? _orderChannel;
+  OfflineRealtimeChannel? _productChannel;
+  OfflineRealtimeChannel? _orderChannel;
   Timer? _refreshDebounce;
   int _tabIndex = 0;
   _MarketSort _sort = _MarketSort.relevance;
@@ -46,8 +46,8 @@ class _MarketScreenState extends State<MarketScreen> {
   bool _usingCachedData = false;
   String? _error;
 
-  SupabaseClient get _supabase => Supabase.instance.client;
-  User? get _user => _supabase.auth.currentUser;
+  OfflineDataClient get _offlineData => OfflineData.instance.client;
+  User? get _user => _offlineData.auth.currentUser;
 
   @override
   void initState() {
@@ -58,7 +58,7 @@ class _MarketScreenState extends State<MarketScreen> {
   Future<void> _start() async {
     final availability = await FeatureFlagService.availability(
       'marketplace',
-      client: _supabase,
+      client: _offlineData,
       forceRefresh: true,
     );
     if (!availability.enabled) {
@@ -94,7 +94,7 @@ class _MarketScreenState extends State<MarketScreen> {
           .map(
             (row) => _MarketProduct.fromRow(
               Map<String, dynamic>.from(row),
-              _supabase,
+              _offlineData,
             ),
           )
           .toList();
@@ -146,7 +146,7 @@ class _MarketScreenState extends State<MarketScreen> {
 
     try {
       final responses = await Future.wait<dynamic>(<Future<dynamic>>[
-        _supabase
+        _offlineData
             .from('products')
             .select(
               'id, seller_id, title, price, category, description, '
@@ -155,7 +155,7 @@ class _MarketScreenState extends State<MarketScreen> {
               'profiles!products_seller_id_fkey(nickname, photo_url, is_verified)',
             )
             .order('created_at', ascending: false),
-        _supabase
+        _offlineData
             .from('marketplace_orders')
             .select(
               'id, product_id, buyer_id, seller_id, kind, amount, status, '
@@ -173,7 +173,7 @@ class _MarketScreenState extends State<MarketScreen> {
         responses[1] as List<dynamic>,
       );
       final products = productRows
-          .map((row) => _MarketProduct.fromRow(row, _supabase))
+          .map((row) => _MarketProduct.fromRow(row, _offlineData))
           .toList();
       final orders = orderRows.map(_MarketOrder.fromRow).toList();
       unawaited(_cacheAvailableProducts(productRows));
@@ -202,19 +202,19 @@ class _MarketScreenState extends State<MarketScreen> {
   }
 
   void _subscribeToChanges() {
-    _productChannel = _supabase
+    _productChannel = _offlineData
         .channel('marketplace-products-${_user?.id ?? 'guest'}')
         .onPostgresChanges(
-          event: PostgresChangeEvent.all,
+          event: OfflinePostgresChangeEvent.all,
           schema: 'public',
           table: 'products',
           callback: (_) => _scheduleRefresh(),
         )
         .subscribe();
-    _orderChannel = _supabase
+    _orderChannel = _offlineData
         .channel('marketplace-orders-${_user?.id ?? 'guest'}')
         .onPostgresChanges(
-          event: PostgresChangeEvent.all,
+          event: OfflinePostgresChangeEvent.all,
           schema: 'public',
           table: 'marketplace_orders',
           callback: (_) => _scheduleRefresh(),
@@ -266,7 +266,7 @@ class _MarketScreenState extends State<MarketScreen> {
   Future<bool> _requireMarketplaceEnabled() async {
     final availability = await FeatureFlagService.availability(
       'marketplace',
-      client: _supabase,
+      client: _offlineData,
       forceRefresh: true,
     );
     if (availability.enabled) return true;
@@ -332,7 +332,7 @@ class _MarketScreenState extends State<MarketScreen> {
     );
     if (result == null) return;
     try {
-      await _supabase.from('marketplace_orders').insert(<String, dynamic>{
+      await _offlineData.from('marketplace_orders').insert(<String, dynamic>{
         'product_id': product.id,
         'buyer_id': user.id,
         'seller_id': product.sellerId,
@@ -367,7 +367,7 @@ class _MarketScreenState extends State<MarketScreen> {
     );
     if (result == null || _user == null) return;
     try {
-      await _supabase.from('marketplace_reports').insert(<String, dynamic>{
+      await _offlineData.from('marketplace_reports').insert(<String, dynamic>{
         'product_id': product.id,
         'reporter_id': _user!.id,
         'reason': result['reason'],
@@ -388,7 +388,7 @@ class _MarketScreenState extends State<MarketScreen> {
   Future<void> _updateOrderStatus(_MarketOrder order, String status) async {
     if (!await _requireMarketplaceEnabled()) return;
     try {
-      await _supabase
+      await _offlineData
           .from('marketplace_orders')
           .update(<String, dynamic>{'status': status})
           .eq('id', order.id);
@@ -408,7 +408,7 @@ class _MarketScreenState extends State<MarketScreen> {
     if (!await _requireMarketplaceEnabled()) return;
     final nextStatus = product.status == 'archived' ? 'available' : 'archived';
     try {
-      await _supabase
+      await _offlineData
           .from('products')
           .update(<String, dynamic>{'status': nextStatus})
           .eq('id', product.id);
@@ -930,7 +930,7 @@ class _ListingWizardState extends State<_ListingWizard> {
   bool _negotiable = true;
   bool _saving = false;
 
-  SupabaseClient get _supabase => Supabase.instance.client;
+  OfflineDataClient get _offlineData => OfflineData.instance.client;
 
   @override
   void dispose() {
@@ -997,11 +997,11 @@ class _ListingWizardState extends State<_ListingWizard> {
   }
 
   Future<void> _publish() async {
-    final user = _supabase.auth.currentUser;
+    final user = _offlineData.auth.currentUser;
     if (user == null || _saving) return;
     final availability = await FeatureFlagService.availability(
       'marketplace',
-      client: _supabase,
+      client: _offlineData,
       forceRefresh: true,
     );
     if (!availability.enabled) {
@@ -1015,12 +1015,12 @@ class _ListingWizardState extends State<_ListingWizard> {
         final photo = _photos[index];
         final path =
             '${user.id}/${DateTime.now().microsecondsSinceEpoch}_$index.jpg';
-        await _supabase.storage
+        await _offlineData.storage
             .from('products')
             .uploadBinary(
               path,
               photo.bytes,
-              fileOptions: const FileOptions(
+              fileOptions: const OfflineFileOptions(
                 contentType: 'image/jpeg',
                 upsert: false,
               ),
@@ -1028,9 +1028,9 @@ class _ListingWizardState extends State<_ListingWizard> {
         uploadedPaths.add(path);
       }
       final urls = uploadedPaths
-          .map((path) => _supabase.storage.from('products').getPublicUrl(path))
+          .map((path) => _offlineData.storage.from('products').getPublicUrl(path))
           .toList();
-      await _supabase.from('products').insert(<String, dynamic>{
+      await _offlineData.from('products').insert(<String, dynamic>{
         'seller_id': user.id,
         'title': _titleController.text.trim(),
         'price': double.parse(_priceController.text.trim()),
@@ -1055,7 +1055,7 @@ class _ListingWizardState extends State<_ListingWizard> {
       );
       if (uploadedPaths.isNotEmpty) {
         try {
-          await _supabase.storage.from('products').remove(uploadedPaths);
+          await _offlineData.storage.from('products').remove(uploadedPaths);
         } catch (_) {
           // A failed cleanup must not hide the original publishing error.
         }
@@ -2422,7 +2422,7 @@ class _MarketProduct {
 
   factory _MarketProduct.fromRow(
     Map<String, dynamic> row,
-    SupabaseClient client,
+    OfflineDataClient client,
   ) {
     final profile = _asMap(row['profiles']);
     final nickname = (profile['nickname'] ?? '').toString().trim();

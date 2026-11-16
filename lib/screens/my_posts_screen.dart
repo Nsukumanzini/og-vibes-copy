@@ -1,7 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
+import '../services/offline_data_adapter.dart';
 
 import '../utils/theme_constants.dart';
 import '../widgets/post_card.dart';
@@ -16,33 +16,33 @@ class MyPostsScreen extends StatefulWidget {
 
 class _MyPostsScreenState extends State<MyPostsScreen> {
   final _posts = <Map<String, dynamic>>[];
-  RealtimeChannel? _channel;
+  OfflineRealtimeChannel? _channel;
   bool _loading = true;
 
   @override
   void initState() {
     super.initState();
     unawaited(_load());
-    final id = Supabase.instance.client.auth.currentUser?.id;
+    final id = OfflineData.instance.client.auth.currentUser?.id;
     if (id != null) {
-      _channel = Supabase.instance.client.channel('my-posts:$id')
-        ..onPostgresChanges(event: PostgresChangeEvent.all, schema: 'public', table: 'posts', filter: PostgresChangeFilter(type: PostgresChangeFilterType.eq, column: 'user_id', value: id), callback: (_) => unawaited(_load(showLoader: false)))
+      _channel = OfflineData.instance.client.channel('my-posts:$id')
+        ..onPostgresChanges(event: OfflinePostgresChangeEvent.all, schema: 'public', table: 'posts', filter: OfflinePostgresChangeFilter(type: OfflinePostgresChangeFilterType.eq, column: 'user_id', value: id), callback: (_) => unawaited(_load(showLoader: false)))
         ..subscribe();
     }
   }
 
   Future<void> _load({bool showLoader = true}) async {
-    final id = Supabase.instance.client.auth.currentUser?.id;
+    final id = OfflineData.instance.client.auth.currentUser?.id;
     if (id == null) { if (mounted) setState(() => _loading = false); return; }
     if (showLoader && mounted) setState(() => _loading = true);
-    final rows = List<Map<String, dynamic>>.from(await Supabase.instance.client.from('posts').select('*,profiles!posts_author_id_fkey(nickname,photo_url,campus,department)').eq('user_id', id).eq('is_deleted', false).order('created_at', ascending: false) as List);
+    final rows = List<Map<String, dynamic>>.from(await OfflineData.instance.client.from('posts').select('*,profiles!posts_author_id_fkey(nickname,photo_url,campus,department)').eq('user_id', id).eq('is_deleted', false).order('created_at', ascending: false) as List);
     if (!mounted) return;
     setState(() { _posts..clear()..addAll(rows); _loading = false; });
   }
 
   @override
   void dispose() {
-    if (_channel != null) unawaited(Supabase.instance.client.removeChannel(_channel!));
+    if (_channel != null) unawaited(OfflineData.instance.client.removeChannel(_channel!));
     super.dispose();
   }
 

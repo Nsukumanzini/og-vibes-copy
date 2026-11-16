@@ -4,7 +4,7 @@ import 'dart:typed_data';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
+import '../services/offline_data_adapter.dart';
 
 import '../services/diagnostics_service.dart';
 
@@ -55,7 +55,7 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
   Future<void> _submitPost() async {
     if (!_formKey.currentState!.validate()) return;
 
-    final user = Supabase.instance.client.auth.currentUser;
+    final user = OfflineData.instance.client.auth.currentUser;
     if (user == null) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -88,10 +88,10 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
         final fileName =
             '${user.id}/${DateTime.now().millisecondsSinceEpoch}_$safeName';
 
-        await Supabase.instance.client.storage.from('posts').uploadBinary(
+        await OfflineData.instance.client.storage.from('posts').uploadBinary(
           fileName,
           attachment.bytes!,
-          fileOptions: FileOptions(
+          fileOptions: OfflineFileOptions(
             contentType: _mimeTypeFor(attachment.name, attachment.type),
             upsert: false,
           ),
@@ -108,7 +108,7 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
         }
       }
 
-      await Supabase.instance.client.from('posts').insert({
+      await OfflineData.instance.client.from('posts').insert({
         'user_id': user.id,
         'content': content,
         'images': mediaUrls,

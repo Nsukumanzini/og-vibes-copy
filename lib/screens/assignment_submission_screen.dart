@@ -5,7 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:shimmer/shimmer.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
+import '../services/offline_data_adapter.dart';
 
 import '../services/diagnostics_service.dart';
 
@@ -89,7 +89,7 @@ class _AssignmentSubmissionScreenState extends State<AssignmentSubmissionScreen>
   }
 
   Future<void> _loadDashboard({bool showLoader = true}) async {
-    final user = Supabase.instance.client.auth.currentUser;
+    final user = OfflineData.instance.client.auth.currentUser;
     if (user == null) {
       if (!mounted) return;
       setState(() {
@@ -111,7 +111,7 @@ class _AssignmentSubmissionScreenState extends State<AssignmentSubmissionScreen>
       List<dynamic> results;
       try {
         results = await Future.wait<dynamic>(<Future<dynamic>>[
-          Supabase.instance.client
+          OfflineData.instance.client
               .from('assessment_briefs')
               .select(
                 'id, module_id, level, title, subject, instructions, due_at, '
@@ -121,7 +121,7 @@ class _AssignmentSubmissionScreenState extends State<AssignmentSubmissionScreen>
               .eq('published', true)
               .order('due_at', ascending: true)
               .limit(30),
-          Supabase.instance.client
+          OfflineData.instance.client
               .from('assignment_submissions')
               .select(
                 'id, user_id, brief_id, module_id, level, title, subject, '
@@ -182,13 +182,13 @@ class _AssignmentSubmissionScreenState extends State<AssignmentSubmissionScreen>
     List<dynamic> results;
     try {
       results = await Future.wait<dynamic>(<Future<dynamic>>[
-        Supabase.instance.client
+        OfflineData.instance.client
             .from('profiles')
             .select('department, level')
             .eq('id', userId)
             .maybeSingle(),
-        Supabase.instance.client.from('programmes').select('id, name'),
-        Supabase.instance.client
+        OfflineData.instance.client.from('programmes').select('id, name'),
+        OfflineData.instance.client
             .from('modules')
             .select('id, programme_id, level, name, code'),
       ]);
@@ -251,7 +251,7 @@ class _AssignmentSubmissionScreenState extends State<AssignmentSubmissionScreen>
   }
 
   void _listenForSubmissionChanges() {
-    _submissionSubscription = Supabase.instance.client
+    _submissionSubscription = OfflineData.instance.client
         .from('assignment_submissions')
         .stream(primaryKey: <String>['id'])
         .listen((_) {
@@ -968,12 +968,12 @@ class _AssignmentSubmissionScreenState extends State<AssignmentSubmissionScreen>
     try {
       String signedUrl;
       try {
-        signedUrl = await Supabase.instance.client.storage
+        signedUrl = await OfflineData.instance.client.storage
             .from('assessment-resources')
             .createSignedUrl(brief.attachmentStoragePath, 600);
-      } on StorageException {
+      } on OfflineStorageException {
         // Older admin uploads use the academic library bucket.
-        signedUrl = await Supabase.instance.client.storage
+        signedUrl = await OfflineData.instance.client.storage
             .from('academic-content')
             .createSignedUrl(brief.attachmentStoragePath, 600);
       }
@@ -1238,7 +1238,7 @@ class _AssignmentSubmissionScreenState extends State<AssignmentSubmissionScreen>
     required String? lateReason,
     required bool replace,
   }) async {
-    final user = Supabase.instance.client.auth.currentUser;
+    final user = OfflineData.instance.client.auth.currentUser;
     if (user == null) {
       _showMessage('Please sign in before submitting.', isError: true);
       return;
@@ -1277,12 +1277,12 @@ class _AssignmentSubmissionScreenState extends State<AssignmentSubmissionScreen>
       final safeName = file.name.replaceAll(RegExp(r'[^A-Za-z0-9._-]'), '_');
       newStoragePath =
           '${user.id}/${DateTime.now().microsecondsSinceEpoch}_$safeName';
-      await Supabase.instance.client.storage
+      await OfflineData.instance.client.storage
           .from('assignment_submissions')
           .uploadBinary(
             newStoragePath,
             bytes,
-            fileOptions: const FileOptions(
+            fileOptions: const OfflineFileOptions(
               contentType: 'application/octet-stream',
               upsert: false,
             ),
@@ -1316,7 +1316,7 @@ class _AssignmentSubmissionScreenState extends State<AssignmentSubmissionScreen>
       };
 
       if (replace && entry.submission != null) {
-        await Supabase.instance.client
+        await OfflineData.instance.client
             .from('assignment_submissions')
             .update(row)
             .eq('id', entry.submission!.id)
@@ -1324,14 +1324,14 @@ class _AssignmentSubmissionScreenState extends State<AssignmentSubmissionScreen>
             .single();
       } else if (entry.submission != null &&
           entry.submission!.status == 'withdrawn') {
-        await Supabase.instance.client
+        await OfflineData.instance.client
             .from('assignment_submissions')
             .update(row)
             .eq('id', entry.submission!.id)
             .select('id')
             .single();
       } else {
-        await Supabase.instance.client
+        await OfflineData.instance.client
             .from('assignment_submissions')
             .insert(row);
       }
@@ -1343,7 +1343,7 @@ class _AssignmentSubmissionScreenState extends State<AssignmentSubmissionScreen>
           oldPath.isNotEmpty &&
           oldPath != newStoragePath) {
         try {
-          await Supabase.instance.client.storage
+          await OfflineData.instance.client.storage
               .from('assignment_submissions')
               .remove(<String>[oldPath]);
         } catch (_) {
@@ -1374,7 +1374,7 @@ class _AssignmentSubmissionScreenState extends State<AssignmentSubmissionScreen>
       );
       if (newStoragePath != null && !submissionSaved) {
         try {
-          await Supabase.instance.client.storage
+          await OfflineData.instance.client.storage
               .from('assignment_submissions')
               .remove(<String>[newStoragePath]);
         } catch (_) {}
@@ -1397,7 +1397,7 @@ class _AssignmentSubmissionScreenState extends State<AssignmentSubmissionScreen>
     }
     try {
       HapticFeedback.lightImpact();
-      final signedUrl = await Supabase.instance.client.storage
+      final signedUrl = await OfflineData.instance.client.storage
           .from('assignment_submissions')
           .createSignedUrl(submission.storagePath, 600);
       await _openDocument(
@@ -1446,7 +1446,7 @@ class _AssignmentSubmissionScreenState extends State<AssignmentSubmissionScreen>
       return;
     }
     try {
-      await Supabase.instance.client
+      await OfflineData.instance.client
           .from('assignment_submissions')
           .update(<String, dynamic>{
             'status': 'withdrawn',
@@ -1454,7 +1454,7 @@ class _AssignmentSubmissionScreenState extends State<AssignmentSubmissionScreen>
           })
           .eq('id', entry.submission!.id);
       if (entry.submission!.storagePath.isNotEmpty) {
-        await Supabase.instance.client.storage
+        await OfflineData.instance.client.storage
             .from('assignment_submissions')
             .remove(<String>[entry.submission!.storagePath]);
       }
@@ -1522,7 +1522,7 @@ class _AssignmentSubmissionScreenState extends State<AssignmentSubmissionScreen>
     );
     controller.dispose();
     if (reason == null) return;
-    final user = Supabase.instance.client.auth.currentUser;
+    final user = OfflineData.instance.client.auth.currentUser;
     if (user == null) return;
     try {
       final values = <String, dynamic>{
@@ -1532,12 +1532,12 @@ class _AssignmentSubmissionScreenState extends State<AssignmentSubmissionScreen>
         'status': 'pending',
       };
       if (entry.submission != null) {
-        await Supabase.instance.client
+        await OfflineData.instance.client
             .from('assignment_submissions')
             .update(values)
             .eq('id', entry.submission!.id);
       } else {
-        await Supabase.instance.client
+        await OfflineData.instance.client
             .from('assignment_submissions')
             .insert(<String, dynamic>{
               ...values,

@@ -6,7 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:shimmer/shimmer.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
+import '../services/offline_data_adapter.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../utils/theme_constants.dart';
@@ -35,7 +35,7 @@ class AnnouncementsScreen extends StatefulWidget {
 
 class _AnnouncementsScreenState extends State<AnnouncementsScreen> {
   final _searchController = TextEditingController();
-  SupabaseClient get _db => Supabase.instance.client;
+  OfflineDataClient get _db => OfflineData.instance.client;
 
   StreamSubscription<List<Map<String, dynamic>>>? _alertsSubscription;
   StreamSubscription<List<Map<String, dynamic>>>? _readsSubscription;

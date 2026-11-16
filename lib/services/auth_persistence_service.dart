@@ -1,7 +1,7 @@
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// Stores only the local routing decision needed for offline startup.
-/// Supabase remains the source of truth for authentication and permissions.
+/// Only local routing preferences are stored here.
 class AuthPersistenceService {
   static const _signedInBeforeKey = 'og_vibes_signed_in_before';
 

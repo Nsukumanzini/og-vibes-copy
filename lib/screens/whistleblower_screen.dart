@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
+import '../services/offline_data_adapter.dart';
 
 import 'package:og_vibes_student/widgets/vibe_scaffold.dart';
 
@@ -271,7 +271,7 @@ class _WhistleblowerScreenState extends State<WhistleblowerScreen> {
 
     setState(() => _isSubmitting = true);
     try {
-      await Supabase.instance.client.from('whistleblower_reports').insert({
+      await OfflineData.instance.client.from('whistleblower_reports').insert({
         'incident_type': _selectedIncidentType,
         'location': _locationController.text.trim(),
         'description': _descriptionController.text.trim(),
@@ -293,7 +293,7 @@ class _WhistleblowerScreenState extends State<WhistleblowerScreen> {
           ),
         ),
       );
-    } on PostgrestException catch (error) {
+    } on OfflinePostgrestException catch (error) {
       if (!mounted) return;
       setState(() => _isSubmitting = false);
       ScaffoldMessenger.of(context).showSnackBar(

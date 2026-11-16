@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:shimmer/shimmer.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
+import '../services/offline_data_adapter.dart';
 import '../services/offline_cache_service.dart';
 import 'package:table_calendar/table_calendar.dart';
 
@@ -66,7 +66,7 @@ class _AssessmentsCalendarScreenState extends State<AssessmentsCalendarScreen> {
   }
 
   Future<void> _loadSchedule({bool showLoader = true}) async {
-    final user = Supabase.instance.client.auth.currentUser;
+    final user = OfflineData.instance.client.auth.currentUser;
     if (user == null) {
       if (!mounted) return;
       setState(() {
@@ -87,19 +87,19 @@ class _AssessmentsCalendarScreenState extends State<AssessmentsCalendarScreen> {
       List<dynamic> results;
       try {
         results = await Future.wait<dynamic>(<Future<dynamic>>[
-          Supabase.instance.client
+          OfflineData.instance.client
               .from('profiles')
               .select('department, level')
               .eq('id', user.id)
               .maybeSingle(),
-          Supabase.instance.client.from('programmes').select('id, name'),
-          Supabase.instance.client
+          OfflineData.instance.client.from('programmes').select('id, name'),
+          OfflineData.instance.client
               .from('modules')
               .select('id, programme_id, level, name, code'),
-          Supabase.instance.client
+          OfflineData.instance.client
               .from('profiles')
               .select('id, name, surname, photo_url, is_verified, role'),
-          Supabase.instance.client
+          OfflineData.instance.client
               .from('assessment_briefs')
               .select(
                 'id, module_id, lecturer_id, level, title, subject, '
@@ -110,7 +110,7 @@ class _AssessmentsCalendarScreenState extends State<AssessmentsCalendarScreen> {
               .eq('published', true)
               .order('due_at', ascending: true)
               .limit(30),
-          Supabase.instance.client
+          OfflineData.instance.client
               .from('quizzes')
               .select(
                 'id, module_id, lecturer_id, lecturer_name, title, description, '
@@ -121,14 +121,14 @@ class _AssessmentsCalendarScreenState extends State<AssessmentsCalendarScreen> {
               .eq('published', true)
               .order('quiz_date', ascending: true)
               .limit(30),
-          Supabase.instance.client
+          OfflineData.instance.client
               .from('assignment_submissions')
               .select(
                 'id, brief_id, module_id, level, title, subject, due_date, '
                 'status, submitted_at, grade, created_at',
               )
               .eq('user_id', user.id),
-          Supabase.instance.client
+          OfflineData.instance.client
               .from('quiz_attempts')
               .select('quiz_id, status, completed_at, percentage')
               .eq('user_id', user.id),
@@ -310,28 +310,28 @@ class _AssessmentsCalendarScreenState extends State<AssessmentsCalendarScreen> {
   }
 
   void _listenForChanges() {
-    final userId = Supabase.instance.client.auth.currentUser?.id;
-    _quizSubscription = Supabase.instance.client
+    final userId = OfflineData.instance.client.auth.currentUser?.id;
+    _quizSubscription = OfflineData.instance.client
         .from('quizzes')
         .stream(primaryKey: <String>['id'])
         .listen((_) {
           if (mounted) unawaited(_loadSchedule(showLoader: false));
         }, onError: (_) {});
-    _briefSubscription = Supabase.instance.client
+    _briefSubscription = OfflineData.instance.client
         .from('assessment_briefs')
         .stream(primaryKey: <String>['id'])
         .listen((_) {
           if (mounted) unawaited(_loadSchedule(showLoader: false));
         }, onError: (_) {});
     if (userId == null) return;
-    _submissionSubscription = Supabase.instance.client
+    _submissionSubscription = OfflineData.instance.client
         .from('assignment_submissions')
         .stream(primaryKey: <String>['id'])
         .eq('user_id', userId)
         .listen((_) {
           if (mounted) unawaited(_loadSchedule(showLoader: false));
         }, onError: (_) {});
-    _attemptSubscription = Supabase.instance.client
+    _attemptSubscription = OfflineData.instance.client
         .from('quiz_attempts')
         .stream(primaryKey: <String>['id'])
         .eq('user_id', userId)

@@ -4,7 +4,7 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
+import '../services/offline_data_adapter.dart';
 
 import '../utils/theme_constants.dart';
 import '../widgets/vibe_scaffold.dart';
@@ -41,14 +41,14 @@ class _FriendRequestsScreenState extends State<FriendRequestsScreen>
   String _course = 'All';
   String _level = 'All';
 
-  SupabaseClient get _supabase => Supabase.instance.client;
-  User? get _user => _supabase.auth.currentUser;
+  OfflineDataClient get _offlineData => OfflineData.instance.client;
+  User? get _user => _offlineData.auth.currentUser;
 
   Future<List<Map<String, dynamic>>> _studentDirectory(String userId) async {
     final rows = <Map<String, dynamic>>[];
     String? cursor;
     for (var page = 0; page < _discoveryPages; page++) {
-      var query = _supabase
+      var query = _offlineData
           .from('profiles')
           .select(
             'id,nickname,campus,department,faculty,course,level,photo_url,is_verified,is_online,role',
@@ -107,7 +107,7 @@ class _FriendRequestsScreenState extends State<FriendRequestsScreen>
       try {
         responses = await Future.wait<dynamic>(<Future<dynamic>>[
           _studentDirectory(user.id),
-          _supabase
+          _offlineData
               .from('friend_requests')
               .select(
                 'id, sender_id, receiver_id, status, created_at, updated_at',
@@ -116,7 +116,7 @@ class _FriendRequestsScreenState extends State<FriendRequestsScreen>
               .eq('status', 'pending')
               .order('created_at', ascending: false)
               .limit(30),
-          _supabase
+          _offlineData
               .from('friendships')
               .select('user_id, friend_id, created_at')
               .or('user_id.eq.${user.id},friend_id.eq.${user.id}')
@@ -141,7 +141,7 @@ class _FriendRequestsScreenState extends State<FriendRequestsScreen>
         final missing = relatedIds.toList();
         for (var start = 0; start < missing.length; start += 30) {
           final end = (start + 30).clamp(0, missing.length);
-          final profiles = await _supabase
+          final profiles = await _offlineData
               .from('profiles')
               .select(
                 'id,nickname,campus,department,faculty,course,level,photo_url,is_verified,is_online,role',
@@ -192,7 +192,7 @@ class _FriendRequestsScreenState extends State<FriendRequestsScreen>
       if (profiles.isNotEmpty) {
         try {
           final mutualRows = List<Map<String, dynamic>>.from(
-            await _supabase.rpc(
+            await _offlineData.rpc(
                   'get_mutual_friend_counts',
                   params: <String, dynamic>{
                     'candidate_ids': profiles
@@ -342,7 +342,7 @@ class _FriendRequestsScreenState extends State<FriendRequestsScreen>
     final user = _user;
     if (user == null) return;
     try {
-      final recipient = await _supabase
+      final recipient = await _offlineData
           .from('profiles')
           .select('id')
           .eq('id', profile.id)
@@ -354,7 +354,7 @@ class _FriendRequestsScreenState extends State<FriendRequestsScreen>
         return;
       }
       HapticFeedback.mediumImpact();
-      await _supabase.from('friend_requests').insert(<String, dynamic>{
+      await _offlineData.from('friend_requests').insert(<String, dynamic>{
         'sender_id': user.id,
         'receiver_id': profile.id,
         'status': 'pending',
@@ -362,7 +362,7 @@ class _FriendRequestsScreenState extends State<FriendRequestsScreen>
       await _loadData(showLoader: false);
       _tabController.animateTo(1);
       _showSnack('Friend request sent to ${profile.displayName}.');
-    } on PostgrestException catch (error) {
+    } on OfflinePostgrestException catch (error) {
       _showSnack(
         error.code == '23505'
             ? 'A request between you is already pending.'
@@ -376,7 +376,7 @@ class _FriendRequestsScreenState extends State<FriendRequestsScreen>
   Future<void> _acceptRequest(FriendRequestEntry entry) async {
     try {
       HapticFeedback.mediumImpact();
-      await _supabase.rpc(
+      await _offlineData.rpc(
         'accept_friend_request',
         params: <String, dynamic>{'request_id': entry.id},
       );
@@ -390,7 +390,7 @@ class _FriendRequestsScreenState extends State<FriendRequestsScreen>
 
   Future<void> _declineRequest(FriendRequestEntry entry) async {
     try {
-      await _supabase
+      await _offlineData
           .from('friend_requests')
           .update(<String, dynamic>{
             'status': 'declined',
@@ -407,7 +407,7 @@ class _FriendRequestsScreenState extends State<FriendRequestsScreen>
 
   Future<void> _cancelRequest(FriendRequestEntry entry) async {
     try {
-      await _supabase
+      await _offlineData
           .from('friend_requests')
           .update(<String, dynamic>{
             'status': 'cancelled',
@@ -453,11 +453,11 @@ class _FriendRequestsScreenState extends State<FriendRequestsScreen>
     if (confirmed != true) return;
 
     try {
-      await _supabase.from('friendships').delete().match(<String, Object>{
+      await _offlineData.from('friendships').delete().match(<String, Object>{
         'user_id': user.id,
         'friend_id': profile.id,
       });
-      await _supabase.from('friendships').delete().match(<String, Object>{
+      await _offlineData.from('friendships').delete().match(<String, Object>{
         'user_id': profile.id,
         'friend_id': user.id,
       });

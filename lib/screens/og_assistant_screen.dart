@@ -2,7 +2,7 @@ import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
+import '../services/offline_data_adapter.dart';
 
 import '../services/og_assistant_service.dart';
 import '../utils/theme_constants.dart';
@@ -26,7 +26,7 @@ class _OgAssistantScreenState extends State<OgAssistantScreen> {
   bool _loadingModules = true;
   bool _searching = false;
 
-  bool get _signedIn => Supabase.instance.client.auth.currentUser != null;
+  bool get _signedIn => OfflineData.instance.client.auth.currentUser != null;
 
   @override
   void initState() {
@@ -42,14 +42,14 @@ class _OgAssistantScreenState extends State<OgAssistantScreen> {
   }
 
   Future<void> _loadModules() async {
-    final user = Supabase.instance.client.auth.currentUser;
+    final user = OfflineData.instance.client.auth.currentUser;
     if (user == null) {
       if (mounted) setState(() => _loadingModules = false);
       return;
     }
     try {
       final raw =
-          await Supabase.instance.client
+          await OfflineData.instance.client
                   .from('student_module_registrations')
                   .select(
                     'module_id, modules!student_module_registrations_module_id_fkey(id,name,code)',
@@ -136,7 +136,7 @@ class _OgAssistantScreenState extends State<OgAssistantScreen> {
   }
 
   String _friendlyError(Object error) {
-    if (error is AuthException) return 'Sign in to use OG Assistant.';
+    if (error is OfflineAuthException) return 'Sign in to use OG Assistant.';
     if (error is FormatException) return error.message;
     final text = error.toString().replaceFirst('Bad state: ', '');
     if (text.contains('Failed host lookup') ||

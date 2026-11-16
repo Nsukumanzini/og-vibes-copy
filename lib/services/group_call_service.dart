@@ -2,7 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
+import 'offline_data_adapter.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 
 import 'push_notification_service.dart';
@@ -25,12 +25,12 @@ class GroupCallInvite {
 }
 
 class GroupCallService {
-  GroupCallService._({SupabaseClient? client})
-    : _client = client ?? Supabase.instance.client;
+  GroupCallService._({OfflineDataClient? client})
+    : _client = client ?? OfflineData.instance.client;
 
   static final GroupCallService instance = GroupCallService._();
-  final SupabaseClient _client;
-  RealtimeChannel? _incomingChannel;
+  final OfflineDataClient _client;
+  OfflineRealtimeChannel? _incomingChannel;
 
   Future<List<Map<String, dynamic>>> availableCallPeople({
     required String excludingUserId,
@@ -257,11 +257,11 @@ class GroupCallService {
     _incomingChannel?.unsubscribe();
     _incomingChannel = _client.channel('group-call-invites:$currentUserId')
       ..onPostgresChanges(
-        event: PostgresChangeEvent.insert,
+        event: OfflinePostgresChangeEvent.insert,
         schema: 'public',
         table: 'group_call_participants',
-        filter: PostgresChangeFilter(
-          type: PostgresChangeFilterType.eq,
+        filter: OfflinePostgresChangeFilter(
+          type: OfflinePostgresChangeFilterType.eq,
           column: 'user_id',
           value: currentUserId,
         ),
@@ -312,7 +312,7 @@ class GroupCallService {
 
 class GroupCallSession extends ChangeNotifier {
   GroupCallSession._({
-    required SupabaseClient client,
+    required OfflineDataClient client,
     required Map<String, dynamic> call,
     required this.currentUserId,
     required this.isStarter,
@@ -322,7 +322,7 @@ class GroupCallSession extends ChangeNotifier {
        _call = call,
        _iceServers = iceServers;
 
-  final SupabaseClient _client;
+  final OfflineDataClient _client;
   Map<String, dynamic> _call;
   final String currentUserId;
   final bool isStarter;
@@ -332,7 +332,7 @@ class GroupCallSession extends ChangeNotifier {
   final Set<String> _creatingPeers = {};
   final Map<String, List<RTCIceCandidate>> _pendingCandidates = {};
   final Set<int> _handledSignals = {};
-  RealtimeChannel? _channel;
+  OfflineRealtimeChannel? _channel;
   bool _closed = false;
 
   MediaStream? localStream;
@@ -386,33 +386,33 @@ class GroupCallSession extends ChangeNotifier {
   void _subscribe() {
     _channel = _client.channel('group-call:$callId:$currentUserId')
       ..onPostgresChanges(
-        event: PostgresChangeEvent.all,
+        event: OfflinePostgresChangeEvent.all,
         schema: 'public',
         table: 'group_call_participants',
-        filter: PostgresChangeFilter(
-          type: PostgresChangeFilterType.eq,
+        filter: OfflinePostgresChangeFilter(
+          type: OfflinePostgresChangeFilterType.eq,
           column: 'call_id',
           value: callId,
         ),
         callback: (_) => unawaited(_refreshParticipants()),
       )
       ..onPostgresChanges(
-        event: PostgresChangeEvent.insert,
+        event: OfflinePostgresChangeEvent.insert,
         schema: 'public',
         table: 'group_call_signals',
-        filter: PostgresChangeFilter(
-          type: PostgresChangeFilterType.eq,
+        filter: OfflinePostgresChangeFilter(
+          type: OfflinePostgresChangeFilterType.eq,
           column: 'recipient_id',
           value: currentUserId,
         ),
         callback: (payload) => unawaited(_handleSignal(payload.newRecord)),
       )
       ..onPostgresChanges(
-        event: PostgresChangeEvent.update,
+        event: OfflinePostgresChangeEvent.update,
         schema: 'public',
         table: 'group_calls',
-        filter: PostgresChangeFilter(
-          type: PostgresChangeFilterType.eq,
+        filter: OfflinePostgresChangeFilter(
+          type: OfflinePostgresChangeFilterType.eq,
           column: 'id',
           value: callId,
         ),

@@ -11,7 +11,7 @@ import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:record/record.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
+import '../services/offline_data_adapter.dart';
 
 import '../services/diagnostics_service.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -34,7 +34,7 @@ class ChatDetailScreen extends StatefulWidget {
 }
 
 class _ChatDetailScreenState extends State<ChatDetailScreen> {
-  final _db = Supabase.instance.client;
+  final _db = OfflineData.instance.client;
   final _text = TextEditingController();
   final _scroll = ScrollController();
   final _recorder = AudioRecorder();
@@ -43,7 +43,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
   final Map<String, String> _mediaUrls = {};
   final List<Uint8List> _voiceChunks = [];
   final List<double> _levels = [];
-  RealtimeChannel? _channel;
+  OfflineRealtimeChannel? _channel;
   StreamSubscription<List<ConnectivityResult>>? _connectivity;
   StreamSubscription<Uint8List>? _voiceStream;
   StreamSubscription<Amplitude>? _amplitudes;
@@ -277,7 +277,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
     _channel = _db
         .channel('chat-$uid-${widget.chatId}')
         .onPostgresChanges(
-          event: PostgresChangeEvent.all,
+          event: OfflinePostgresChangeEvent.all,
           schema: 'public',
           table: 'messages',
           callback: (payload) {
@@ -293,13 +293,13 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
           },
         )
         .onPostgresChanges(
-          event: PostgresChangeEvent.all,
+          event: OfflinePostgresChangeEvent.all,
           schema: 'public',
           table: 'message_reactions',
           callback: (_) => _scheduleLoad(),
         )
         .onPostgresChanges(
-          event: PostgresChangeEvent.all,
+          event: OfflinePostgresChangeEvent.all,
           schema: 'public',
           table: 'chat_typing_status',
           callback: (_) => unawaited(_loadTyping()),
@@ -439,7 +439,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
                 .uploadBinary(
                   path,
                   bytes,
-                  fileOptions: FileOptions(contentType: mime, upsert: false),
+                  fileOptions: OfflineFileOptions(contentType: mime, upsert: false),
                 );
             p['attachment_url'] = path;
             await _db.from('messages').insert(p);
@@ -537,7 +537,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
           .uploadBinary(
             path,
             bytes,
-            fileOptions: FileOptions(contentType: mime, upsert: false),
+            fileOptions: OfflineFileOptions(contentType: mime, upsert: false),
           );
       if (mounted) setState(() => _sendStatus = 'Sending message…');
       await _db.from('messages').insert({

@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
+import '../services/offline_data_adapter.dart';
 import '../services/offline_cache_service.dart';
 
 import 'assessments_calendar_screen.dart';
@@ -27,7 +27,7 @@ class MyModulesScreen extends StatefulWidget {
 class _MyModulesScreenState extends State<MyModulesScreen>
     with SingleTickerProviderStateMixin {
   late final TabController _tabs;
-  RealtimeChannel? _invitationChannel;
+  OfflineRealtimeChannel? _invitationChannel;
   bool _loading = true;
   bool _responding = false;
   String? _error;
@@ -36,7 +36,7 @@ class _MyModulesScreenState extends State<MyModulesScreen>
   List<_ModuleInvitation> _invitations = const [];
   _ModuleInvitationPreview? _linkPreview;
 
-  SupabaseClient get _client => Supabase.instance.client;
+  OfflineDataClient get _client => OfflineData.instance.client;
 
   @override
   void initState() {
@@ -54,7 +54,7 @@ class _MyModulesScreenState extends State<MyModulesScreen>
     if (userId == null) return;
     _invitationChannel = _client.channel('module-invitations-$userId')
       ..onPostgresChanges(
-        event: PostgresChangeEvent.all,
+        event: OfflinePostgresChangeEvent.all,
         schema: 'public',
         table: 'module_invitations',
         callback: (_) => unawaited(_load(silent: true)),
@@ -67,7 +67,7 @@ class _MyModulesScreenState extends State<MyModulesScreen>
     try {
       final user = _client.auth.currentUser;
       if (user == null) {
-        throw const AuthException('Sign in to view your modules.');
+        throw const OfflineAuthException('Sign in to view your modules.');
       }
       List<dynamic> results;
       try {
@@ -125,7 +125,7 @@ class _MyModulesScreenState extends State<MyModulesScreen>
           response as List? ?? const [],
         );
         if (rows.isEmpty) {
-          throw const PostgrestException(
+          throw const OfflinePostgrestException(
             message:
                 'This invitation link is invalid, expired, or belongs to another student.',
           );
@@ -495,8 +495,8 @@ class _MyModulesScreenState extends State<MyModulesScreen>
   }
 
   static String _friendlyError(Object error) {
-    if (error is PostgrestException) return error.message;
-    if (error is AuthException) return error.message;
+    if (error is OfflinePostgrestException) return error.message;
+    if (error is OfflineAuthException) return error.message;
     return 'Unable to load modules right now. Check your connection and try again.';
   }
 }

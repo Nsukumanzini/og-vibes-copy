@@ -6,7 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:og_vibes_student/utils/theme_constants.dart';
 import 'package:shimmer/shimmer.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
+import '../services/offline_data_adapter.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../services/download_history_service.dart';
 import '../services/academic_file_service.dart';
@@ -59,7 +59,7 @@ class _TimetableScreenState extends State<TimetableScreen> {
     });
 
     try {
-      final response = await Supabase.instance.client
+      final response = await OfflineData.instance.client
           .from('timetables')
           .select(
             'id, level, programme, module, group_name, title, url, '
@@ -92,7 +92,7 @@ class _TimetableScreenState extends State<TimetableScreen> {
   }
 
   void _listenForTimetables() {
-    _timetableSubscription = Supabase.instance.client
+    _timetableSubscription = OfflineData.instance.client
         .from('timetables')
         .stream(primaryKey: ['id'])
         .listen(
@@ -276,7 +276,7 @@ class _TimetableScreenState extends State<TimetableScreen> {
 
   Future<String> _resolveTimetableUrl(_TimetableItem item) async {
     if (item.storagePath.isNotEmpty) {
-      return Supabase.instance.client.storage
+      return OfflineData.instance.client.storage
           .from('academic-content')
           .createSignedUrl(item.storagePath, 600);
     }

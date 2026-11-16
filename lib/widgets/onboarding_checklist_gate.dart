@@ -2,7 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
+import '../services/offline_data_adapter.dart';
 
 import '../screens/profile_screen.dart';
 import '../services/push_notification_service.dart';
@@ -25,7 +25,7 @@ class OnboardingChecklistGate extends StatefulWidget {
 }
 
 class _OnboardingChecklistGateState extends State<OnboardingChecklistGate> {
-  StreamSubscription<AuthState>? _authSubscription;
+  StreamSubscription<OfflineAuthState>? _authSubscription;
   bool _checking = false;
   bool _showing = false;
 
@@ -33,7 +33,7 @@ class _OnboardingChecklistGateState extends State<OnboardingChecklistGate> {
   void initState() {
     super.initState();
     if (!widget.enabled) return;
-    _authSubscription = Supabase.instance.client.auth.onAuthStateChange.listen(
+    _authSubscription = OfflineData.instance.client.auth.onAuthStateChange.listen(
       (_) => _scheduleCheck(),
     );
     _scheduleCheck();
@@ -45,7 +45,7 @@ class _OnboardingChecklistGateState extends State<OnboardingChecklistGate> {
 
   Future<void> _check() async {
     if (!mounted || _checking || _showing || !widget.enabled) return;
-    final user = Supabase.instance.client.auth.currentUser;
+    final user = OfflineData.instance.client.auth.currentUser;
     if (user == null) return;
     final createdAt = DateTime.tryParse(user.createdAt)?.toLocal();
     if (createdAt == null ||
@@ -58,7 +58,7 @@ class _OnboardingChecklistGateState extends State<OnboardingChecklistGate> {
       final preferences = await SharedPreferences.getInstance();
       final key = 'og_setup_checklist_${user.id}';
       if (preferences.getBool(key) ?? false) return;
-      final profile = await Supabase.instance.client
+      final profile = await OfflineData.instance.client
           .from('profiles')
           .select('photo_url')
           .eq('id', user.id)

@@ -8,7 +8,7 @@ import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:shimmer/shimmer.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
+import '../services/offline_data_adapter.dart';
 
 import '../utils/theme_constants.dart';
 import '../widgets/vibe_scaffold.dart';
@@ -26,10 +26,10 @@ class MessagesScreen extends StatefulWidget {
 }
 
 class _MessagesScreenState extends State<MessagesScreen> {
-  SupabaseClient get _client => Supabase.instance.client;
+  OfflineDataClient get _client => OfflineData.instance.client;
   final _searchController = TextEditingController();
 
-  RealtimeChannel? _channel;
+  OfflineRealtimeChannel? _channel;
   Timer? _reloadDebounce;
   List<Map<String, dynamic>> _conversations = [];
   List<Map<String, dynamic>> _friends = [];
@@ -229,19 +229,19 @@ class _MessagesScreenState extends State<MessagesScreen> {
     _channel = _client
         .channel('chat-inbox-${user.id}')
         .onPostgresChanges(
-          event: PostgresChangeEvent.all,
+          event: OfflinePostgresChangeEvent.all,
           schema: 'public',
           table: 'messages',
           callback: (_) => _scheduleReload(),
         )
         .onPostgresChanges(
-          event: PostgresChangeEvent.all,
+          event: OfflinePostgresChangeEvent.all,
           schema: 'public',
           table: 'chat_preferences',
           callback: (_) => _scheduleReload(),
         )
         .onPostgresChanges(
-          event: PostgresChangeEvent.update,
+          event: OfflinePostgresChangeEvent.update,
           schema: 'public',
           table: 'profiles',
           callback: (_) => _scheduleReload(),

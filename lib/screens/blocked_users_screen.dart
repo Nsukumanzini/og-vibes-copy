@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
+import '../services/offline_data_adapter.dart';
 import 'package:og_vibes_student/widgets/vibe_scaffold.dart';
 
 class BlockedUsersScreen extends StatefulWidget {
@@ -19,9 +19,9 @@ class _BlockedUsersScreenState extends State<BlockedUsersScreen> {
   }
 
   Future<List<Map<String, dynamic>>> _fetchBlockedUsers() async {
-    final user = Supabase.instance.client.auth.currentUser;
+    final user = OfflineData.instance.client.auth.currentUser;
     if (user == null) return [];
-    final response = await Supabase.instance.client
+    final response = await OfflineData.instance.client
         .from('blocked_users')
         .select('*, profiles(*)')
         .eq('user_id', user.id)
@@ -32,7 +32,7 @@ class _BlockedUsersScreenState extends State<BlockedUsersScreen> {
   }
 
   Future<void> _unblock(Map<String, dynamic> row) async {
-    final user = Supabase.instance.client.auth.currentUser;
+    final user = OfflineData.instance.client.auth.currentUser;
     if (user == null || row['user_id']?.toString() != user.id) {
       _showMessage('You can only unblock accounts you blocked yourself.');
       return;
@@ -63,7 +63,7 @@ class _BlockedUsersScreenState extends State<BlockedUsersScreen> {
     );
     if (confirmed != true) return;
     try {
-      await Supabase.instance.client
+      await OfflineData.instance.client
           .from('blocked_users')
           .delete()
           .eq('id', row['id'])
@@ -84,7 +84,7 @@ class _BlockedUsersScreenState extends State<BlockedUsersScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final user = Supabase.instance.client.auth.currentUser;
+    final user = OfflineData.instance.client.auth.currentUser;
     if (user == null) {
       return VibeScaffold(
         appBar: AppBar(title: const Text('Blocked accounts')),

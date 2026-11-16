@@ -1,4 +1,4 @@
-import 'package:supabase_flutter/supabase_flutter.dart';
+import 'offline_data_adapter.dart';
 
 class IceServers {
   static const Map<String, dynamic> fallback = {
@@ -9,7 +9,7 @@ class IceServers {
 
   static Future<Map<String, dynamic>> fetch() async {
     try {
-      final response = await Supabase.instance.client.functions.invoke('get-turn-credentials');
+      final response = await OfflineData.instance.client.functions.invoke('get-turn-credentials');
       final data = response.data;
       if (data == null) {
         throw Exception('Failed to fetch TURN credentials: no data returned');

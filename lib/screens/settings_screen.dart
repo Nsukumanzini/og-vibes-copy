@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
+import '../services/offline_data_adapter.dart';
 
 import '../services/auth_persistence_service.dart';
 
@@ -26,7 +26,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   final AuthService _authService = AuthService();
   late Future<_SettingsProfile> _profile;
 
-  User? get _user => Supabase.instance.client.auth.currentUser;
+  User? get _user => OfflineData.instance.client.auth.currentUser;
 
   @override
   void initState() {
@@ -38,7 +38,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final user = _user;
     if (user == null) return const _SettingsProfile.guest();
     try {
-      final row = await Supabase.instance.client
+      final row = await OfflineData.instance.client
           .from('profiles')
           .select('nickname,student_number,campus,department,level,photo_url')
           .eq('id', user.id)
@@ -296,9 +296,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
             onPressed: () async {
               if (formKey.currentState?.validate() != true) return;
               try {
-                await Supabase.instance.client.auth.reauthenticate();
-                await Supabase.instance.client.auth.updateUser(
-                  UserAttributes(password: controller.text.trim()),
+                await OfflineData.instance.client.auth.reauthenticate();
+                await OfflineData.instance.client.auth.updateUser(
+                  OfflineUserAttributes(password: controller.text.trim()),
                 );
                 if (!dialogContext.mounted) return;
                 Navigator.pop(dialogContext);
@@ -345,7 +345,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 return;
               }
               try {
-                await Supabase.instance.client.from('bug_reports').insert({
+                await OfflineData.instance.client.from('bug_reports').insert({
                   'user_id': _user?.id,
                   'description': description,
                 });
@@ -431,11 +431,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
         _showSnack('Type DELETE exactly to confirm.');
         return;
       }
-      await Supabase.instance.client.auth.signInWithPassword(
+      await OfflineData.instance.client.auth.signInWithPassword(
         email: user.email!,
         password: password,
       );
-      final response = await Supabase.instance.client.functions.invoke(
+      final response = await OfflineData.instance.client.functions.invoke(
         'delete-account',
         body: const <String, String>{'confirmation': 'DELETE'},
       );
@@ -445,7 +445,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             : 'Account could not be deleted.';
         throw Exception(message);
       }
-      await Supabase.instance.client.auth.signOut();
+      await OfflineData.instance.client.auth.signOut();
       await AuthPersistenceService.clear();
       if (!mounted) return;
       Navigator.of(context).pushAndRemoveUntil(

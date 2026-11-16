@@ -10,7 +10,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
+import '../services/offline_data_adapter.dart';
 
 import '../services/diagnostics_service.dart';
 import 'package:syncfusion_flutter_pdfviewer/pdfviewer.dart';
@@ -47,7 +47,7 @@ class _DocumentWalletScreenState extends State<DocumentWalletScreen> {
   bool dragging = false;
   String? error;
 
-  SupabaseClient get db => Supabase.instance.client;
+  OfflineDataClient get db => OfflineData.instance.client;
   User? get user => db.auth.currentUser;
   bool get selecting => selected.isNotEmpty;
   int get used =>
@@ -200,7 +200,7 @@ class _DocumentWalletScreenState extends State<DocumentWalletScreen> {
           .uploadBinary(
             path,
             task.file.bytes,
-            fileOptions: FileOptions(
+            fileOptions: OfflineFileOptions(
               contentType: task.file.mimeType,
               upsert: false,
             ),
@@ -473,7 +473,7 @@ class _DocumentWalletScreenState extends State<DocumentWalletScreen> {
           .uploadBinary(
             newPath,
             bytes,
-            fileOptions: FileOptions(
+            fileOptions: OfflineFileOptions(
               contentType: document.mimeType,
               upsert: false,
             ),

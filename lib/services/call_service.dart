@@ -2,22 +2,22 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
+import 'offline_data_adapter.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 
 import 'push_notification_service.dart';
 import 'feature_flag_service.dart';
 
 class CallService {
-  CallService._({SupabaseClient? client})
-    : _client = client ?? Supabase.instance.client;
+  CallService._({OfflineDataClient? client})
+    : _client = client ?? OfflineData.instance.client;
 
   static final CallService instance = CallService._();
-  factory CallService({SupabaseClient? client}) =>
+  factory CallService({OfflineDataClient? client}) =>
       client == null ? instance : CallService._(client: client);
 
-  final SupabaseClient _client;
-  RealtimeChannel? _incomingChannel;
+  final OfflineDataClient _client;
+  OfflineRealtimeChannel? _incomingChannel;
 
   Future<CallSession> startCall(String calleeId, {required String type}) async {
     final availability = await FeatureFlagService.availability(
@@ -123,18 +123,18 @@ class CallService {
     await query;
   }
 
-  RealtimeChannel listenForIncomingCalls({
+  OfflineRealtimeChannel listenForIncomingCalls({
     required String currentUserId,
     required void Function(Map<String, dynamic> call) onIncoming,
   }) {
     _incomingChannel?.unsubscribe();
     _incomingChannel = _client.channel('incoming-calls:$currentUserId')
       ..onPostgresChanges(
-        event: PostgresChangeEvent.insert,
+        event: OfflinePostgresChangeEvent.insert,
         schema: 'public',
         table: 'calls',
-        filter: PostgresChangeFilter(
-          type: PostgresChangeFilterType.eq,
+        filter: OfflinePostgresChangeFilter(
+          type: OfflinePostgresChangeFilterType.eq,
           column: 'callee_id',
           value: currentUserId,
         ),
@@ -186,7 +186,7 @@ class CallService {
 
 class CallSession extends ChangeNotifier {
   CallSession._({
-    required SupabaseClient client,
+    required OfflineDataClient client,
     required Map<String, dynamic> call,
     required String currentUserId,
     required bool isCaller,
@@ -197,7 +197,7 @@ class CallSession extends ChangeNotifier {
        _isCaller = isCaller,
        _iceServers = iceServers;
 
-  final SupabaseClient _client;
+  final OfflineDataClient _client;
   final Map<String, dynamic> _call;
   final String _currentUserId;
   final bool _isCaller;
@@ -205,7 +205,7 @@ class CallSession extends ChangeNotifier {
   final Set<int> _handledSignals = {};
   final List<RTCIceCandidate> _pendingCandidates = [];
   RTCPeerConnection? _peerConnection;
-  RealtimeChannel? _channel;
+  OfflineRealtimeChannel? _channel;
   bool _remoteDescriptionReady = false;
   bool _closed = false;
   bool _restartInProgress = false;
@@ -441,22 +441,22 @@ class CallSession extends ChangeNotifier {
   void _subscribe() {
     _channel = _client.channel('call:$callId')
       ..onPostgresChanges(
-        event: PostgresChangeEvent.insert,
+        event: OfflinePostgresChangeEvent.insert,
         schema: 'public',
         table: 'call_signals',
-        filter: PostgresChangeFilter(
-          type: PostgresChangeFilterType.eq,
+        filter: OfflinePostgresChangeFilter(
+          type: OfflinePostgresChangeFilterType.eq,
           column: 'call_id',
           value: callId,
         ),
         callback: (payload) => unawaited(_handleSignal(payload.newRecord)),
       )
       ..onPostgresChanges(
-        event: PostgresChangeEvent.update,
+        event: OfflinePostgresChangeEvent.update,
         schema: 'public',
         table: 'calls',
-        filter: PostgresChangeFilter(
-          type: PostgresChangeFilterType.eq,
+        filter: OfflinePostgresChangeFilter(
+          type: OfflinePostgresChangeFilterType.eq,
           column: 'id',
           value: callId,
         ),
