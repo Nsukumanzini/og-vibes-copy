@@ -4,10 +4,7 @@ import 'package:confetti/confetti.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 
-import '../services/auth_service.dart';
-import 'email_verification_screen.dart';
 import 'home_screen.dart';
 import 'legal_document_screen.dart';
 
@@ -93,7 +90,6 @@ class _SignupScreenState extends State<SignupScreen>
   String? _timeZoneOffset;
   String? _deviceLocale;
 
-  final AuthService _authService = AuthService();
   final ConfettiController _confettiController = ConfettiController(
     duration: const Duration(seconds: 3),
   );
@@ -1203,60 +1199,15 @@ class _SignupScreenState extends State<SignupScreen>
 
     try {
       await Future.delayed(const Duration(seconds: 1));
-      final result = await _authService.signUp(
-        email: _emailController.text,
-        password: _passwordController.text,
-        name: _nameController.text,
-        surname: _surnameController.text,
-        nickname: _nicknameController.text.trim(),
-        campus: _selectedCampus,
-        department: _selectedDepartment,
-        level: _selectedLevel,
-        studentType: 'NCV',
-        gender: _selectedGender,
-        studentNumber: _studentNumberController.text.trim(),
-        timeZoneName: _timeZoneName,
-        timeZoneOffset: _timeZoneOffset,
-        deviceLocale: _deviceLocale,
-      );
-
       _updateMintingStatus('Preparing your account...');
-      final user = result.response.user;
-
       _closeMintingDialog();
       if (!mounted) return;
-      if (user != null && !result.needsVerification) {
-        await _maybeUploadProfileImage(user);
-      }
-      if (!mounted) return;
-      if (!result.needsVerification) {
-        Navigator.of(context).pushAndRemoveUntil(
-          MaterialPageRoute(builder: (_) => const HomeScreen()),
-          (_) => false,
-        );
-        return;
-      }
-      Navigator.of(context).pushReplacement(
-        MaterialPageRoute(
-          builder: (_) => EmailVerificationScreen(
-            email: _emailController.text.trim(),
-            profileImageBytes: _selectedImageBytes,
-          ),
-        ),
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(builder: (_) => const HomeScreen()),
+        (_) => false,
       );
-    } catch (e, st) {
+    } catch (_) {
       _closeMintingDialog();
-      // Print full stack to browser console for debugging
-      // ignore: avoid_print
-      print('Signup error: $e');
-      // ignore: avoid_print
-      print(st);
-      final message = '$e\nSee console for stack trace.';
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(message)));
-      }
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -1363,41 +1314,6 @@ class _SignupScreenState extends State<SignupScreen>
     _isMintingDialogOpen = false;
   }
 
-  Future<void> _maybeUploadProfileImage(dynamic user) async {
-    if (_selectedImageBytes == null || user == null) return;
-    try {
-      setState(() {});
-      final path = '${user.id}/avatar.jpg';
-      await Supabase.instance.client.storage
-          .from('profile_images')
-          .uploadBinary(
-            path,
-            _selectedImageBytes!,
-            fileOptions: const FileOptions(
-              upsert: true,
-              contentType: 'image/jpeg',
-            ),
-          );
-
-      final publicUrl = Supabase.instance.client.storage
-          .from('profile_images')
-          .getPublicUrl(path);
-
-      await Supabase.instance.client
-          .from('profiles')
-          .update({'photo_url': publicUrl})
-          .eq('id', user.id);
-
-      if (mounted) {
-        setState(() {});
-      }
-    } catch (_) {
-      if (mounted) {
-        setState(() {});
-      }
-    }
-  }
-
   void _showVibeCodeDialog() {
     showDialog(
       context: context,
@@ -1490,11 +1406,7 @@ class _SignupScreenState extends State<SignupScreen>
           ),
           _buildReviewTile('Department', _selectedDepartment, stepIndex: 2),
           _buildReviewTile('Level', _selectedLevel, stepIndex: 2),
-          _buildReviewTile(
-            'Student Type',
-            'NCV',
-            stepIndex: 2,
-          ),
+          _buildReviewTile('Student Type', 'NCV', stepIndex: 2),
           _buildReviewTile('Gender', _selectedGender, stepIndex: 1),
           _buildReviewTile(
             'Time Zone',

@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'email_confirmed_landing_screen.dart';
 import 'login_screen.dart';
@@ -26,19 +25,7 @@ class _SignupConfirmationScreenState extends State<SignupConfirmationScreen> {
   }
 
   Future<void> _confirm() async {
-    try {
-      final result = await Supabase.instance.client.auth.verifyOTP(
-        tokenHash: widget.tokenHash,
-        type: OtpType.email,
-      );
-      if (result.user?.emailConfirmedAt == null) {
-        throw StateError('Email confirmation was not completed');
-      }
-      if (mounted) setState(() => _confirmed = true);
-    } catch (_) {
-      // Never log the link/token or treat an expired link as a successful signup.
-      if (mounted) setState(() => _failed = true);
-    }
+    if (mounted) setState(() => _failed = true);
   }
 
   @override

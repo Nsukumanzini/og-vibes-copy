@@ -3,12 +3,8 @@ import 'dart:async';
 import 'package:confetti/confetti.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 
-import '../services/auth_persistence_service.dart';
-import '../services/auth_service.dart';
 import '../widgets/vibe_scaffold.dart';
-import 'home_screen.dart';
 
 class EmailVerificationScreen extends StatefulWidget {
   const EmailVerificationScreen({
@@ -26,7 +22,6 @@ class EmailVerificationScreen extends StatefulWidget {
 }
 
 class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
-  final AuthService _authService = AuthService();
   final TextEditingController _codeController = TextEditingController();
   final FocusNode _codeFocusNode = FocusNode();
   late final ConfettiController _confettiController;
@@ -71,42 +66,10 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
     }
 
     setState(() {
-      _isVerifying = true;
-      _errorMessage = null;
-    });
-    try {
-      final response = await Supabase.instance.client.auth.verifyOTP(
-        email: widget.email,
-        token: code,
-        type: OtpType.email,
-      );
-      if (response.session == null || response.user?.emailConfirmedAt == null) {
-        throw const AuthException('Email verification was not completed.');
-      }
-      await _handleVerified(response.user);
-    } on AuthException catch (error) {
-      if (!mounted) return;
-      final message = error.message.toLowerCase();
-      setState(() {
-        _errorMessage = _verificationErrorMessage(error.message);
-        if (message.contains('expired') || message.contains('invalid')) {
-          // Let the user recover immediately instead of waiting through the
-          // original cooldown after Supabase has rejected the code.
-          _cooldownTimer?.cancel();
-          _cooldownSeconds = 0;
-        }
-      });
+      _errorMessage = 'Email verification is unavailable.';
       _codeController.clear();
       _codeFocusNode.requestFocus();
-    } catch (_) {
-      if (!mounted) return;
-      setState(() {
-        _errorMessage =
-            'We could not verify the code. Check your connection and try again.';
-      });
-    } finally {
-      if (mounted) setState(() => _isVerifying = false);
-    }
+    });
   }
 
   Future<void> _resendVerificationCode() async {
@@ -120,38 +83,9 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
     }
 
     setState(() {
-      _isSending = true;
-      _errorMessage = null;
+      _isSending = false;
+      _errorMessage = 'Email verification is unavailable.';
     });
-    try {
-      await Supabase.instance.client.auth.resend(
-        type: OtpType.signup,
-        email: widget.email,
-      );
-      if (!mounted) return;
-      _resendAttempts += 1;
-      _codeController.clear();
-      _startCooldown();
-      _codeFocusNode.requestFocus();
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'A new six-digit code has been sent. Use the newest code only.',
-          ),
-        ),
-      );
-    } on AuthException catch (error) {
-      if (!mounted) return;
-      setState(() => _errorMessage = _resendErrorMessage(error.message));
-    } catch (_) {
-      if (!mounted) return;
-      setState(() {
-        _errorMessage =
-            'We could not resend the code. Check your connection and try again.';
-      });
-    } finally {
-      if (mounted) setState(() => _isSending = false);
-    }
   }
 
   void _startCooldown() {
@@ -168,76 +102,7 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
     });
   }
 
-  String _verificationErrorMessage(String rawMessage) {
-    final message = rawMessage.toLowerCase();
-    if (message.contains('expired') || message.contains('invalid')) {
-      return 'This code has expired or was replaced. Send a new code, then use only the newest email.';
-    }
-    if (message.contains('rate') || message.contains('too many')) {
-      return 'Too many verification attempts. Wait a few minutes, then request one new code.';
-    }
-    return 'That code could not be verified. Check all six digits and use the newest code sent to your email.';
-  }
-
-  String _resendErrorMessage(String rawMessage) {
-    final message = rawMessage.toLowerCase();
-    if (message.contains('rate') || message.contains('too many')) {
-      return 'A code was requested too recently. Wait a minute and try again.';
-    }
-    return 'We could not send a new code right now. Check your connection and try again.';
-  }
-
-  Future<void> _handleVerified(User? user) async {
-    if (_verificationComplete || !mounted) return;
-    _cooldownTimer?.cancel();
-    await _uploadSelectedProfilePicture(user);
-    await AuthPersistenceService.rememberSignedInUser();
-    if (!mounted) return;
-    setState(() => _verificationComplete = true);
-    if (!MediaQuery.of(context).disableAnimations) {
-      _confettiController.play();
-    }
-    await Future.delayed(
-      MediaQuery.of(context).disableAnimations
-          ? const Duration(milliseconds: 450)
-          : const Duration(milliseconds: 2100),
-    );
-    if (!mounted) return;
-    Navigator.of(context).pushAndRemoveUntil(
-      MaterialPageRoute(builder: (_) => const HomeScreen()),
-      (_) => false,
-    );
-  }
-
-  Future<void> _uploadSelectedProfilePicture(User? user) async {
-    final bytes = widget.profileImageBytes;
-    if (user == null || bytes == null) return;
-    try {
-      final path = '${user.id}/avatar.jpg';
-      await Supabase.instance.client.storage
-          .from('profile_images')
-          .uploadBinary(
-            path,
-            bytes,
-            fileOptions: const FileOptions(
-              upsert: true,
-              contentType: 'image/jpeg',
-            ),
-          );
-      final publicUrl = Supabase.instance.client.storage
-          .from('profile_images')
-          .getPublicUrl(path);
-      await Supabase.instance.client
-          .from('profiles')
-          .update({'photo_url': publicUrl})
-          .eq('id', user.id);
-    } catch (error) {
-      debugPrint('Deferred profile picture upload failed: $error');
-    }
-  }
-
   Future<void> _cancel() async {
-    await _authService.signOut();
     if (!mounted) return;
     Navigator.of(context).pop();
   }

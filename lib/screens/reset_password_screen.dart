@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../utils/theme_constants.dart';
+import 'home_screen.dart';
 
 class ResetPasswordScreen extends StatefulWidget {
   const ResetPasswordScreen({super.key});
@@ -20,25 +20,11 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
   void dispose() { _password.dispose(); _confirm.dispose(); super.dispose(); }
 
   Future<void> _save() async {
-    final password = _password.text;
-    if (password.length < 8) { _message('Use at least 8 characters.'); return; }
-    if (password != _confirm.text) { _message('The passwords do not match.'); return; }
-    setState(() => _saving = true);
-    try {
-      await Supabase.instance.client.auth.updateUser(UserAttributes(password: password));
-      if (!mounted) return;
-      await showDialog<void>(context: context, barrierDismissible: false, builder: (_) => AlertDialog(
-        icon: const Icon(Icons.verified_rounded, color: AppColors.success, size: 44),
-        title: const Text('Password updated'),
-        content: const Text('Your OG Vibes account is secure. You can continue using the app.'),
-        actions: [FilledButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Continue'))],
-      ));
-      if (mounted) Navigator.of(context).popUntil((route) => route.isFirst);
-    } catch (error) { _message('Password update failed. Please request a new recovery email.'); }
-    finally { if (mounted) setState(() => _saving = false); }
+    Navigator.of(context).pushAndRemoveUntil(
+      MaterialPageRoute<void>(builder: (_) => const HomeScreen()),
+      (_) => false,
+    );
   }
-
-  void _message(String value) => ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(value)));
 
   @override
   Widget build(BuildContext context) => Scaffold(

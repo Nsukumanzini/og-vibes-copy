@@ -1,10 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:og_vibes_student/screens/home_screen.dart';
 
-import '../services/auth_service.dart';
-import 'email_verification_screen.dart';
 import 'signup_screen.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -22,7 +19,6 @@ class _LoginScreenState extends State<LoginScreen>
 
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
-  final AuthService _authService = AuthService();
   bool _obscurePassword = true;
   bool _isSubmitting = false;
 
@@ -67,63 +63,11 @@ class _LoginScreenState extends State<LoginScreen>
     super.dispose();
   }
 
-  Future<void> _onLoginPressed() async {
-    final email = _emailController.text.trim();
-    final password = _passwordController.text;
-
-    if (email.isEmpty || password.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please enter your email and password.')),
-      );
-      return;
-    }
-
-    setState(() {
-      _isSubmitting = true;
-    });
-
-    try {
-      final result = await _authService.signIn(
-        email: email,
-        password: password,
-      );
-      if (!mounted) return;
-
-      if (result.needsVerification) {
-        Navigator.of(context).pushReplacement(
-          MaterialPageRoute(
-            builder: (_) => EmailVerificationScreen(email: email),
-          ),
-        );
-      } else {
-        if (!mounted) return;
-        Navigator.of(context).pushReplacement(
-          MaterialPageRoute(builder: (_) => const HomeScreen()),
-        );
-      }
-    } catch (e, st) {
-      // ignore: avoid_print
-      print('Login error: $e');
-      // ignore: avoid_print
-      print(st);
-      if (mounted && e.toString().toLowerCase().contains('confirm')) {
-        Navigator.of(context).pushReplacement(
-          MaterialPageRoute(
-            builder: (_) => EmailVerificationScreen(email: email),
-          ),
-        );
-      } else if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('$e')));
-      }
-    } finally {
-      if (mounted) {
-        setState(() {
-          _isSubmitting = false;
-        });
-      }
-    }
+  void _onLoginPressed() {
+    Navigator.of(context).pushAndRemoveUntil(
+      MaterialPageRoute(builder: (_) => const HomeScreen()),
+      (route) => false,
+    );
   }
 
   Future<void> _forgotPassword() async {
@@ -171,30 +115,10 @@ class _LoginScreenState extends State<LoginScreen>
     );
     controller.dispose();
     if (email == null || email.isEmpty || !mounted) return;
-    try {
-      await Supabase.instance.client.auth.resetPasswordForEmail(
-        email,
-        redirectTo: AuthService.passwordRecoveryRedirect(),
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Password recovery is unavailable.')),
       );
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text(
-              'Recovery email sent. Open the link on this device to choose a new password.',
-            ),
-          ),
-        );
-      }
-    } catch (_) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text(
-              'We could not send the recovery email. Check the address and try again.',
-            ),
-          ),
-        );
-      }
     }
   }
 

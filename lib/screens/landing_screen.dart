@@ -5,7 +5,6 @@ import 'package:flutter/material.dart';
 import 'package:og_vibes_student/screens/home_screen.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-import 'login_screen.dart';
 import 'signup_screen.dart';
 
 class LandingScreen extends StatefulWidget {
@@ -217,9 +216,10 @@ class _LandingScreenState extends State<LandingScreen>
           width: double.infinity,
           child: ElevatedButton.icon(
             onPressed: () {
-              Navigator.of(
-                context,
-              ).push(MaterialPageRoute(builder: (_) => const LoginScreen()));
+              Navigator.of(context).pushAndRemoveUntil(
+                MaterialPageRoute(builder: (_) => const HomeScreen()),
+                (route) => false,
+              );
             },
             icon: const Icon(Icons.login),
             label: const Text('Login'),
