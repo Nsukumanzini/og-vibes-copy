@@ -104,10 +104,6 @@
     }
   </style>
 
-  <script>
-    // Configure Firebase before the app loads
-    window.flutterfire_web_sdk_version = "12.7.0";
-  </script>
 </head>
 <body>
   <aside id="app_install_prompt" role="dialog" aria-modal="true" aria-labelledby="app_install_title">
@@ -170,13 +166,6 @@
       if (isAppleMobile) show();
     }());
 
-    if ('serviceWorker' in navigator) {
-      window.addEventListener('load', function () {
-        navigator.serviceWorker.register('/firebase-messaging-sw.js', {
-          scope: '/firebase-cloud-messaging-push-scope',
-        });
-      });
-    }
   </script>
   <script src="flutter_bootstrap.js" async></script>
 </body>
