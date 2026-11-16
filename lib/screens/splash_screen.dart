@@ -3,17 +3,10 @@ import 'dart:math';
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
-
-import '../services/auth_persistence_service.dart';
-import 'email_confirmed_landing_screen.dart';
-import 'home_screen.dart';
 import 'landing_screen.dart';
 
 class SplashScreen extends StatefulWidget {
-  const SplashScreen({super.key, required this.supabaseConfigured});
-
-  final bool supabaseConfigured;
+  const SplashScreen({super.key});
 
   @override
   State<SplashScreen> createState() => _SplashScreenState();
@@ -236,81 +229,8 @@ class _SplashScreenState extends State<SplashScreen>
   }
 
   Future<void> _initApp() async {
-    try {
-      if (Uri.base.queryParameters['emailConfirmed'] == '1') {
-        await Future.delayed(const Duration(milliseconds: 650));
-        await _navigateTo(const EmailConfirmedLandingScreen());
-        return;
-      }
-
-      final hasSignedInBefore =
-          await AuthPersistenceService.hasSignedInBefore();
-      const supabaseUrl = String.fromEnvironment('SUPABASE_URL');
-      const supabaseAnonKey = String.fromEnvironment('SUPABASE_ANON_KEY');
-
-      // Log for debugging
-      // ignore: avoid_print
-      print('Supabase URL: ${supabaseUrl.isNotEmpty ? "set" : "NOT SET"}');
-      // ignore: avoid_print
-      print('Supabase Key: ${supabaseAnonKey.isNotEmpty ? "set" : "NOT SET"}');
-
-      if (!widget.supabaseConfigured) {
-        if (mounted) {
-          setState(() {
-            _loadingText = 'Offline mode enabled';
-            _showOfflineHint = true;
-          });
-        }
-        await Future.delayed(const Duration(milliseconds: 700));
-        await _navigateTo(
-          hasSignedInBefore ? const HomeScreen() : const LandingScreen(),
-        );
-        return;
-      }
-
-      // Supabase should already be initialized in main; guard against double-init.
-      final session = Supabase.instance.client.auth.currentSession;
-      final user = session?.user;
-      if (user != null) {
-        await AuthPersistenceService.rememberSignedInUser();
-      }
-
-      if (mounted) {
-        setState(() {
-          _loadingText = 'Connecting to Supabase...';
-        });
-      }
-
-      await Future.delayed(const Duration(milliseconds: 900));
-      if (user != null || hasSignedInBefore) {
-        await _navigateTo(const HomeScreen());
-      } else {
-        await _navigateTo(const LandingScreen());
-      }
-    } catch (e) {
-      // ignore: avoid_print
-      print('Init error: $e');
-      if (!mounted) return;
-      setState(() {
-        _loadingText = 'Loading...';
-        _showOfflineHint = true;
-      });
-      await Future.delayed(const Duration(milliseconds: 700));
-      final hasSignedInBefore =
-          await AuthPersistenceService.hasSignedInBefore();
-      await _navigateTo(
-        hasSignedInBefore ? const HomeScreen() : const LandingScreen(),
-      );
-    }
-  }
-
-  String _firstNameFrom(String? displayName) {
-    if (displayName == null || displayName.isEmpty) {
-      return 'Viber';
-    }
-
-    final parts = displayName.split(' ').where((part) => part.isNotEmpty);
-    return parts.isNotEmpty ? parts.first : 'Viber';
+    await Future.delayed(const Duration(milliseconds: 700));
+    await _navigateTo(const LandingScreen());
   }
 
   Future<void> _navigateTo(Widget destination) async {
