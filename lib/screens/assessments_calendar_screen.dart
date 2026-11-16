@@ -1,15 +1,17 @@
 import 'dart:async';
-import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:shimmer/shimmer.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../services/offline_cache_service.dart';
 import 'package:table_calendar/table_calendar.dart';
 
 import 'package:og_vibes_student/utils/theme_constants.dart';
 import 'package:og_vibes_student/widgets/vibe_scaffold.dart';
+import 'package:og_vibes_student/screens/assignment_submission_screen.dart';
+import 'package:og_vibes_student/screens/quiz_screen.dart';
 
 class AssessmentsCalendarScreen extends StatefulWidget {
   const AssessmentsCalendarScreen({super.key});
@@ -19,16 +21,16 @@ class AssessmentsCalendarScreen extends StatefulWidget {
       _AssessmentsCalendarScreenState();
 }
 
-class _AssessmentsCalendarScreenState
-    extends State<AssessmentsCalendarScreen> {
+class _AssessmentsCalendarScreenState extends State<AssessmentsCalendarScreen> {
   final List<_ScheduleItem> _items = <_ScheduleItem>[];
   final List<_ModuleRef> _modules = <_ModuleRef>[];
   final Set<String> _registeredModuleIds = <String>{};
-  final Map<String, _LecturerProfile> _lecturers =
-      <String, _LecturerProfile>{};
+  final Map<String, _LecturerProfile> _lecturers = <String, _LecturerProfile>{};
 
   StreamSubscription<List<Map<String, dynamic>>>? _quizSubscription;
   StreamSubscription<List<Map<String, dynamic>>>? _briefSubscription;
+  StreamSubscription<List<Map<String, dynamic>>>? _submissionSubscription;
+  StreamSubscription<List<Map<String, dynamic>>>? _attemptSubscription;
   Timer? _clock;
   _ScheduleView _view = _ScheduleView.calendar;
   DateTime _focusedDay = DateTime.now();
@@ -38,6 +40,7 @@ class _AssessmentsCalendarScreenState
   String _lecturerFilter = 'All';
   String _statusFilter = 'All';
   bool _myModulesOnly = true;
+  bool _thisWeekOnly = false;
   bool _hasRegistrationMatch = false;
   bool _isLoading = true;
   String? _errorMessage;
@@ -57,6 +60,8 @@ class _AssessmentsCalendarScreenState
     _clock?.cancel();
     _quizSubscription?.cancel();
     _briefSubscription?.cancel();
+    _submissionSubscription?.cancel();
+    _attemptSubscription?.cancel();
     super.dispose();
   }
 
@@ -79,45 +84,71 @@ class _AssessmentsCalendarScreenState
     }
 
     try {
-      final results = await Future.wait<dynamic>(<Future<dynamic>>[
-        Supabase.instance.client
-            .from('profiles')
-            .select('department, level')
-            .eq('id', user.id)
-            .maybeSingle(),
-        Supabase.instance.client.from('programmes').select('id, name'),
-        Supabase.instance.client
-            .from('modules')
-            .select('id, programme_id, level, name, code'),
-        Supabase.instance.client
-            .from('profiles')
-            .select('id, name, surname, photo_url, is_verified, role'),
-        Supabase.instance.client
-            .from('assessment_briefs')
-            .select(
-              'id, module_id, lecturer_id, level, title, subject, '
-              'instructions, due_at, assessment_type, venue, '
-              'duration_minutes, weight_percent, published',
-            )
-            .eq('published', true)
-            .order('due_at', ascending: true),
-        Supabase.instance.client
-            .from('quizzes')
-            .select(
-              'id, module_id, lecturer_id, lecturer_name, title, description, '
-              'quiz_date, duration_minutes, assessment_type, venue, '
-              'weight_percent, published',
-            )
-            .eq('published', true)
-            .order('quiz_date', ascending: true),
-        Supabase.instance.client
-            .from('assignment_submissions')
-            .select(
-              'id, brief_id, module_id, level, title, subject, due_date, '
-              'status, submitted_at, grade',
-            )
-            .eq('user_id', user.id),
-      ]);
+      List<dynamic> results;
+      try {
+        results = await Future.wait<dynamic>(<Future<dynamic>>[
+          Supabase.instance.client
+              .from('profiles')
+              .select('department, level')
+              .eq('id', user.id)
+              .maybeSingle(),
+          Supabase.instance.client.from('programmes').select('id, name'),
+          Supabase.instance.client
+              .from('modules')
+              .select('id, programme_id, level, name, code'),
+          Supabase.instance.client
+              .from('profiles')
+              .select('id, name, surname, photo_url, is_verified, role'),
+          Supabase.instance.client
+              .from('assessment_briefs')
+              .select(
+                'id, module_id, lecturer_id, level, title, subject, '
+                'instructions, due_at, assessment_type, venue, '
+                'duration_minutes, weight_percent, published, created_at, published_at, '
+                'updated_at',
+              )
+              .eq('published', true)
+              .order('due_at', ascending: true)
+              .limit(30),
+          Supabase.instance.client
+              .from('quizzes')
+              .select(
+                'id, module_id, lecturer_id, lecturer_name, title, description, '
+                'quiz_date, duration_minutes, assessment_type, venue, '
+                'weight_percent, published, created_at, available_from, '
+                'closes_at',
+              )
+              .eq('published', true)
+              .order('quiz_date', ascending: true)
+              .limit(30),
+          Supabase.instance.client
+              .from('assignment_submissions')
+              .select(
+                'id, brief_id, module_id, level, title, subject, due_date, '
+                'status, submitted_at, grade, created_at',
+              )
+              .eq('user_id', user.id),
+          Supabase.instance.client
+              .from('quiz_attempts')
+              .select('quiz_id, status, completed_at, percentage')
+              .eq('user_id', user.id),
+        ]);
+        unawaited(
+          OfflineCacheService.writeList(
+            'assessment_calendar',
+            <Map<String, dynamic>>[
+              <String, dynamic>{'results': results},
+            ],
+            maxRecords: 1,
+          ),
+        );
+      } catch (_) {
+        final cached = await OfflineCacheService.readList(
+          'assessment_calendar',
+        );
+        if (cached.isEmpty || cached.first['results'] is! List) rethrow;
+        results = List<dynamic>.from(cached.first['results'] as List);
+      }
 
       final profile = results[0] is Map
           ? Map<String, dynamic>.from(results[0] as Map)
@@ -140,6 +171,9 @@ class _AssessmentsCalendarScreenState
       final submissionRows = List<Map<String, dynamic>>.from(
         results[6] as List<dynamic>? ?? <dynamic>[],
       );
+      final attemptRows = List<Map<String, dynamic>>.from(
+        results[7] as List<dynamic>? ?? <dynamic>[],
+      );
 
       _buildAcademicContext(
         profile: profile,
@@ -147,12 +181,23 @@ class _AssessmentsCalendarScreenState
         modules: moduleRows,
         lecturerRows: lecturerRows,
       );
-      final submissions =
-          submissionRows.map(_SubmissionSummary.fromRow).toList();
+      final submissions = submissionRows
+          .map(_SubmissionSummary.fromRow)
+          .toList();
       final byBrief = <String, _SubmissionSummary>{
         for (final submission in submissions)
           if (submission.briefId.isNotEmpty) submission.briefId: submission,
       };
+      final completedQuizIds = attemptRows
+          .where((row) {
+            final status = _normalize(row['status']);
+            return status == 'completed' ||
+                status == 'submitted' ||
+                _text(row['completed_at']).isNotEmpty;
+          })
+          .map((row) => _text(row['quiz_id']))
+          .where((id) => id.isNotEmpty)
+          .toSet();
       final schedule = <_ScheduleItem>[
         ...briefRows.map(
           (row) => _ScheduleItem.fromBrief(
@@ -165,6 +210,7 @@ class _AssessmentsCalendarScreenState
         ...quizRows.map(
           (row) => _ScheduleItem.fromQuiz(
             row,
+            hasCompletedAttempt: completedQuizIds.contains(_text(row['id'])),
             lecturer: _lecturers[_text(row['lecturer_id'])],
             module: _moduleById(_text(row['module_id'])),
           ),
@@ -213,12 +259,15 @@ class _AssessmentsCalendarScreenState
   }) {
     final department = _normalize(profile['department']);
     final level = _normalize(profile['level']);
-    final programmeIds = programmes.where((programme) {
-      final programmeName = _normalize(programme['name']);
-      return department.isNotEmpty &&
-          (department.contains(programmeName) ||
-              programmeName.contains(department));
-    }).map((programme) => _text(programme['id'])).toSet();
+    final programmeIds = programmes
+        .where((programme) {
+          final programmeName = _normalize(programme['name']);
+          return department.isNotEmpty &&
+              (department.contains(programmeName) ||
+                  programmeName.contains(department));
+        })
+        .map((programme) => _text(programme['id']))
+        .toSet();
 
     _modules
       ..clear()
@@ -226,14 +275,16 @@ class _AssessmentsCalendarScreenState
     _registeredModuleIds
       ..clear()
       ..addAll(
-        _modules.where((module) {
-          final moduleLevel = _normalize(module.level);
-          return programmeIds.contains(module.programmeId) &&
-              (level.isEmpty ||
-                  level == moduleLevel ||
-                  level.contains(moduleLevel) ||
-                  moduleLevel.contains(level));
-        }).map((module) => module.id),
+        _modules
+            .where((module) {
+              final moduleLevel = _normalize(module.level);
+              return programmeIds.contains(module.programmeId) &&
+                  (level.isEmpty ||
+                      level == moduleLevel ||
+                      level.contains(moduleLevel) ||
+                      moduleLevel.contains(level));
+            })
+            .map((module) => module.id),
       );
     _hasRegistrationMatch = _registeredModuleIds.isNotEmpty;
     if (!_hasRegistrationMatch) _myModulesOnly = false;
@@ -259,18 +310,34 @@ class _AssessmentsCalendarScreenState
   }
 
   void _listenForChanges() {
+    final userId = Supabase.instance.client.auth.currentUser?.id;
     _quizSubscription = Supabase.instance.client
         .from('quizzes')
         .stream(primaryKey: <String>['id'])
         .listen((_) {
-      if (mounted) unawaited(_loadSchedule(showLoader: false));
-    }, onError: (_) {});
+          if (mounted) unawaited(_loadSchedule(showLoader: false));
+        }, onError: (_) {});
     _briefSubscription = Supabase.instance.client
         .from('assessment_briefs')
         .stream(primaryKey: <String>['id'])
         .listen((_) {
-      if (mounted) unawaited(_loadSchedule(showLoader: false));
-    }, onError: (_) {});
+          if (mounted) unawaited(_loadSchedule(showLoader: false));
+        }, onError: (_) {});
+    if (userId == null) return;
+    _submissionSubscription = Supabase.instance.client
+        .from('assignment_submissions')
+        .stream(primaryKey: <String>['id'])
+        .eq('user_id', userId)
+        .listen((_) {
+          if (mounted) unawaited(_loadSchedule(showLoader: false));
+        }, onError: (_) {});
+    _attemptSubscription = Supabase.instance.client
+        .from('quiz_attempts')
+        .stream(primaryKey: <String>['id'])
+        .eq('user_id', userId)
+        .listen((_) {
+          if (mounted) unawaited(_loadSchedule(showLoader: false));
+        }, onError: (_) {});
   }
 
   _ModuleRef? _moduleById(String id) {
@@ -303,12 +370,17 @@ class _AssessmentsCalendarScreenState
         return false;
       }
       if (_typeFilter != 'All' && item.type != _typeFilter) return false;
-      if (_lecturerFilter != 'All' &&
-          item.lecturer.name != _lecturerFilter) {
+      if (_lecturerFilter != 'All' && item.lecturer.name != _lecturerFilter) {
         return false;
       }
       if (_statusFilter != 'All' && item.statusLabel != _statusFilter) {
         return false;
+      }
+      if (_thisWeekOnly) {
+        final now = DateTime.now();
+        final weekEnd = now.add(const Duration(days: 7));
+        final date = item.scheduledAt.toLocal();
+        if (date.isBefore(now) || date.isAfter(weekEnd)) return false;
       }
       return true;
     }).toList();
@@ -316,7 +388,13 @@ class _AssessmentsCalendarScreenState
 
   List<_ScheduleItem> _eventsForDay(DateTime day) {
     return _visibleItems
-        .where((item) => isSameDay(item.scheduledAt.toLocal(), day))
+        .where(
+          (item) =>
+              isSameDay(item.scheduledAt.toLocal(), day) ||
+              (!item.isQuiz &&
+                  item.publishedAt != null &&
+                  isSameDay(item.publishedAt!.toLocal(), day)),
+        )
         .toList();
   }
 
@@ -344,16 +422,22 @@ class _AssessmentsCalendarScreenState
         .length;
   }
 
-  int get _overdueCount =>
-      _visibleItems.where((item) => item.isOverdue).length;
-  int get _completedCount =>
-      _visibleItems.where((item) => item.isCompleted).length;
+  int get _todayCount {
+    final now = DateTime.now();
+    return _visibleItems
+        .where((item) => isSameDay(item.scheduledAt.toLocal(), now))
+        .length;
+  }
+
+  int get _overdueCount => _visibleItems.where((item) => item.isOverdue).length;
+  bool get _reduceMotion =>
+      MediaQuery.maybeOf(context)?.disableAnimations ?? false;
 
   @override
   Widget build(BuildContext context) {
     return VibeScaffold(
       appBar: AppBar(
-        title: const Text('Assessment Schedule'),
+        title: const Text('Assessment dates'),
         backgroundColor: Colors.transparent,
         actions: <Widget>[
           IconButton(
@@ -386,7 +470,9 @@ class _AssessmentsCalendarScreenState
               SliverFillRemaining(
                 hasScrollBody: true,
                 child: AnimatedSwitcher(
-                  duration: const Duration(milliseconds: 300),
+                  duration: _reduceMotion
+                      ? Duration.zero
+                      : const Duration(milliseconds: 300),
                   transitionBuilder: (child, animation) => FadeTransition(
                     opacity: animation,
                     child: SlideTransition(
@@ -397,9 +483,15 @@ class _AssessmentsCalendarScreenState
                       child: child,
                     ),
                   ),
-                  child: _view == _ScheduleView.calendar
-                      ? _buildCalendarView()
-                      : _buildAgendaView(),
+                  child: switch (_view) {
+                    _ScheduleView.calendar => _buildCalendarView(),
+                    _ScheduleView.upcoming => _buildAgendaView(
+                      completed: false,
+                    ),
+                    _ScheduleView.completed => _buildAgendaView(
+                      completed: true,
+                    ),
+                  },
                 ),
               ),
             ],
@@ -457,7 +549,7 @@ class _AssessmentsCalendarScreenState
                 ),
                 const SizedBox(height: 12),
                 const Text(
-                  'Know what’s next.',
+                  'My Assessment Schedule',
                   style: TextStyle(
                     color: Colors.white,
                     fontSize: 28,
@@ -466,7 +558,7 @@ class _AssessmentsCalendarScreenState
                 ),
                 const SizedBox(height: 5),
                 const Text(
-                  'Every test, quiz and deadline in one focused schedule.',
+                  'See what is due and stay on track.',
                   style: TextStyle(
                     color: Colors.white70,
                     fontWeight: FontWeight.w600,
@@ -475,22 +567,9 @@ class _AssessmentsCalendarScreenState
                 const SizedBox(height: 20),
                 Row(
                   children: <Widget>[
-                    _heroStat(
-                      '${_upcomingItems.length}',
-                      'Upcoming',
-                      AppColors.electricCyan,
-                    ),
+                    _heroStat('$_todayCount', 'Today', AppColors.electricCyan),
                     _heroStat('$_weekCount', 'This week', AppColors.ogGold),
-                    _heroStat(
-                      '$_overdueCount',
-                      'Overdue',
-                      Colors.redAccent,
-                    ),
-                    _heroStat(
-                      '$_completedCount',
-                      'Completed',
-                      AppColors.success,
-                    ),
+                    _heroStat('$_overdueCount', 'Overdue', Colors.redAccent),
                   ],
                 ),
                 const SizedBox(height: 18),
@@ -506,10 +585,7 @@ class _AssessmentsCalendarScreenState
                   ),
                   child: Row(
                     children: <Widget>[
-                      const Icon(
-                        Icons.timer_outlined,
-                        color: AppColors.ogGold,
-                      ),
+                      const Icon(Icons.timer_outlined, color: AppColors.ogGold),
                       const SizedBox(width: 10),
                       Expanded(
                         child: Column(
@@ -518,7 +594,7 @@ class _AssessmentsCalendarScreenState
                             Text(
                               next == null
                                   ? 'No upcoming assessment'
-                                  : '${next.type} • ${next.title}',
+                                  : 'NEXT UP · ${next.type} • ${next.title}',
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                               style: const TextStyle(
@@ -531,7 +607,7 @@ class _AssessmentsCalendarScreenState
                             Text(
                               next == null
                                   ? 'Your schedule is clear'
-                                  : _countdown(next.scheduledAt),
+                                  : _countdown(next.deadlineAt),
                               style: const TextStyle(
                                 color: Colors.white,
                                 fontSize: 16,
@@ -549,7 +625,7 @@ class _AssessmentsCalendarScreenState
           ],
         ),
       ),
-    ).animate().fadeIn(duration: 420.ms).slideY(begin: .05, end: 0);
+    );
   }
 
   Widget _heroStat(String value, String label, Color color) {
@@ -605,9 +681,14 @@ class _AssessmentsCalendarScreenState
                   label: Text('Calendar'),
                 ),
                 ButtonSegment<_ScheduleView>(
-                  value: _ScheduleView.agenda,
-                  icon: Icon(Icons.view_agenda_outlined),
-                  label: Text('Agenda'),
+                  value: _ScheduleView.upcoming,
+                  icon: Icon(Icons.upcoming_rounded),
+                  label: Text('Upcoming'),
+                ),
+                ButtonSegment<_ScheduleView>(
+                  value: _ScheduleView.completed,
+                  icon: Icon(Icons.task_alt_rounded),
+                  label: Text('Completed'),
                 ),
               ],
               selected: <_ScheduleView>{_view},
@@ -656,8 +737,7 @@ class _AssessmentsCalendarScreenState
                           : 'All modules • registration not matched',
                       overflow: TextOverflow.ellipsis,
                     ),
-                    selectedColor:
-                        AppColors.vibeBlue.withValues(alpha: .14),
+                    selectedColor: AppColors.vibeBlue.withValues(alpha: .14),
                     side: BorderSide.none,
                   ),
                 ),
@@ -672,6 +752,19 @@ class _AssessmentsCalendarScreenState
                   ),
                 ),
               ],
+            ),
+          ),
+          const SizedBox(height: 8),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: FilterChip(
+              selected: _thisWeekOnly,
+              onSelected: (selected) =>
+                  setState(() => _thisWeekOnly = selected),
+              avatar: const Icon(Icons.date_range_rounded, size: 18),
+              label: const Text('This week'),
+              selectedColor: AppColors.vibeBlue.withValues(alpha: .14),
+              side: BorderSide.none,
             ),
           ),
         ],
@@ -701,11 +794,7 @@ class _AssessmentsCalendarScreenState
         }
         return ListView(
           padding: const EdgeInsets.fromLTRB(16, 0, 16, 110),
-          children: <Widget>[
-            calendar,
-            const SizedBox(height: 14),
-            dayAgenda,
-          ],
+          children: <Widget>[calendar, const SizedBox(height: 14), dayAgenda],
         );
       },
     );
@@ -875,7 +964,25 @@ class _AssessmentsCalendarScreenState
                 padding: EdgeInsets.only(
                   bottom: index == items.length - 1 ? 0 : 10,
                 ),
-                child: _buildCompactItem(items[index], index),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (!items[index].isQuiz &&
+                        items[index].publishedAt != null &&
+                        isSameDay(
+                          items[index].publishedAt!.toLocal(),
+                          _selectedDay,
+                        ))
+                      const Padding(
+                        padding: EdgeInsets.only(bottom: 6),
+                        child: Text(
+                          'Published on this day',
+                          style: TextStyle(fontWeight: FontWeight.w700),
+                        ),
+                      ),
+                    _buildCompactItem(items[index], index),
+                  ],
+                ),
               ),
             ),
         ],
@@ -883,10 +990,21 @@ class _AssessmentsCalendarScreenState
     );
   }
 
-  Widget _buildAgendaView() {
-    final items = _visibleItems;
+  Widget _buildAgendaView({required bool completed}) {
+    final items =
+        _visibleItems
+            .where((item) => completed ? item.isCompleted : !item.isCompleted)
+            .toList()
+          ..sort(
+            (a, b) => completed
+                ? b.scheduledAt.compareTo(a.scheduledAt)
+                : a.scheduledAt.compareTo(b.scheduledAt),
+          );
     if (items.isEmpty) {
-      return _buildEmptyState(key: const ValueKey<String>('agenda-empty'));
+      return _buildEmptyState(
+        key: ValueKey<String>(completed ? 'completed-empty' : 'upcoming-empty'),
+        completed: completed,
+      );
     }
     final grouped = <DateTime, List<_ScheduleItem>>{};
     for (final item in items) {
@@ -894,9 +1012,10 @@ class _AssessmentsCalendarScreenState
       final day = DateTime(local.year, local.month, local.day);
       grouped.putIfAbsent(day, () => <_ScheduleItem>[]).add(item);
     }
-    final days = grouped.keys.toList()..sort();
+    final days = grouped.keys.toList()
+      ..sort((a, b) => completed ? b.compareTo(a) : a.compareTo(b));
     return RefreshIndicator(
-      key: const ValueKey<String>('agenda'),
+      key: ValueKey<String>(completed ? 'completed' : 'upcoming'),
       onRefresh: _loadSchedule,
       child: ListView.builder(
         padding: const EdgeInsets.fromLTRB(16, 0, 16, 110),
@@ -946,193 +1065,232 @@ class _AssessmentsCalendarScreenState
   }
 
   Widget _buildCompactItem(_ScheduleItem item, int index) {
-    return InkWell(
-      onTap: () => _showDetails(item),
-      borderRadius: BorderRadius.circular(14),
-      child: Container(
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: item.typeColor.withValues(alpha: .07),
+    return _entryMotion(
+      Semantics(
+        button: true,
+        label: '${item.title}, ${item.statusLabel}, ${item.timeLabel}',
+        child: InkWell(
+          onTap: () => _showDetails(item),
           borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: item.typeColor.withValues(alpha: .17)),
-        ),
-        child: Row(
-          children: <Widget>[
-            Container(
-              width: 9,
-              height: 42,
-              decoration: BoxDecoration(
-                color: item.typeColor,
-                borderRadius: BorderRadius.circular(999),
-              ),
+          child: Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: item.typeColor.withValues(alpha: .07),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: item.typeColor.withValues(alpha: .17)),
             ),
-            const SizedBox(width: 11),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: <Widget>[
-                  Text(
-                    item.title,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      color: AppColors.midnightInk,
-                      fontWeight: FontWeight.w900,
-                    ),
+            child: Row(
+              children: <Widget>[
+                Container(
+                  width: 9,
+                  height: 42,
+                  decoration: BoxDecoration(
+                    color: item.typeColor,
+                    borderRadius: BorderRadius.circular(999),
                   ),
-                  const SizedBox(height: 3),
-                  Text(
-                    '${item.timeLabel} • ${item.type}',
-                    style: TextStyle(
-                      color: item.typeColor,
-                      fontSize: 11,
-                      fontWeight: FontWeight.w800,
-                    ),
+                ),
+                const SizedBox(width: 11),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: <Widget>[
+                      Text(
+                        item.title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: AppColors.midnightInk,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                      const SizedBox(height: 3),
+                      Text(
+                        '${item.timeLabel} • ${item.type}',
+                        style: TextStyle(
+                          color: item.typeColor,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    ],
                   ),
+                ),
+                if (item.isNew) ...<Widget>[
+                  const SizedBox(width: 8),
+                  _newPill(),
                 ],
-              ),
+                const Icon(
+                  Icons.chevron_right_rounded,
+                  color: AppColors.textMuted,
+                ),
+              ],
             ),
-            const Icon(Icons.chevron_right_rounded, color: AppColors.textMuted),
-          ],
+          ),
         ),
       ),
-    ).animate(delay: (45 * index).ms).fadeIn().slideX(begin: .04, end: 0);
+      index,
+      horizontal: true,
+    );
   }
 
   Widget _buildAgendaCard(_ScheduleItem item, int index) {
-    return InkWell(
-      onTap: () => _showDetails(item),
-      borderRadius: AppStyles.controlRadius,
-      child: _glass(
-        padding: const EdgeInsets.all(16),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: <Widget>[
-            Column(
+    return _entryMotion(
+      Semantics(
+        button: true,
+        label:
+            '${item.title}, ${item.statusLabel}, due ${_formatDateTime(item.deadlineAt)}',
+        child: InkWell(
+          onTap: () => _showDetails(item),
+          borderRadius: AppStyles.controlRadius,
+          child: _glass(
+            padding: const EdgeInsets.all(16),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: <Widget>[
-                Container(
-                  width: 46,
-                  height: 46,
-                  decoration: BoxDecoration(
-                    color: item.typeColor.withValues(alpha: .11),
-                    borderRadius: BorderRadius.circular(14),
-                  ),
-                  child: Icon(item.typeIcon, color: item.typeColor),
+                Column(
+                  children: <Widget>[
+                    Container(
+                      width: 46,
+                      height: 46,
+                      decoration: BoxDecoration(
+                        color: item.typeColor.withValues(alpha: .11),
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                      child: Icon(item.typeIcon, color: item.typeColor),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      item.timeLabel,
+                      style: const TextStyle(
+                        color: AppColors.textMuted,
+                        fontSize: 10,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ],
                 ),
-                const SizedBox(height: 6),
-                Text(
-                  item.timeLabel,
-                  style: const TextStyle(
-                    color: AppColors.textMuted,
-                    fontSize: 10,
-                    fontWeight: FontWeight.w800,
+                const SizedBox(width: 13),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: <Widget>[
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: <Widget>[
+                          Expanded(
+                            child: Text(
+                              item.title,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                color: AppColors.midnightInk,
+                                fontSize: 16,
+                                height: 1.22,
+                                fontWeight: FontWeight.w900,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          if (item.isNew) ...<Widget>[
+                            _newPill(),
+                            const SizedBox(width: 6),
+                          ],
+                          _statusPill(item),
+                        ],
+                      ),
+                      const SizedBox(height: 5),
+                      Text(
+                        '${item.moduleLabel} • ${item.type}',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: AppColors.textMuted,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      const SizedBox(height: 11),
+                      Wrap(
+                        spacing: 7,
+                        runSpacing: 7,
+                        children: <Widget>[
+                          _metaPill(
+                            Icons.location_on_outlined,
+                            item.venueLabel,
+                          ),
+                          if (item.durationMinutes != null)
+                            _metaPill(
+                              Icons.timelapse_rounded,
+                              '${item.durationMinutes} min',
+                            ),
+                          if (item.weightPercent != null)
+                            _metaPill(
+                              Icons.percent_rounded,
+                              '${_cleanNumber(item.weightPercent!)} weight',
+                            ),
+                        ],
+                      ),
+                      const SizedBox(height: 11),
+                      Row(
+                        children: <Widget>[
+                          _lecturerAvatar(item.lecturer, radius: 14),
+                          const SizedBox(width: 7),
+                          Expanded(
+                            child: Text(
+                              item.lecturer.name,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                color: AppColors.midnightInk,
+                                fontSize: 11,
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                          ),
+                          Text(
+                            item.isCompleted
+                                ? item.statusLabel
+                                : _countdown(item.deadlineAt),
+                            style: TextStyle(
+                              color: item.isOverdue
+                                  ? AppColors.danger
+                                  : item.typeColor,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w900,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
                   ),
                 ),
               ],
             ),
-            const SizedBox(width: 13),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: <Widget>[
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: <Widget>[
-                      Expanded(
-                        child: Text(
-                          item.title,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            color: AppColors.midnightInk,
-                            fontSize: 16,
-                            height: 1.22,
-                            fontWeight: FontWeight.w900,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      _statusPill(item),
-                    ],
-                  ),
-                  const SizedBox(height: 5),
-                  Text(
-                    '${item.moduleLabel} • ${item.type}',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      color: AppColors.textMuted,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  const SizedBox(height: 11),
-                  Wrap(
-                    spacing: 7,
-                    runSpacing: 7,
-                    children: <Widget>[
-                      _metaPill(Icons.location_on_outlined, item.venueLabel),
-                      if (item.durationMinutes != null)
-                        _metaPill(
-                          Icons.timelapse_rounded,
-                          '${item.durationMinutes} min',
-                        ),
-                      if (item.weightPercent != null)
-                        _metaPill(
-                          Icons.percent_rounded,
-                          '${_cleanNumber(item.weightPercent!)} weight',
-                        ),
-                    ],
-                  ),
-                  const SizedBox(height: 11),
-                  Row(
-                    children: <Widget>[
-                      _lecturerAvatar(item.lecturer, radius: 14),
-                      const SizedBox(width: 7),
-                      Expanded(
-                        child: Text(
-                          item.lecturer.name,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            color: AppColors.midnightInk,
-                            fontSize: 11,
-                            fontWeight: FontWeight.w800,
-                          ),
-                        ),
-                      ),
-                      Text(
-                        item.isCompleted
-                            ? 'Completed'
-                            : _countdown(item.scheduledAt),
-                        style: TextStyle(
-                          color: item.isOverdue
-                              ? AppColors.danger
-                              : item.typeColor,
-                          fontSize: 11,
-                          fontWeight: FontWeight.w900,
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-          ],
+          ),
         ),
       ),
-    )
+      index,
+    );
+  }
+
+  Widget _entryMotion(Widget child, int index, {bool horizontal = false}) {
+    if (_reduceMotion) return child;
+    final animation = child
         .animate(delay: (45 * index).ms)
-        .fadeIn(duration: 330.ms)
-        .slideY(begin: .06, end: 0);
+        .fadeIn(duration: 330.ms);
+    return horizontal
+        ? animation.slideX(begin: .04, end: 0)
+        : animation.slideY(begin: .06, end: 0);
   }
 
   Widget _statusPill(_ScheduleItem item) {
-    final color = item.isOverdue
-        ? AppColors.danger
-        : item.isCompleted
-            ? AppColors.success
-            : item.typeColor;
+    final color = switch (item.statusLabel) {
+      'Overdue' => AppColors.danger,
+      'Due soon' => AppColors.warning,
+      'Graded' => AppColors.vibeBlue,
+      'Submitted' || 'Completed' => AppColors.success,
+      _ => item.typeColor,
+    };
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
       decoration: BoxDecoration(
@@ -1146,6 +1304,28 @@ class _AssessmentsCalendarScreenState
           fontSize: 9,
           fontWeight: FontWeight.w900,
           letterSpacing: .35,
+        ),
+      ),
+    );
+  }
+
+  Widget _newPill() {
+    return Semantics(
+      label: 'Newly published assessment',
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
+        decoration: BoxDecoration(
+          color: AppColors.ogGold.withValues(alpha: .16),
+          borderRadius: AppStyles.pillRadius,
+        ),
+        child: const Text(
+          'NEW',
+          style: TextStyle(
+            color: AppColors.midnightInk,
+            fontSize: 8,
+            fontWeight: FontWeight.w900,
+            letterSpacing: .45,
+          ),
         ),
       ),
     );
@@ -1180,8 +1360,9 @@ class _AssessmentsCalendarScreenState
     return CircleAvatar(
       radius: radius,
       backgroundColor: AppColors.vibeBlue.withValues(alpha: .11),
-      backgroundImage:
-          lecturer.photoUrl.isEmpty ? null : NetworkImage(lecturer.photoUrl),
+      backgroundImage: lecturer.photoUrl.isEmpty
+          ? null
+          : NetworkImage(lecturer.photoUrl),
       child: lecturer.photoUrl.isEmpty
           ? Text(
               lecturer.initials,
@@ -1201,7 +1382,7 @@ class _AssessmentsCalendarScreenState
       context: context,
       isScrollControlled: true,
       showDragHandle: true,
-      backgroundColor: const Color(0xFFF8FAFF),
+      backgroundColor: AppColors.surfaceSoft,
       builder: (context) => SafeArea(
         child: Padding(
           padding: const EdgeInsets.fromLTRB(22, 0, 22, 26),
@@ -1235,6 +1416,13 @@ class _AssessmentsCalendarScreenState
                             fontWeight: FontWeight.w900,
                           ),
                         ),
+                        if (item.isNew) ...<Widget>[
+                          const SizedBox(height: 8),
+                          Align(
+                            alignment: Alignment.centerLeft,
+                            child: _newPill(),
+                          ),
+                        ],
                         const SizedBox(height: 5),
                         Text(
                           '${item.moduleLabel} • ${item.type}',
@@ -1254,11 +1442,13 @@ class _AssessmentsCalendarScreenState
                 'Date and time',
                 _formatDateTime(item.scheduledAt),
               ),
-              _detailRow(
-                Icons.location_on_outlined,
-                'Venue',
-                item.venueLabel,
-              ),
+              if (item.deadlineAt != item.scheduledAt)
+                _detailRow(
+                  Icons.timer_outlined,
+                  'Closes',
+                  _formatDateTime(item.deadlineAt),
+                ),
+              _detailRow(Icons.location_on_outlined, 'Venue', item.venueLabel),
               _detailRow(
                 Icons.timelapse_rounded,
                 'Duration',
@@ -1344,8 +1534,8 @@ class _AssessmentsCalendarScreenState
                 ),
                 child: Text(
                   item.isCompleted
-                      ? 'Completed'
-                      : _countdown(item.scheduledAt),
+                      ? item.statusLabel
+                      : _countdown(item.deadlineAt),
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     color: item.isOverdue ? AppColors.danger : item.typeColor,
@@ -1353,11 +1543,38 @@ class _AssessmentsCalendarScreenState
                   ),
                 ),
               ),
+              const SizedBox(height: 12),
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton.icon(
+                  onPressed: () {
+                    Navigator.of(context).pop();
+                    _openAssessment(item);
+                  },
+                  icon: Icon(
+                    item.isQuiz
+                        ? Icons.play_circle_outline_rounded
+                        : Icons.upload_file_rounded,
+                  ),
+                  label: Text(item.isQuiz ? 'Open quiz' : 'Open submission'),
+                ),
+              ),
             ],
           ),
         ),
       ),
     );
+  }
+
+  Future<void> _openAssessment(_ScheduleItem item) async {
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => item.isQuiz
+            ? const QuizScreen()
+            : const AssignmentSubmissionScreen(),
+      ),
+    );
+    if (mounted) unawaited(_loadSchedule(showLoader: false));
   }
 
   Widget _detailRow(IconData icon, String label, String value) {
@@ -1404,7 +1621,7 @@ class _AssessmentsCalendarScreenState
       context: context,
       isScrollControlled: true,
       showDragHandle: true,
-      backgroundColor: const Color(0xFFF8FAFF),
+      backgroundColor: AppColors.surfaceSoft,
       builder: (context) => StatefulBuilder(
         builder: (context, setSheetState) => SafeArea(
           child: Padding(
@@ -1423,8 +1640,8 @@ class _AssessmentsCalendarScreenState
                 ),
                 const SizedBox(height: 16),
                 DropdownButtonFormField<String>(
-                  initialValue: _moduleOptions
-                          .any((option) => option.value == module)
+                  initialValue:
+                      _moduleOptions.any((option) => option.value == module)
                       ? module
                       : 'All',
                   isExpanded: true,
@@ -1441,9 +1658,10 @@ class _AssessmentsCalendarScreenState
                   children: <Widget>[
                     Expanded(
                       child: DropdownButtonFormField<String>(
-                        initialValue: _typeOptions.contains(type) ? type : 'All',
-                        decoration:
-                            const InputDecoration(labelText: 'Type'),
+                        initialValue: _typeOptions.contains(type)
+                            ? type
+                            : 'All',
+                        decoration: const InputDecoration(labelText: 'Type'),
                         items: _typeOptions
                             .map(
                               (value) => DropdownMenuItem<String>(
@@ -1459,10 +1677,10 @@ class _AssessmentsCalendarScreenState
                     const SizedBox(width: 10),
                     Expanded(
                       child: DropdownButtonFormField<String>(
-                        initialValue:
-                            _statusOptions.contains(status) ? status : 'All',
-                        decoration:
-                            const InputDecoration(labelText: 'Status'),
+                        initialValue: _statusOptions.contains(status)
+                            ? status
+                            : 'All',
+                        decoration: const InputDecoration(labelText: 'Status'),
                         items: _statusOptions
                             .map(
                               (value) => DropdownMenuItem<String>(
@@ -1536,8 +1754,8 @@ class _AssessmentsCalendarScreenState
   List<DropdownMenuItem<String>> get _moduleOptions {
     final allowed = _myModulesOnly && _hasRegistrationMatch
         ? _modules
-            .where((module) => _registeredModuleIds.contains(module.id))
-            .toList()
+              .where((module) => _registeredModuleIds.contains(module.id))
+              .toList()
         : List<_ModuleRef>.from(_modules);
     allowed.sort((a, b) => a.displayName.compareTo(b.displayName));
     return <DropdownMenuItem<String>>[
@@ -1557,20 +1775,28 @@ class _AssessmentsCalendarScreenState
   }
 
   List<String> get _lecturerOptions {
-    final values = _items
-        .map((item) => item.lecturer.name)
-        .where((name) => name.isNotEmpty)
-        .toSet()
-        .toList()
-      ..sort();
+    final values =
+        _items
+            .map((item) => item.lecturer.name)
+            .where((name) => name.isNotEmpty)
+            .toSet()
+            .toList()
+          ..sort();
     return <String>['All', ...values];
   }
 
   List<String> get _statusOptions {
-    return const <String>['All', 'Upcoming', 'Completed', 'Overdue'];
+    return const <String>[
+      'All',
+      'Upcoming',
+      'Due soon',
+      'Submitted',
+      'Graded',
+      'Overdue',
+    ];
   }
 
-  Widget _buildEmptyState({Key? key}) {
+  Widget _buildEmptyState({Key? key, bool completed = false}) {
     return Center(
       key: key,
       child: Padding(
@@ -1592,8 +1818,8 @@ class _AssessmentsCalendarScreenState
               ),
             ),
             const SizedBox(height: 15),
-            const Text(
-              'No assessments match',
+            Text(
+              completed ? 'Nothing completed yet' : 'You’re all caught up',
               style: TextStyle(
                 color: AppColors.midnightInk,
                 fontSize: 17,
@@ -1601,8 +1827,10 @@ class _AssessmentsCalendarScreenState
               ),
             ),
             const SizedBox(height: 5),
-            const Text(
-              'Published tests, assignments and quizzes will appear here.',
+            Text(
+              completed
+                  ? 'Submitted and graded work will appear here.'
+                  : 'New assessments and overdue work will appear here.',
               textAlign: TextAlign.center,
               style: TextStyle(color: AppColors.textMuted),
             ),
@@ -1695,21 +1923,15 @@ class _AssessmentsCalendarScreenState
     required Widget child,
     EdgeInsetsGeometry padding = EdgeInsets.zero,
   }) {
-    return ClipRRect(
-      borderRadius: AppStyles.controlRadius,
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
-        child: Container(
-          padding: padding,
-          decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: .80),
-            borderRadius: AppStyles.controlRadius,
-            border: Border.all(color: Colors.white.withValues(alpha: .90)),
-            boxShadow: AppStyles.softShadow,
-          ),
-          child: child,
-        ),
+    return Container(
+      padding: padding,
+      decoration: BoxDecoration(
+        color: AppColors.surfaceElevated,
+        borderRadius: AppStyles.controlRadius,
+        border: Border.all(color: AppColors.outline),
+        boxShadow: AppStyles.softShadow,
       ),
+      child: child,
     );
   }
 
@@ -1792,7 +2014,7 @@ class _AssessmentsCalendarScreenState
       _text(value).toLowerCase().replaceAll(RegExp(r'\s+'), ' ');
 }
 
-enum _ScheduleView { calendar, agenda }
+enum _ScheduleView { calendar, upcoming, completed }
 
 class _ScheduleItem {
   const _ScheduleItem({
@@ -1804,12 +2026,16 @@ class _ScheduleItem {
     required this.description,
     required this.type,
     required this.scheduledAt,
+    required this.deadlineAt,
+    required this.createdAt,
+    this.publishedAt,
     required this.venue,
     required this.durationMinutes,
     required this.weightPercent,
     required this.lecturer,
     required this.completed,
     required this.overdue,
+    required this.progressStatus,
   });
 
   final String id;
@@ -1820,17 +2046,28 @@ class _ScheduleItem {
   final String description;
   final String type;
   final DateTime scheduledAt;
+  final DateTime deadlineAt;
+  final DateTime? createdAt;
+  final DateTime? publishedAt;
   final String venue;
   final int? durationMinutes;
   final double? weightPercent;
   final _LecturerProfile lecturer;
   final bool completed;
   final bool overdue;
+  final String progressStatus;
 
   bool get isCompleted => completed;
   bool get isOverdue => overdue && !completed;
-  String get statusLabel =>
-      isCompleted ? 'Completed' : isOverdue ? 'Overdue' : 'Upcoming';
+  bool get isQuiz => type.toLowerCase() == 'quiz';
+  String get statusLabel => progressStatus;
+  bool get isNew {
+    final created = createdAt;
+    if (created == null) return false;
+    final age = DateTime.now().difference(created.toLocal());
+    return !age.isNegative && age <= const Duration(hours: 48);
+  }
+
   String get venueLabel => venue.isEmpty ? 'Venue TBA' : venue;
   String get timeLabel {
     final local = scheduledAt.toLocal();
@@ -1878,72 +2115,119 @@ class _ScheduleItem {
     required _LecturerProfile? lecturer,
     required _ModuleRef? module,
   }) {
-    final date = DateTime.tryParse(
+    final date =
+        DateTime.tryParse(
           _AssessmentsCalendarScreenState._text(row['due_at']),
         ) ??
         DateTime.now();
     final status = submission?.status ?? '';
-    final completed = status == 'submitted' || status == 'graded';
+    final grade = submission?.grade ?? '';
+    final isGraded = status == 'graded' || grade.isNotEmpty;
+    final isSubmitted = !isGraded && status == 'submitted';
+    final completed = isSubmitted || isGraded;
+    final overdue = date.toLocal().isBefore(DateTime.now()) && !completed;
+    final dueSoon = !completed &&
+        !overdue &&
+        date.toLocal().difference(DateTime.now()) <= const Duration(days: 3);
     return _ScheduleItem(
       id: _AssessmentsCalendarScreenState._text(row['id']),
       moduleId: _AssessmentsCalendarScreenState._text(row['module_id']),
-      moduleLabel: module?.displayName ??
+      moduleLabel:
+          module?.displayName ??
           _AssessmentsCalendarScreenState._text(row['subject']),
       subject: _AssessmentsCalendarScreenState._text(row['subject']),
       title: _AssessmentsCalendarScreenState._text(row['title']),
-      description:
-          _AssessmentsCalendarScreenState._text(row['instructions']),
+      description: _AssessmentsCalendarScreenState._text(row['instructions']),
       type: _canonicalType(
         _AssessmentsCalendarScreenState._text(row['assessment_type']),
         fallback: 'Assignment',
       ),
       scheduledAt: date,
+      deadlineAt: date,
+      publishedAt: DateTime.tryParse(
+        _AssessmentsCalendarScreenState._text(
+          row['published_at'] ?? row['created_at'],
+        ),
+      ),
+      createdAt: DateTime.tryParse(
+        _AssessmentsCalendarScreenState._text(row['created_at']),
+      ),
       venue: _AssessmentsCalendarScreenState._text(row['venue']),
-      durationMinutes:
-          int.tryParse(row['duration_minutes']?.toString() ?? ''),
-      weightPercent:
-          double.tryParse(row['weight_percent']?.toString() ?? ''),
+      durationMinutes: int.tryParse(row['duration_minutes']?.toString() ?? ''),
+      weightPercent: double.tryParse(row['weight_percent']?.toString() ?? ''),
       lecturer: lecturer ?? const _LecturerProfile(name: 'Academic staff'),
       completed: completed,
-      overdue: date.toLocal().isBefore(DateTime.now()) && !completed,
+      overdue: overdue,
+      progressStatus: isGraded
+          ? 'Graded'
+          : isSubmitted
+          ? 'Submitted'
+          : overdue
+          ? 'Overdue'
+          : dueSoon
+          ? 'Due soon'
+          : 'Upcoming',
     );
   }
 
   factory _ScheduleItem.fromQuiz(
     Map<String, dynamic> row, {
+    required bool hasCompletedAttempt,
     required _LecturerProfile? lecturer,
     required _ModuleRef? module,
   }) {
-    final date = DateTime.tryParse(
+    final date =
+        DateTime.tryParse(
           _AssessmentsCalendarScreenState._text(row['quiz_date']),
         ) ??
         DateTime.now();
-    final lecturerName =
-        _AssessmentsCalendarScreenState._text(row['lecturer_name']);
+    final lecturerName = _AssessmentsCalendarScreenState._text(
+      row['lecturer_name'],
+    );
+    final deadline =
+        DateTime.tryParse(
+          _AssessmentsCalendarScreenState._text(row['closes_at']),
+        ) ??
+        date;
+    final overdue =
+        deadline.toLocal().isBefore(DateTime.now()) && !hasCompletedAttempt;
+    final dueSoon = !hasCompletedAttempt &&
+        !overdue &&
+        deadline.toLocal().difference(DateTime.now()) <=
+            const Duration(days: 3);
     return _ScheduleItem(
       id: _AssessmentsCalendarScreenState._text(row['id']),
       moduleId: _AssessmentsCalendarScreenState._text(row['module_id']),
       moduleLabel: module?.displayName ?? 'General',
       subject: module?.name ?? 'Quiz',
       title: _AssessmentsCalendarScreenState._text(row['title']),
-      description:
-          _AssessmentsCalendarScreenState._text(row['description']),
+      description: _AssessmentsCalendarScreenState._text(row['description']),
       type: _canonicalType(
         _AssessmentsCalendarScreenState._text(row['assessment_type']),
         fallback: 'Quiz',
       ),
       scheduledAt: date,
+      deadlineAt: deadline,
+      createdAt: DateTime.tryParse(
+        _AssessmentsCalendarScreenState._text(row['created_at']),
+      ),
       venue: _AssessmentsCalendarScreenState._text(row['venue']),
-      durationMinutes:
-          int.tryParse(row['duration_minutes']?.toString() ?? ''),
-      weightPercent:
-          double.tryParse(row['weight_percent']?.toString() ?? ''),
-      lecturer: lecturer ??
+      durationMinutes: int.tryParse(row['duration_minutes']?.toString() ?? ''),
+      weightPercent: double.tryParse(row['weight_percent']?.toString() ?? ''),
+      lecturer:
+          lecturer ??
           _LecturerProfile(
             name: lecturerName.isEmpty ? 'Academic staff' : lecturerName,
           ),
-      completed: date.toLocal().isBefore(DateTime.now()),
-      overdue: false,
+      completed: hasCompletedAttempt,
+      overdue: overdue,
+      progressStatus: hasCompletedAttempt
+          ? 'Graded'
+          : overdue
+          ? 'Overdue'
+          : dueSoon
+          ? 'Due soon'
+          : 'Upcoming',
     );
   }
 
@@ -1952,8 +2236,13 @@ class _ScheduleItem {
     required _ModuleRef? module,
   }) {
     final date = submission.dueDate ?? submission.submittedAt ?? DateTime.now();
-    final completed =
-        submission.status == 'submitted' || submission.status == 'graded';
+    final isGraded =
+        submission.status == 'graded' || submission.grade.isNotEmpty;
+    final completed = submission.status == 'submitted' || isGraded;
+    final overdue = date.toLocal().isBefore(DateTime.now()) && !completed;
+    final dueSoon = !completed &&
+        !overdue &&
+        date.toLocal().difference(DateTime.now()) <= const Duration(days: 3);
     return _ScheduleItem(
       id: submission.id,
       moduleId: submission.moduleId,
@@ -1963,12 +2252,23 @@ class _ScheduleItem {
       description: '',
       type: 'Assignment',
       scheduledAt: date,
+      deadlineAt: date,
+      createdAt: submission.createdAt,
       venue: 'Online submission',
       durationMinutes: null,
       weightPercent: null,
       lecturer: const _LecturerProfile(name: 'Academic staff'),
       completed: completed,
-      overdue: date.toLocal().isBefore(DateTime.now()) && !completed,
+      overdue: overdue,
+      progressStatus: isGraded
+          ? 'Graded'
+          : completed
+          ? 'Submitted'
+          : overdue
+          ? 'Overdue'
+          : dueSoon
+          ? 'Due soon'
+          : 'Upcoming',
     );
   }
 
@@ -1989,6 +2289,8 @@ class _SubmissionSummary {
     required this.status,
     required this.dueDate,
     required this.submittedAt,
+    required this.grade,
+    required this.createdAt,
   });
 
   final String id;
@@ -1999,6 +2301,8 @@ class _SubmissionSummary {
   final String status;
   final DateTime? dueDate;
   final DateTime? submittedAt;
+  final String grade;
+  final DateTime? createdAt;
 
   factory _SubmissionSummary.fromRow(Map<String, dynamic> row) {
     final due = DateTime.tryParse(
@@ -2010,13 +2314,18 @@ class _SubmissionSummary {
       moduleId: _AssessmentsCalendarScreenState._text(row['module_id']),
       title: _AssessmentsCalendarScreenState._text(row['title']),
       subject: _AssessmentsCalendarScreenState._text(row['subject']),
-      status:
-          _AssessmentsCalendarScreenState._text(row['status']).toLowerCase(),
+      status: _AssessmentsCalendarScreenState._text(
+        row['status'],
+      ).toLowerCase(),
       dueDate: due == null
           ? null
           : DateTime(due.year, due.month, due.day, 23, 59, 59),
       submittedAt: DateTime.tryParse(
         _AssessmentsCalendarScreenState._text(row['submitted_at']),
+      ),
+      grade: _AssessmentsCalendarScreenState._text(row['grade']),
+      createdAt: DateTime.tryParse(
+        _AssessmentsCalendarScreenState._text(row['created_at']),
       ),
     );
   }
@@ -2042,8 +2351,7 @@ class _ModuleRef {
   factory _ModuleRef.fromRow(Map<String, dynamic> row) {
     return _ModuleRef(
       id: _AssessmentsCalendarScreenState._text(row['id']),
-      programmeId:
-          _AssessmentsCalendarScreenState._text(row['programme_id']),
+      programmeId: _AssessmentsCalendarScreenState._text(row['programme_id']),
       level: _AssessmentsCalendarScreenState._text(row['level']),
       name: _AssessmentsCalendarScreenState._text(row['name']),
       code: _AssessmentsCalendarScreenState._text(row['code']),

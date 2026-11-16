@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:shimmer/shimmer.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../screens/student_profile_screen.dart';
+
 class CommentSheet extends StatefulWidget {
   const CommentSheet({super.key, required this.postId});
 
@@ -37,12 +39,14 @@ class _CommentSheetState extends State<CommentSheet> {
     try {
       final data = await Supabase.instance.client
           .from('profiles')
-          .select('name, photo_url')
+          .select('nickname, photo_url')
           .eq('id', user.id)
           .single();
       final map = data as Map<String, dynamic>?;
       setState(() {
-        _userName = map?['name'] as String? ?? user.email ?? 'OG Vibester';
+        _userName = (map?['nickname'] as String?)?.trim().isNotEmpty == true
+            ? (map!['nickname'] as String).trim()
+            : 'OG Vibester';
         _userAvatar = map?['photo_url'] as String?;
       });
     } catch (_) {
@@ -214,7 +218,9 @@ class _CommentSheetState extends State<CommentSheet> {
           CircleAvatar(
             radius: 16,
             backgroundImage: (_userAvatar != null && _userAvatar!.isNotEmpty) ? NetworkImage(_userAvatar!) : null,
-            child: (_userAvatar == null || _userAvatar!.isEmpty) ? Text((_userName ?? 'U')[0].toUpperCase()) : null,
+            child: (_userAvatar == null || _userAvatar!.isEmpty)
+                ? const Icon(Icons.person_rounded)
+                : null,
           ),
           const SizedBox(width: 8),
           if (_userName != null)
@@ -291,12 +297,7 @@ class _CommentSheetState extends State<CommentSheet> {
       return nickname;
     }
 
-    final name = (profile['name'] as String?)?.trim();
-    final surname = (profile['surname'] as String?)?.trim();
-    if ((name?.isNotEmpty ?? false) && (surname?.isNotEmpty ?? false)) {
-      return '$name ${surname!}';
-    }
-    return name ?? surname ?? 'OG Vibester';
+    return 'OG Vibester';
   }
 
   Widget _buildShimmerPlaceholder() {
@@ -327,6 +328,7 @@ class _CommentSheetState extends State<CommentSheet> {
     final likes = comment['likes_count'] as int? ?? 0;
     final timestamp = comment['created_at'];
     final avatarUrl = (profile?['photo_url'] as String?)?.trim();
+    final authorId = comment['author_id']?.toString();
 
     return Container(
       margin: EdgeInsets.only(left: parentId == null ? 0 : 24, bottom: 12),
@@ -340,26 +342,33 @@ class _CommentSheetState extends State<CommentSheet> {
         children: [
           Row(
             children: [
-              CircleAvatar(
-                backgroundImage: avatarUrl != null
-                    ? NetworkImage(avatarUrl)
-                    : null,
-                child: avatarUrl == null
-                    ? Text(
-                        authorName.isNotEmpty
-                            ? authorName[0].toUpperCase()
-                            : 'O',
-                      )
-                    : null,
+              InkWell(
+                customBorder: const CircleBorder(),
+                onTap: authorId == null
+                    ? null
+                    : () => StudentProfileNavigator.open(context, authorId),
+                child: CircleAvatar(
+                  backgroundImage: avatarUrl != null
+                      ? NetworkImage(avatarUrl)
+                      : null,
+                  child: avatarUrl == null
+                      ? const Icon(Icons.person_rounded)
+                      : null,
+                ),
               ),
               const SizedBox(width: 12),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      authorName,
-                      style: const TextStyle(fontWeight: FontWeight.w600),
+                    InkWell(
+                      onTap: authorId == null
+                          ? null
+                          : () => StudentProfileNavigator.open(context, authorId),
+                      child: Text(
+                        authorName,
+                        style: const TextStyle(fontWeight: FontWeight.w700),
+                      ),
                     ),
                     Text(
                       _formatTimestamp(timestamp),

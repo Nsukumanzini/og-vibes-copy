@@ -30,6 +30,7 @@ class VibeScaffold extends StatefulWidget {
 class _VibeScaffoldState extends State<VibeScaffold>
     with SingleTickerProviderStateMixin {
   late final AnimationController _ambientController;
+  bool _reduceMotion = false;
 
   @override
   void initState() {
@@ -37,7 +38,27 @@ class _VibeScaffoldState extends State<VibeScaffold>
     _ambientController = AnimationController(
       vsync: this,
       duration: const Duration(seconds: 10),
-    )..repeat(reverse: true);
+    );
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final reduce = MediaQuery.maybeOf(context)?.disableAnimations ?? false;
+    if (reduce == _reduceMotion) {
+      if (!reduce && !_ambientController.isAnimating) {
+        _ambientController.repeat(reverse: true);
+      }
+      return;
+    }
+    _reduceMotion = reduce;
+    if (reduce) {
+      _ambientController
+        ..stop()
+        ..value = 0.5;
+    } else {
+      _ambientController.repeat(reverse: true);
+    }
   }
 
   @override
@@ -48,8 +69,6 @@ class _VibeScaffoldState extends State<VibeScaffold>
 
   @override
   Widget build(BuildContext context) {
-    final bool reduceMotion =
-        MediaQuery.maybeOf(context)?.disableAnimations ?? false;
     final bool isDark = Theme.of(context).brightness == Brightness.dark;
     final LinearGradient background = isDark
         ? const LinearGradient(
@@ -64,7 +83,7 @@ class _VibeScaffoldState extends State<VibeScaffold>
       child: AnimatedBuilder(
         animation: _ambientController,
         builder: (BuildContext context, Widget? child) {
-          final double drift = reduceMotion ? 0.5 : _ambientController.value;
+          final double drift = _reduceMotion ? 0.5 : _ambientController.value;
           return Stack(
             children: [
               Positioned(

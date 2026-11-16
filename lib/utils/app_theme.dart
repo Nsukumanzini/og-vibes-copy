@@ -1,57 +1,71 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 
 import 'theme_constants.dart';
 
-/// Shared presentation layer for the OG Vibes "Aurora Glass" redesign.
-///
-/// It deliberately contains no navigation, data access, authentication or
-/// feature logic.
+/// The single source of truth for OG Vibes Material styling.
 class AppTheme {
   AppTheme._();
 
-  static ThemeData decorate(ThemeData base) {
-    final isDark = base.brightness == Brightness.dark;
-    final foreground =
-        isDark ? const Color(0xFFF4F7FF) : AppColors.midnightInk;
-    final muted = isDark ? const Color(0xFFAAB7CD) : AppColors.textMuted;
-    final surface = isDark ? const Color(0xFF172944) : Colors.white;
-    final glassFill = isDark
-        ? const Color(0xE61A2C49)
-        : Colors.white.withValues(alpha: 0.78);
-    final glassBorder =
-        isDark ? const Color(0xFF304663) : AppColors.glassBorder;
-    final OutlineInputBorder fieldBorder = OutlineInputBorder(
+  static const List<String> _fallbacks = <String>[
+    'NotoColorEmoji',
+    'NotoSansSymbols2',
+    'NotoSans',
+  ];
+
+  static ThemeData get light => _build(Brightness.light);
+  static ThemeData get dark => _build(Brightness.dark);
+
+  static ThemeData _build(Brightness brightness) {
+    final dark = brightness == Brightness.dark;
+    final foreground = dark ? AppColors.textOnDark : AppColors.midnightInk;
+    final muted = dark ? AppColors.textMutedDark : AppColors.textMuted;
+    final surface = dark ? AppColors.surfaceDark : AppColors.surface;
+    final canvas = dark ? AppColors.canvasDark : AppColors.auroraCanvas;
+    final border = dark ? AppColors.borderDark : AppColors.glassBorder;
+    final scheme = ColorScheme.fromSeed(
+      seedColor: AppColors.vibeBlue,
+      brightness: brightness,
+      primary: dark ? AppColors.blueLight : AppColors.vibeBlue,
+      secondary: AppColors.electricCyan,
+      tertiary: AppColors.ogGold,
+      error: AppColors.danger,
+      surface: surface,
+      onSurface: foreground,
+    );
+    final base = ThemeData(
+      useMaterial3: true,
+      brightness: brightness,
+      colorScheme: scheme,
+      scaffoldBackgroundColor: canvas,
+      fontFamily: 'Poppins',
+      fontFamilyFallback: _fallbacks,
+      visualDensity: VisualDensity.standard,
+      materialTapTargetSize: MaterialTapTargetSize.padded,
+    );
+    final textTheme = base.textTheme.apply(
+      bodyColor: foreground,
+      displayColor: foreground,
+      fontFamily: 'Poppins',
+      fontFamilyFallback: _fallbacks,
+    );
+    final fieldBorder = OutlineInputBorder(
       borderRadius: AppStyles.controlRadius,
-      borderSide: BorderSide(color: glassBorder),
+      borderSide: BorderSide(color: border),
     );
 
     return base.copyWith(
-      scaffoldBackgroundColor:
-          isDark ? const Color(0xFF071323) : AppColors.auroraCanvas,
-      colorScheme: base.colorScheme.copyWith(
-        primary: AppColors.vibeBlue,
-        secondary: AppColors.electricCyan,
-        tertiary: AppColors.ogGold,
-        error: AppColors.danger,
-        surface: surface,
-        onSurface: foreground,
-      ),
-      textTheme: base.textTheme.copyWith(
-        headlineSmall: GoogleFonts.poppins(
-          color: foreground,
+      textTheme: textTheme.copyWith(
+        headlineSmall: textTheme.headlineSmall?.copyWith(
           fontSize: 24,
           fontWeight: FontWeight.w800,
           letterSpacing: -0.6,
         ),
-        titleLarge: GoogleFonts.poppins(
-          color: foreground,
+        titleLarge: textTheme.titleLarge?.copyWith(
           fontSize: 20,
           fontWeight: FontWeight.w700,
           letterSpacing: -0.35,
         ),
-        titleMedium: GoogleFonts.poppins(
-          color: foreground,
+        titleMedium: textTheme.titleMedium?.copyWith(
           fontSize: 15,
           fontWeight: FontWeight.w700,
         ),
@@ -63,7 +77,8 @@ class AppTheme {
         elevation: 0,
         scrolledUnderElevation: 0,
         centerTitle: false,
-        titleTextStyle: GoogleFonts.poppins(
+        titleTextStyle: TextStyle(
+          fontFamily: 'Poppins',
           color: foreground,
           fontSize: 19,
           fontWeight: FontWeight.w700,
@@ -72,34 +87,29 @@ class AppTheme {
       ),
       cardTheme: CardThemeData(
         margin: EdgeInsets.zero,
-        color: glassFill,
+        color: surface,
         surfaceTintColor: Colors.transparent,
         elevation: 0,
         shadowColor: AppColors.deepBlue.withValues(alpha: 0.08),
         shape: RoundedRectangleBorder(
           borderRadius: AppStyles.bentoRadius,
-          side: BorderSide(color: glassBorder),
+          side: BorderSide(color: border),
         ),
       ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
-        fillColor: glassFill,
-        contentPadding:
-            const EdgeInsets.symmetric(horizontal: 18, vertical: 17),
-        labelStyle: TextStyle(
-          color: muted,
-          fontWeight: FontWeight.w600,
-        ),
+        fillColor: surface,
+        contentPadding: const EdgeInsets.symmetric(horizontal: 18, vertical: 17),
+        labelStyle: TextStyle(color: muted, fontWeight: FontWeight.w600),
         hintStyle: TextStyle(
-          color: muted.withValues(alpha: 0.74),
+          color: muted.withValues(alpha: 0.8),
           fontWeight: FontWeight.w500,
         ),
         prefixIconColor: muted,
         border: fieldBorder,
         enabledBorder: fieldBorder,
         focusedBorder: fieldBorder.copyWith(
-          borderSide:
-              const BorderSide(color: AppColors.vibeBlue, width: 1.6),
+          borderSide: const BorderSide(color: AppColors.vibeBlue, width: 1.6),
         ),
         errorBorder: fieldBorder.copyWith(
           borderSide: const BorderSide(color: AppColors.danger),
@@ -108,59 +118,58 @@ class AppTheme {
           borderSide: const BorderSide(color: AppColors.danger, width: 1.6),
         ),
       ),
+      filledButtonTheme: FilledButtonThemeData(
+        style: FilledButton.styleFrom(
+          minimumSize: const Size(48, 52),
+          padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 15),
+          shape: RoundedRectangleBorder(borderRadius: AppStyles.controlRadius),
+          textStyle: const TextStyle(fontWeight: FontWeight.w700),
+        ),
+      ),
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
           backgroundColor: AppColors.vibeBlue,
-          foregroundColor: Colors.white,
-          disabledBackgroundColor:
-              AppColors.vibeBlue.withValues(alpha: 0.45),
-          disabledForegroundColor: Colors.white70,
-          minimumSize: const Size(0, 54),
-          padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 16),
+          foregroundColor: AppColors.textOnBrand,
+          minimumSize: const Size(48, 52),
+          padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 15),
           elevation: 0,
-          shape: RoundedRectangleBorder(
-            borderRadius: AppStyles.controlRadius,
-          ),
-          textStyle: GoogleFonts.poppins(
-            fontWeight: FontWeight.w700,
-            fontSize: 14,
-          ),
+          shape: RoundedRectangleBorder(borderRadius: AppStyles.controlRadius),
+          textStyle: const TextStyle(fontWeight: FontWeight.w700),
         ),
       ),
       outlinedButtonTheme: OutlinedButtonThemeData(
         style: OutlinedButton.styleFrom(
           foregroundColor: AppColors.vibeBlue,
-          minimumSize: const Size(0, 52),
-          side: const BorderSide(color: AppColors.glassBorder),
-          shape: RoundedRectangleBorder(
-            borderRadius: AppStyles.controlRadius,
-          ),
-          textStyle: GoogleFonts.poppins(fontWeight: FontWeight.w700),
+          minimumSize: const Size(48, 52),
+          side: BorderSide(color: border),
+          shape: RoundedRectangleBorder(borderRadius: AppStyles.controlRadius),
+          textStyle: const TextStyle(fontWeight: FontWeight.w700),
         ),
+      ),
+      iconButtonTheme: IconButtonThemeData(
+        style: IconButton.styleFrom(minimumSize: const Size.square(48)),
+      ),
+      chipTheme: ChipThemeData(
+        side: BorderSide(color: border),
+        backgroundColor: surface,
+        selectedColor: AppColors.blueTint,
+        shape: RoundedRectangleBorder(borderRadius: AppStyles.pillRadius),
+        labelStyle: const TextStyle(fontWeight: FontWeight.w600),
       ),
       snackBarTheme: SnackBarThemeData(
         behavior: SnackBarBehavior.floating,
         backgroundColor: AppColors.midnightInk,
-        contentTextStyle: GoogleFonts.poppins(
-          color: Colors.white,
+        contentTextStyle: const TextStyle(
+          color: AppColors.textOnBrand,
           fontWeight: FontWeight.w600,
         ),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        shape: RoundedRectangleBorder(borderRadius: AppStyles.smallRadius),
         insetPadding: const EdgeInsets.all(16),
       ),
-      chipTheme: ChipThemeData(
-        side: BorderSide(color: glassBorder),
-        backgroundColor: glassFill,
-        selectedColor: AppColors.vibeBlue,
-        shape: RoundedRectangleBorder(borderRadius: AppStyles.pillRadius),
-        labelStyle: const TextStyle(fontWeight: FontWeight.w600),
+      progressIndicatorTheme: const ProgressIndicatorThemeData(
+        color: AppColors.vibeBlue,
       ),
-      progressIndicatorTheme:
-          const ProgressIndicatorThemeData(color: AppColors.vibeBlue),
-      dividerTheme: DividerThemeData(
-        color: glassBorder,
-        thickness: 1,
-      ),
+      dividerTheme: DividerThemeData(color: border, thickness: 1),
     );
   }
 }

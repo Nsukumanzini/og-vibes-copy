@@ -1,22 +1,53 @@
-﻿import 'dart:async';
+import 'dart:async';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
+import 'package:app_links/app_links.dart';
 
 import 'firebase_options.dart';
 import 'screens/splash_screen.dart';
 import 'screens/incoming_call_screen.dart';
 import 'screens/active_call_screen.dart';
+import 'screens/group_call_screen.dart';
+import 'screens/my_modules_screen.dart';
+import 'screens/email_confirmed_landing_screen.dart';
+import 'screens/signup_confirmation_screen.dart';
+import 'screens/reset_password_screen.dart';
+import 'screens/home_screen.dart';
+import 'screens/chat_detail_screen.dart';
+import 'screens/messages_screen.dart';
+import 'screens/group_chats_screen.dart';
+import 'screens/quiz_screen.dart';
+import 'screens/assessments_calendar_screen.dart';
+import 'screens/online_classes_screen.dart';
+import 'screens/announcements_screen.dart';
+import 'screens/events_screen.dart';
+import 'screens/friend_requests_screen.dart';
+import 'screens/market_screen.dart';
+import 'screens/lost_and_found_screen.dart';
+import 'screens/icass_checker_screen.dart';
+import 'screens/career_screen.dart';
+import 'screens/past_question_papers_screen.dart';
+import 'screens/slides_screen.dart';
 import 'services/call_service.dart';
+import 'services/accessibility_preferences.dart';
+import 'services/group_call_service.dart';
+import 'services/diagnostics_service.dart';
 import 'services/push_notification_service.dart';
+import 'services/presence_service.dart';
 import 'services/theme_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'utils/app_theme.dart';
+import 'widgets/app_notice_gate.dart';
+import 'widgets/notification_enrollment_gate.dart';
+import 'widgets/onboarding_checklist_gate.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await ThemePreferences.initialise();
+  await Future.wait([
+    ThemePreferences.initialise(),
+    AccessibilityPreferences.initialise(),
+  ]);
 
   try {
     final supported = kIsWeb || defaultTargetPlatform == TargetPlatform.android;
@@ -29,21 +60,28 @@ Future<void> main() async {
     debugPrint('Firebase initialization failed: $error');
     debugPrintStack(stackTrace: stackTrace);
   }
-  
+
   const supabaseUrl = String.fromEnvironment('SUPABASE_URL');
   const supabaseAnonKey = String.fromEnvironment('SUPABASE_ANON_KEY');
+  final supabaseConfigured =
+      supabaseUrl.isNotEmpty && supabaseAnonKey.isNotEmpty;
+
   // ignore: avoid_print
-  print('Loaded web configuration: SUPABASE_URL=${supabaseUrl.isEmpty ? "NOT SET" : "set"}, SUPABASE_ANON_KEY=${supabaseAnonKey.isEmpty ? "NOT SET" : "set"}');
+  print(
+    'Loaded web configuration: SUPABASE_URL=${supabaseUrl.isEmpty ? "NOT SET" : "set"}, SUPABASE_ANON_KEY=${supabaseAnonKey.isEmpty ? "NOT SET" : "set"}',
+  );
 
   // Initialize Supabase early so screens and services can safely use it.
   try {
-    if (supabaseUrl.isNotEmpty && supabaseAnonKey.isNotEmpty) {
+    if (supabaseConfigured) {
       await Supabase.initialize(url: supabaseUrl, anonKey: supabaseAnonKey);
       // ignore: avoid_print
       print('✓ Supabase initialized successfully.');
     } else {
       // ignore: avoid_print
-      print('⚠ Supabase keys not provided. For web, build with: flutter run -d edge --dart-define=SUPABASE_URL=... --dart-define=SUPABASE_ANON_KEY=...');
+      print(
+        '⚠ Supabase keys not provided. For web, build with: flutter run -d chrome --dart-define=SUPABASE_URL=... --dart-define=SUPABASE_ANON_KEY=...',
+      );
     }
   } catch (e, st) {
     // ignore: avoid_print
@@ -52,21 +90,20 @@ Future<void> main() async {
     print(st);
   }
 
-  // Global error handling to capture runtime exceptions in web console.
+  // Keep client failures observable during the pilot without storing message
+  // contents, access tokens or stack traces in the database.
   FlutterError.onError = (details) {
     FlutterError.presentError(details);
-    // Print to console so browser DevTools will show the stack trace.
-    // ignore: avoid_print
-    print('FlutterError: ${details.exceptionAsString()}');
-    // ignore: avoid_print
-    print(details.stack);
+    unawaited(DiagnosticsService.recordFlutterError(details));
   };
 
-  runApp(const MyApp());
+  runApp(MyApp(supabaseConfigured: supabaseConfigured));
 }
 
 class MyApp extends StatefulWidget {
-  const MyApp({super.key});
+  const MyApp({super.key, required this.supabaseConfigured});
+
+  final bool supabaseConfigured;
 
   @override
   State<MyApp> createState() => _MyAppState();
@@ -74,10 +111,22 @@ class MyApp extends StatefulWidget {
 
 class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   final CallService _callService = CallService();
+  final GroupCallService _groupCallService = GroupCallService.instance;
   final GlobalKey<NavigatorState> _navigatorKey = GlobalKey<NavigatorState>();
   StreamSubscription<AuthState>? _authSubscription;
   StreamSubscription<CallNotificationAction>? _callActionSubscription;
+  StreamSubscription<String>? _moduleInvitationSubscription;
+  StreamSubscription<StudentNotificationAction>?
+  _studentNotificationSubscription;
+  StreamSubscription<Uri>? _appLinkSubscription;
+  final AppLinks _appLinks = AppLinks();
+  String? _pendingModuleToken;
+  String? _pendingModuleInvitationId;
+  String? _lastModuleLinkSignature;
   bool _isShowingIncomingCall = false;
+  bool _isShowingPasswordRecovery = false;
+  final Set<String> _handledConfirmationTokens = <String>{};
+  String? _lastStudentNotificationSignature;
   String? _incomingUserId;
 
   @override
@@ -87,36 +136,175 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     _callActionSubscription = PushNotificationService.actions.listen(
       (action) => unawaited(_handleCallNotificationAction(action)),
     );
+    _moduleInvitationSubscription = PushNotificationService.moduleInvitations
+        .listen((invitationId) {
+          _openModuleInvitation(invitationId: invitationId);
+        });
+    _studentNotificationSubscription = PushNotificationService
+        .studentNotifications
+        .listen(_openStudentNotification);
+    unawaited(_configureModuleInvitationLinks());
     if (Firebase.apps.isNotEmpty) {
       unawaited(PushNotificationService.initialise());
     }
-    _authSubscription = Supabase.instance.client.auth.onAuthStateChange.listen((state) {
-      if (state.session?.user.id == null) {
-        _incomingUserId = null;
-        _callService.dispose();
-      } else {
+    if (widget.supabaseConfigured) {
+      _authSubscription = Supabase.instance.client.auth.onAuthStateChange
+          .listen((state) {
+            if (state.event == AuthChangeEvent.passwordRecovery) {
+              _openPasswordRecovery();
+            }
+            if (state.session?.user.id == null) {
+              _incomingUserId = null;
+              _callService.dispose();
+              _groupCallService.dispose();
+              unawaited(PresenceService.instance.stop());
+            } else {
+              unawaited(PresenceService.instance.start());
+              _listenForIncomingCalls();
+              if (Firebase.apps.isNotEmpty) {
+                unawaited(PushNotificationService.registerCurrentDevice());
+              }
+              _openPendingModuleInvitation();
+            }
+          });
+      if (Supabase.instance.client.auth.currentUser != null) {
+        unawaited(PresenceService.instance.start());
         _listenForIncomingCalls();
         if (Firebase.apps.isNotEmpty) {
           unawaited(PushNotificationService.registerCurrentDevice());
         }
       }
-    });
-    if (Supabase.instance.client.auth.currentUser != null) {
-      _listenForIncomingCalls();
-      if (Firebase.apps.isNotEmpty) {
-        unawaited(PushNotificationService.registerCurrentDevice());
-      }
     }
+  }
+
+  Future<void> _configureModuleInvitationLinks() async {
+    try {
+      final initial = await _appLinks.getInitialLink();
+      if (initial != null) _handleModuleInvitationUri(initial);
+      _appLinkSubscription = _appLinks.uriLinkStream.listen(
+        _handleModuleInvitationUri,
+        onError: (Object error) =>
+            debugPrint('Unable to process module invitation link: $error'),
+      );
+      if (kIsWeb) _handleModuleInvitationUri(Uri.base);
+    } catch (error) {
+      debugPrint('Module invitation links are unavailable: $error');
+    }
+  }
+
+  void _handleModuleInvitationUri(Uri uri) {
+    final confirmationToken = uri.queryParameters['token_hash'];
+    if (uri.host == 'student.ogvibes.co.za' &&
+        uri.queryParameters['type'] == 'email' &&
+        confirmationToken?.isNotEmpty == true) {
+      if (!_handledConfirmationTokens.add(confirmationToken!)) return;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _navigatorKey.currentState?.pushAndRemoveUntil(
+          MaterialPageRoute<void>(
+            builder: (_) =>
+                SignupConfirmationScreen(tokenHash: confirmationToken),
+          ),
+          (_) => false,
+        );
+      });
+      return;
+    }
+    if (uri.queryParameters['passwordRecovery'] == '1') {
+      _openPasswordRecovery();
+      return;
+    }
+    if (uri.queryParameters['emailConfirmed'] == '1') {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _navigatorKey.currentState?.pushAndRemoveUntil(
+          MaterialPageRoute<void>(
+            builder: (_) => const EmailConfirmedLandingScreen(),
+          ),
+          (_) => false,
+        );
+      });
+      return;
+    }
+    final token = uri.queryParameters['moduleToken'];
+    final invitationId = uri.queryParameters['moduleInvite'];
+    if (token?.isNotEmpty == true) {
+      _openModuleInvitation(token: token);
+    } else if (invitationId?.isNotEmpty == true) {
+      _openModuleInvitation(invitationId: invitationId);
+    }
+  }
+
+  void _openPasswordRecovery() {
+    if (_isShowingPasswordRecovery) return;
+    _isShowingPasswordRecovery = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final navigator = _navigatorKey.currentState;
+      if (navigator == null) {
+        _isShowingPasswordRecovery = false;
+        return;
+      }
+      navigator
+          .push(
+            MaterialPageRoute<void>(
+              builder: (_) => const ResetPasswordScreen(),
+            ),
+          )
+          .whenComplete(() => _isShowingPasswordRecovery = false);
+    });
+  }
+
+  void _openModuleInvitation({String? token, String? invitationId}) {
+    if (token == null && invitationId == null) return;
+    if (!widget.supabaseConfigured ||
+        Supabase.instance.client.auth.currentUser == null) {
+      _pendingModuleToken = token;
+      _pendingModuleInvitationId = invitationId;
+      return;
+    }
+    final signature = token != null ? 'token:$token' : 'id:$invitationId';
+    if (_lastModuleLinkSignature == signature) return;
+    _lastModuleLinkSignature = signature;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final navigator = _navigatorKey.currentState;
+      if (navigator == null) {
+        _pendingModuleToken = token;
+        _pendingModuleInvitationId = invitationId;
+        _lastModuleLinkSignature = null;
+        return;
+      }
+      navigator.push(
+        MaterialPageRoute<void>(
+          builder: (_) => MyModulesScreen(
+            initialToken: token,
+            highlightInvitationId: invitationId,
+          ),
+        ),
+      );
+    });
+  }
+
+  void _openPendingModuleInvitation() {
+    final token = _pendingModuleToken;
+    final invitationId = _pendingModuleInvitationId;
+    if (token == null && invitationId == null) return;
+    _pendingModuleToken = null;
+    _pendingModuleInvitationId = null;
+    _openModuleInvitation(token: token, invitationId: invitationId);
   }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
+      unawaited(PresenceService.instance.resume());
       _listenForIncomingCalls();
+    } else if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.inactive ||
+        state == AppLifecycleState.detached) {
+      unawaited(PresenceService.instance.pause());
     }
   }
 
   void _listenForIncomingCalls() {
+    if (!widget.supabaseConfigured) return;
     final currentUserId = Supabase.instance.client.auth.currentUser?.id;
     if (currentUserId == null) return;
     if (_incomingUserId == currentUserId) return;
@@ -126,19 +314,49 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
       currentUserId: currentUserId,
       onIncoming: (call) => unawaited(_showIncomingCall(call)),
     );
+    _groupCallService.listenForInvites(
+      currentUserId: currentUserId,
+      onIncoming: (invite) => unawaited(_showIncomingGroupCall(invite)),
+    );
     unawaited(_restorePendingCall());
   }
 
   Future<void> _restorePendingCall() async {
     final pending = await _callService.pendingIncomingCalls();
-    if (pending.isNotEmpty) await _showIncomingCall(pending.first);
+    if (pending.isNotEmpty) {
+      await _showIncomingCall(pending.first);
+      return;
+    }
+    final groupInvites = await _groupCallService.pendingInvites();
+    if (groupInvites.isNotEmpty) {
+      await _showIncomingGroupCall(groupInvites.first);
+    }
   }
 
   Future<void> _handleCallNotificationAction(
     CallNotificationAction action,
   ) async {
-    if (Supabase.instance.client.auth.currentUser == null) return;
+    if (!widget.supabaseConfigured ||
+        Supabase.instance.client.auth.currentUser == null) {
+      return;
+    }
     try {
+      if (action.isGroupCall) {
+        final invite = await _groupCallService.inviteById(action.callId);
+        if (invite == null ||
+            !const {'ringing', 'active'}.contains(invite.call['status'])) {
+          return;
+        }
+        if (action.action == 'decline') {
+          await _groupCallService.decline(action.callId);
+          return;
+        }
+        await _showIncomingGroupCall(
+          invite,
+          autoAccept: action.action == 'accept',
+        );
+        return;
+      }
       final call = await Supabase.instance.client
           .from('calls')
           .select()
@@ -158,6 +376,50 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     }
   }
 
+  void _openStudentNotification(StudentNotificationAction notification) {
+    if (!widget.supabaseConfigured ||
+        Supabase.instance.client.auth.currentUser == null) {
+      return;
+    }
+    final signature = '${notification.route}:${notification.entityId ?? ''}';
+    if (_lastStudentNotificationSignature == signature) return;
+    _lastStudentNotificationSignature = signature;
+
+    final Widget destination = switch (notification.route) {
+      'chat' when notification.entityId?.isNotEmpty == true => ChatDetailScreen(
+        chatId: notification.entityId!,
+        chatTitle: notification.title,
+      ),
+      'messages' => const MessagesScreen(),
+      'group_chats' => GroupChatsScreen(initialGroupId: notification.entityId),
+      'quiz' || 'quizzes' => const QuizScreen(),
+      'assessments' => const AssessmentsCalendarScreen(),
+      'online_classes' => const OnlineClassesScreen(),
+      'alerts' => const AnnouncementsScreen(),
+      'events' => const EventsScreen(),
+      'friends' => const FriendRequestsScreen(),
+      'marketplace' => const MarketScreen(),
+      'lost_found' => const LostAndFoundScreen(),
+      'icass' => const IcassCheckerScreen(),
+      'career' => const CareerScreen(),
+      'past_papers' => const PastQuestionPapersScreen(),
+      'lecture_slides' => const SlidesScreen(),
+      'home' || 'feed' || 'social' => const HomeScreen(),
+      _ => const HomeScreen(),
+    };
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final navigator = _navigatorKey.currentState;
+      if (navigator == null) {
+        _lastStudentNotificationSignature = null;
+        return;
+      }
+      navigator
+          .push(MaterialPageRoute<void>(builder: (_) => destination))
+          .whenComplete(() => _lastStudentNotificationSignature = null);
+    });
+  }
+
   Future<void> _showIncomingCall(
     Map<String, dynamic> call, {
     bool autoAccept = false,
@@ -167,32 +429,36 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     if (navigator == null) return;
     _isShowingIncomingCall = true;
     var name = 'OG Vibes student';
+    String? photoUrl;
     try {
       final profile = await Supabase.instance.client
           .from('profiles')
-          .select('name,surname,nickname')
+          .select('nickname,photo_url')
           .eq('id', call['caller_id'])
           .maybeSingle();
       final nickname = profile?['nickname']?.toString().trim() ?? '';
-      final full = [profile?['name'], profile?['surname']]
-          .whereType<String>()
-          .where((part) => part.trim().isNotEmpty)
-          .join(' ');
-      name = nickname.isNotEmpty ? nickname : (full.isNotEmpty ? full : name);
+      name = nickname.isNotEmpty ? nickname : name;
+      photoUrl = profile?['photo_url']?.toString();
     } catch (_) {}
     if (!mounted) {
       _isShowingIncomingCall = false;
       return;
     }
+    await PushNotificationService.cancelIncomingCallNotification(
+      call['id']?.toString() ?? '',
+    );
     if (autoAccept) {
       try {
         final session = await _callService.acceptIncomingCall(call);
-        await navigator.push(MaterialPageRoute(
-          builder: (_) => ActiveCallScreen(
-            session: session,
-            contactName: name,
+        await navigator.push(
+          MaterialPageRoute(
+            builder: (_) => ActiveCallScreen(
+              session: session,
+              contactName: name,
+              contactPhotoUrl: photoUrl,
+            ),
           ),
-        ));
+        );
       } catch (_) {
         final context = _navigatorKey.currentContext;
         if (context != null && context.mounted) {
@@ -207,39 +473,112 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
       }
       return;
     }
-    navigator.push(MaterialPageRoute(
-      fullscreenDialog: true,
-      builder: (_) => IncomingCallScreen(
-        contactName: name,
-        callType: call['type']?.toString() ?? 'audio',
-        onAccept: () async {
-          navigator.pop();
-          try {
-            final session = await _callService.acceptIncomingCall(call);
-            await navigator.push(MaterialPageRoute(
-              builder: (_) => ActiveCallScreen(
-                session: session,
-                contactName: name,
-              ),
-            ));
-          } catch (_) {
-            final context = _navigatorKey.currentContext;
-            if (context != null && context.mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Unable to connect this call. Please try again.')),
+    navigator.push(
+      MaterialPageRoute(
+        fullscreenDialog: true,
+        builder: (_) => IncomingCallScreen(
+          contactName: name,
+          contactPhotoUrl: photoUrl,
+          callType: call['type']?.toString() ?? 'audio',
+          onAccept: () async {
+            navigator.pop();
+            try {
+              final session = await _callService.acceptIncomingCall(call);
+              await navigator.push(
+                MaterialPageRoute(
+                  builder: (_) => ActiveCallScreen(
+                    session: session,
+                    contactName: name,
+                    contactPhotoUrl: photoUrl,
+                  ),
+                ),
               );
+            } catch (_) {
+              final context = _navigatorKey.currentContext;
+              if (context != null && context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text(
+                      'Unable to connect this call. Please try again.',
+                    ),
+                  ),
+                );
+              }
+            } finally {
+              _isShowingIncomingCall = false;
             }
-          } finally {
+          },
+          onDecline: () async {
+            navigator.pop();
+            await _callService.declineCall(call['id'].toString());
             _isShowingIncomingCall = false;
-          }
-        },
-        onDecline: () async {
-          navigator.pop();
-          await _callService.declineCall(call['id'].toString());
-          _isShowingIncomingCall = false;
-        },
+          },
+        ),
       ),
-    ));
+    );
+  }
+
+  Future<void> _showIncomingGroupCall(
+    GroupCallInvite invite, {
+    bool autoAccept = false,
+  }) async {
+    if (_isShowingIncomingCall ||
+        !const {'ringing', 'active'}.contains(invite.call['status'])) {
+      return;
+    }
+    final navigator = _navigatorKey.currentState;
+    if (navigator == null) return;
+    _isShowingIncomingCall = true;
+    await PushNotificationService.cancelIncomingCallNotification(invite.callId);
+
+    Future<void> accept() async {
+      try {
+        final session = await _groupCallService.accept(invite);
+        await navigator.push(
+          MaterialPageRoute<void>(
+            fullscreenDialog: true,
+            builder: (_) => GroupCallScreen(session: session),
+          ),
+        );
+      } catch (error) {
+        final context = _navigatorKey.currentContext;
+        if (context != null && context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                'Unable to join this group call. It may be full or finished.',
+              ),
+            ),
+          );
+        }
+      } finally {
+        _isShowingIncomingCall = false;
+      }
+    }
+
+    if (autoAccept) {
+      await accept();
+      return;
+    }
+    await navigator.push(
+      MaterialPageRoute<void>(
+        fullscreenDialog: true,
+        builder: (_) => IncomingCallScreen(
+          contactName: '${invite.callerName} • ${invite.groupName}',
+          contactPhotoUrl: invite.callerPhotoUrl,
+          callType: invite.callType,
+          onAccept: () async {
+            navigator.pop();
+            await accept();
+          },
+          onDecline: () async {
+            navigator.pop();
+            await _groupCallService.decline(invite.callId);
+            _isShowingIncomingCall = false;
+          },
+        ),
+      ),
+    );
   }
 
   @override
@@ -247,152 +586,48 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     WidgetsBinding.instance.removeObserver(this);
     _authSubscription?.cancel();
     _callActionSubscription?.cancel();
+    _moduleInvitationSubscription?.cancel();
+    _studentNotificationSubscription?.cancel();
+    _appLinkSubscription?.cancel();
     _callService.dispose();
+    _groupCallService.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    // --- SIGNUP SCREEN PALETTE ---
-    const primaryBlue = Color(0xFF2962FF); // The "Vibe" Blue
-    const accentCyan = Color(0xFF00E5FF); // The Blob/Accent color
-    const navyText = Color(0xFF0D47A1); // Headers
-    const bgTop = Color(0xFFF5F7FA); // Gradient Start
-
-    const fontFallback = ['NotoColorEmoji', 'NotoSansSymbols2', 'NotoSans'];
-
-    final baseTheme = ThemeData(
-      useMaterial3: true,
-      brightness: Brightness.light,
-      scaffoldBackgroundColor: bgTop, // Fallback color
-      primaryColor: primaryBlue,
-
-      colorScheme: ColorScheme.fromSeed(
-        seedColor: primaryBlue,
-        primary: primaryBlue,
-        secondary: accentCyan,
-        surface: Colors.white,
-        onSurface: Colors.black87,
-      ),
-    );
-
-    // --- TYPOGRAPHY ---
-    final textTheme = GoogleFonts.poppinsTextTheme(baseTheme.textTheme)
-        .copyWith(
-          // Match the Signup Headers
-          headlineSmall: GoogleFonts.poppins(
-            color: navyText,
-            fontWeight: FontWeight.w700,
-          ),
-          titleLarge: GoogleFonts.poppins(
-            color: navyText,
-            fontWeight: FontWeight.w600,
-          ),
-        );
-
-    TextStyle? addFallback(TextStyle? style) {
-      return style?.copyWith(fontFamilyFallback: fontFallback);
-    }
-
-    final fallbackTextTheme = textTheme.copyWith(
-      displayLarge: addFallback(textTheme.displayLarge),
-      bodyLarge: addFallback(textTheme.bodyLarge),
-      bodyMedium: addFallback(textTheme.bodyMedium),
-    );
-
-    final themed = baseTheme.copyWith(
-      textTheme: fallbackTextTheme,
-
-      // 1. APP BAR
-      appBarTheme: AppBarTheme(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        centerTitle: true,
-        iconTheme: IconThemeData(
-          color: Colors.grey[800],
-        ), // Back buttons are dark grey
-        titleTextStyle: GoogleFonts.poppins(
-          color: navyText,
-          fontWeight: FontWeight.bold,
-          fontSize: 20,
-        ),
-      ),
-
-      // 2. INPUT FIELDS (Match Signup Exactly)
-      inputDecorationTheme: InputDecorationTheme(
-        filled: true,
-        fillColor: Colors.grey[50], // The specific off-white from Signup
-        contentPadding: const EdgeInsets.symmetric(
-          vertical: 20,
-          horizontal: 20,
-        ),
-        labelStyle: TextStyle(color: Colors.grey[600]),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(16),
-          borderSide: BorderSide.none, // Default is clean
-        ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(16),
-          borderSide: BorderSide(color: Colors.grey.shade200),
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(16),
-          borderSide: const BorderSide(color: primaryBlue, width: 1.5),
-        ),
-        prefixIconColor: Colors.grey[600],
-      ),
-
-      // 3. BUTTONS (Rounded & Shadowed)
-      elevatedButtonTheme: ElevatedButtonThemeData(
-        style: ElevatedButton.styleFrom(
-          backgroundColor: primaryBlue,
-          foregroundColor: Colors.white,
-          elevation: 8,
-          shadowColor: primaryBlue.withValues(alpha: 0.4),
-          padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 24),
-          textStyle: GoogleFonts.poppins(
-            fontWeight: FontWeight.bold,
-            fontSize: 16,
-          ),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-          ),
-        ),
-      ),
-
-      // 4. CARDS
-      cardTheme: CardThemeData(
-        color: Colors.white,
-        elevation: 4,
-        shadowColor: Colors.black.withValues(alpha: 0.05), // Very subtle shadow
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-      ),
-    );
-
-    final darkBase = ThemeData(
-      useMaterial3: true,
-      brightness: Brightness.dark,
-      colorScheme: ColorScheme.fromSeed(
-        seedColor: primaryBlue,
-        brightness: Brightness.dark,
-        primary: const Color(0xFF7FA2FF),
-        secondary: accentCyan,
-        surface: const Color(0xFF0D1B31),
-      ),
-      textTheme: GoogleFonts.poppinsTextTheme(ThemeData.dark().textTheme),
-    );
-
     return ValueListenableBuilder<ThemeMode>(
       valueListenable: ThemePreferences.mode,
-      builder: (context, themeMode, _) => MaterialApp(
-        title: 'OG Vibes',
-        debugShowCheckedModeBanner: false,
-        navigatorKey: _navigatorKey,
-        theme: AppTheme.decorate(themed),
-        darkTheme: AppTheme.decorate(darkBase),
-        themeMode: themeMode,
-        home: const SplashScreen(),
-        builder: (context, child) => child ?? const SizedBox(),
+      builder: (context, themeMode, _) => ValueListenableBuilder<bool>(
+        valueListenable: AccessibilityPreferences.reduceMotion,
+        builder: (context, reduceMotion, _) => MaterialApp(
+          title: 'OG Vibes',
+          debugShowCheckedModeBanner: false,
+          navigatorKey: _navigatorKey,
+          theme: AppTheme.light,
+          darkTheme: AppTheme.dark,
+          themeMode: themeMode,
+          home: SplashScreen(supabaseConfigured: widget.supabaseConfigured),
+          builder: (context, child) {
+            final platformMedia = MediaQuery.of(context);
+            return MediaQuery(
+              data: platformMedia.copyWith(
+                disableAnimations:
+                    platformMedia.disableAnimations || reduceMotion,
+              ),
+              child: OnboardingChecklistGate(
+                enabled: widget.supabaseConfigured,
+                child: NotificationEnrollmentGate(
+                  enabled: widget.supabaseConfigured,
+                  child: AppNoticeGate(
+                    enabled: widget.supabaseConfigured,
+                    child: child ?? const SizedBox.shrink(),
+                  ),
+                ),
+              ),
+            );
+          },
+        ),
       ),
     );
   }

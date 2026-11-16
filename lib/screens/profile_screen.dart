@@ -8,6 +8,11 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'package:og_vibes_student/widgets/vibe_scaffold.dart';
 
+import 'my_posts_screen.dart';
+import '../services/offline_cache_service.dart';
+import '../services/diagnostics_service.dart';
+import '../utils/theme_constants.dart';
+
 Map<String, dynamic> mapProfileRowToUiProfile(Map<String, dynamic> row) {
   final name = ((row['name'] ?? '') as String).trim();
   final surname = ((row['surname'] ?? '') as String).trim();
@@ -15,11 +20,10 @@ Map<String, dynamic> mapProfileRowToUiProfile(Map<String, dynamic> row) {
   final campus = ((row['campus'] ?? '') as String).trim();
   final level = ((row['level'] ?? '') as String).trim();
   final photoUrl = ((row['photo_url'] ?? '') as String).trim();
-
-  final fullNameParts = [if (name.isNotEmpty) name, if (surname.isNotEmpty) surname];
+  final nickname = ((row['nickname'] ?? '') as String).trim();
 
   return {
-    'fullName': fullNameParts.isNotEmpty ? fullNameParts.join(' ') : 'Student',
+    'fullName': nickname.isNotEmpty ? nickname : 'OG Vibester',
     'name': name,
     'surname': surname,
     'department': department.isNotEmpty ? department : 'Not set',
@@ -27,6 +31,14 @@ Map<String, dynamic> mapProfileRowToUiProfile(Map<String, dynamic> row) {
     'level': level.isNotEmpty ? level : 'Not set',
     'photoUrl': photoUrl,
     'email': (row['email'] as String?)?.trim() ?? '',
+    'nickname': nickname,
+    'studentNumber': (row['student_number'] as String?)?.trim() ?? '',
+    'phone': (row['phone'] as String?)?.trim() ?? '',
+    'studentType': (row['student_type'] as String?)?.trim() ?? 'Student',
+    'gender': (row['gender'] as String?)?.trim() ?? 'Not set',
+    'role': (row['role'] as String?)?.trim() ?? 'student',
+    'verified': row['is_verified'] == true,
+    'createdAt': row['created_at']?.toString(),
   };
 }
 
@@ -44,6 +56,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
   final _departmentController = TextEditingController();
   final _campusController = TextEditingController();
   final _levelController = TextEditingController();
+  final _nicknameController = TextEditingController();
+  final _studentNumberController = TextEditingController();
+  final _phoneController = TextEditingController();
   final ImagePicker _imagePicker = ImagePicker();
   late Future<Map<String, dynamic>> _profileFuture;
   Uint8List? _selectedImageBytes;
@@ -64,6 +79,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
     _departmentController.dispose();
     _campusController.dispose();
     _levelController.dispose();
+    _nicknameController.dispose();
+    _studentNumberController.dispose();
+    _phoneController.dispose();
     super.dispose();
   }
 
@@ -80,6 +98,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
         ? ''
         : profile['level']?.toString() ?? '';
     _photoUrl = profile['photoUrl']?.toString();
+    _nicknameController.text = profile['nickname']?.toString() ?? '';
+    _studentNumberController.text = profile['studentNumber']?.toString() ?? '';
+    _phoneController.text = profile['phone']?.toString() ?? '';
   }
 
   Future<Map<String, dynamic>> _loadProfile() async {
@@ -94,20 +115,48 @@ class _ProfileScreenState extends State<ProfileScreen> {
         'level': 'Not set',
         'photoUrl': '',
         'email': '',
+        'nickname': '',
+        'studentNumber': '',
+        'phone': '',
+        'studentType': 'Student',
+        'gender': 'Not set',
+        'role': 'student',
+        'verified': false,
+        'createdAt': null,
       };
       await _populateControllers(fallback);
       return fallback;
     }
 
-    final response = await Supabase.instance.client
-        .from('profiles')
-        .select('name, surname, campus, department, level, photo_url, email')
-        .eq('id', user.id)
-        .maybeSingle();
+    Map<String, dynamic>? response;
+    try {
+      response = await Supabase.instance.client
+          .from('profiles')
+          .select(
+            'name, surname, nickname, campus, department, level, photo_url, '
+            'email, student_number, phone, student_type, gender, role, '
+            'is_verified, created_at',
+          )
+          .eq('id', user.id)
+          .maybeSingle();
+      if (response != null) {
+        unawaited(
+          OfflineCacheService.writeList('own_profile', <Map<String, dynamic>>[
+            response,
+          ], maxRecords: 1),
+        );
+      }
+    } catch (_) {
+      final cached = await OfflineCacheService.readList('own_profile');
+      response = cached.isEmpty ? null : cached.first;
+    }
 
     if (response == null) {
       final fallback = {
-        'fullName': user.userMetadata?['full_name']?.toString() ?? user.email?.split('@').first ?? 'Student',
+        'fullName':
+            user.userMetadata?['full_name']?.toString() ??
+            user.email?.split('@').first ??
+            'Student',
         'name': '',
         'surname': '',
         'department': 'Not set',
@@ -115,12 +164,22 @@ class _ProfileScreenState extends State<ProfileScreen> {
         'level': 'Not set',
         'photoUrl': '',
         'email': user.email ?? '',
+        'nickname': user.userMetadata?['nickname']?.toString() ?? '',
+        'studentNumber': user.userMetadata?['student_number']?.toString() ?? '',
+        'phone': user.phone ?? '',
+        'studentType': 'Student',
+        'gender': 'Not set',
+        'role': 'student',
+        'verified': user.emailConfirmedAt != null,
+        'createdAt': user.createdAt,
       };
       await _populateControllers(fallback);
       return fallback;
     }
 
-    final profile = mapProfileRowToUiProfile(Map<String, dynamic>.from(response));
+    final profile = mapProfileRowToUiProfile(
+      Map<String, dynamic>.from(response),
+    );
     await _populateControllers(profile);
     return profile;
   }
@@ -157,16 +216,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
       String? photoUrl;
       if (_selectedImageBytes != null) {
         final mimeType = _selectedImageMimeType ?? 'image/jpeg';
-        final fileName = '${user.id}.jpg';
+        final extension = mimeType.contains('png') ? 'png' : 'jpg';
+        final fileName =
+            '${user.id}/avatar_${DateTime.now().millisecondsSinceEpoch}.$extension';
         await Supabase.instance.client.storage
             .from('profile_images')
             .uploadBinary(
               fileName,
               _selectedImageBytes!,
-              fileOptions: FileOptions(
-                upsert: true,
-                contentType: mimeType,
-              ),
+              fileOptions: FileOptions(upsert: true, contentType: mimeType),
             );
 
         photoUrl = Supabase.instance.client.storage
@@ -180,15 +238,38 @@ class _ProfileScreenState extends State<ProfileScreen> {
         'department': _departmentController.text.trim(),
         'campus': _campusController.text.trim(),
         'level': _levelController.text.trim(),
+        'nickname': _nicknameController.text.trim(),
+        'student_number': _studentNumberController.text.trim(),
+        'phone': _phoneController.text.trim(),
       };
       if (photoUrl != null) {
         updateData['photo_url'] = photoUrl;
       }
 
-      await Supabase.instance.client.from('profiles').upsert({
-        'id': user.id,
-        ...updateData,
-      });
+      final updated = await Supabase.instance.client
+          .from('profiles')
+          .update(updateData)
+          .eq('id', user.id)
+          .select('id')
+          .maybeSingle();
+      if (updated == null) {
+        await Supabase.instance.client.from('profiles').insert({
+          'id': user.id,
+          'email': user.email ?? '',
+          ...updateData,
+          'student_type': 'Student',
+          'gender': 'Not set',
+        });
+      }
+      await Supabase.instance.client.auth.updateUser(
+        UserAttributes(
+          data: {
+            ...?user.userMetadata,
+            'nickname': _nicknameController.text.trim(),
+            if (photoUrl != null) 'avatar_url': photoUrl,
+          },
+        ),
+      );
 
       if (!mounted) return;
       setState(() {
@@ -201,13 +282,25 @@ class _ProfileScreenState extends State<ProfileScreen> {
         _profileFuture = _loadProfile();
       });
 
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Profile updated successfully.')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Profile updated successfully.')),
+      );
     } catch (error, stackTrace) {
+      unawaited(
+        DiagnosticsService.record(
+          'upload_failed_profile',
+          metadata: {'error_type': error.runtimeType.toString()},
+        ),
+      );
       debugPrint('Profile save error: $error');
       debugPrint('$stackTrace');
       if (!mounted) return;
       setState(() => _isSaving = false);
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Unable to save profile. Please try again.')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Unable to save profile. Please try again.'),
+        ),
+      );
     }
   }
 
@@ -215,7 +308,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   Widget build(BuildContext context) {
     return VibeScaffold(
       appBar: AppBar(
-        title: const Text('Profile'),
+        title: const Text('My profile'),
         leading: Navigator.canPop(context) ? const BackButton() : null,
       ),
       body: FutureBuilder<Map<String, dynamic>>(
@@ -255,9 +348,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Widget _buildProfile(Map<String, dynamic> profile) {
-    final fullName = profile['fullName']?.toString() ?? 'Student';
+    final fullName = profile['nickname']?.toString().trim().isNotEmpty == true
+        ? profile['nickname'].toString().trim()
+        : 'OG Vibester';
     final email = profile['email']?.toString() ?? '';
-    final photoUrl = _selectedImageBytes != null ? null : _photoUrl ?? profile['photoUrl']?.toString();
+    final photoUrl = _selectedImageBytes != null
+        ? null
+        : _photoUrl ?? profile['photoUrl']?.toString();
+    final verified =
+        profile['verified'] == true ||
+        Supabase.instance.client.auth.currentUser?.emailConfirmedAt != null;
 
     return SafeArea(
       child: GestureDetector(
@@ -267,33 +367,119 @@ class _ProfileScreenState extends State<ProfileScreen> {
           child: ListView(
             padding: const EdgeInsets.fromLTRB(20, 20, 20, 36),
             children: [
-              _buildHeader(fullName, email, photoUrl),
+              _buildHeader(fullName, email, photoUrl, verified),
               const SizedBox(height: 18),
-              _buildEditableField(_nameController, 'First Name', 'Enter your first name', true),
-              const SizedBox(height: 12),
-              _buildEditableField(_surnameController, 'Surname', 'Enter your surname', false),
-              const SizedBox(height: 12),
-              _buildEditableField(_departmentController, 'Department', 'Enter your department', false),
-              const SizedBox(height: 12),
-              _buildEditableField(_campusController, 'Campus', 'Enter your campus', false),
-              const SizedBox(height: 12),
-              _buildEditableField(_levelController, 'Level', 'Enter your academic level', false),
+              Card(
+                child: ListTile(
+                  leading: const CircleAvatar(
+                    child: Icon(Icons.dynamic_feed_rounded),
+                  ),
+                  title: const Text(
+                    'My posts',
+                    style: TextStyle(fontWeight: FontWeight.w800),
+                  ),
+                  subtitle: const Text(
+                    'View, edit, delete and reply to comments on your posts.',
+                  ),
+                  trailing: const Icon(Icons.arrow_forward_rounded),
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) => const MyPostsScreen(),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 14),
+              _sectionCard(
+                title: 'About you',
+                subtitle: 'Choose what other students see on your profile',
+                icon: Icons.badge_outlined,
+                children: [
+                  _buildEditableField(
+                    _nameController,
+                    'First name',
+                    'Enter your first name',
+                    true,
+                  ),
+                  _buildEditableField(
+                    _surnameController,
+                    'Surname',
+                    'Enter your surname',
+                    false,
+                  ),
+                  _buildEditableField(
+                    _nicknameController,
+                    'Nickname',
+                    'Your public OG Vibes name',
+                    true,
+                  ),
+                  _buildEditableField(
+                    _phoneController,
+                    'Phone number',
+                    'Optional contact number',
+                    false,
+                  ),
+                ],
+              ),
+              const SizedBox(height: 14),
+              _sectionCard(
+                title: 'Academic profile',
+                subtitle: 'Used to personalise modules and campus content',
+                icon: Icons.school_outlined,
+                children: [
+                  _buildEditableField(
+                    _studentNumberController,
+                    'Student number',
+                    'Your college student number',
+                    false,
+                  ),
+                  _buildEditableField(
+                    _departmentController,
+                    'Course or department',
+                    'Your programme',
+                    false,
+                  ),
+                  _buildEditableField(
+                    _campusController,
+                    'Campus',
+                    'Your campus',
+                    false,
+                  ),
+                  _buildEditableField(
+                    _levelController,
+                    'Academic level',
+                    'Your current level',
+                    false,
+                  ),
+                ],
+              ),
               const SizedBox(height: 18),
-              _buildAccountCard(email),
+              _buildAccountCard(email, profile, verified),
               const SizedBox(height: 24),
               ElevatedButton(
                 onPressed: _isSaving ? null : _saveProfile,
                 style: ElevatedButton.styleFrom(
                   padding: const EdgeInsets.symmetric(vertical: 16),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                  ),
                 ),
                 child: _isSaving
                     ? const SizedBox(
                         height: 20,
                         width: 20,
-                        child: CircularProgressIndicator(strokeWidth: 2.2, color: Colors.white),
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2.2,
+                          color: Colors.white,
+                        ),
                       )
-                    : const Text('Save changes', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+                    : const Text(
+                        'Save changes',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
               ),
             ],
           ),
@@ -302,14 +488,19 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  Widget _buildHeader(String fullName, String email, String? photoUrl) {
+  Widget _buildHeader(
+    String fullName,
+    String email,
+    String? photoUrl,
+    bool verified,
+  ) {
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         gradient: const LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [Color(0xFF0F4C81), Color(0xFF2962FF)],
+          colors: [AppColors.primaryStrong, AppColors.primaryAction],
         ),
         borderRadius: BorderRadius.circular(24),
       ),
@@ -326,12 +517,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   backgroundImage: _selectedImageBytes != null
                       ? MemoryImage(_selectedImageBytes!) as ImageProvider
                       : photoUrl != null && photoUrl.isNotEmpty
-                          ? NetworkImage(photoUrl)
-                          : null,
-                  child: _selectedImageBytes == null && (photoUrl == null || photoUrl.isEmpty)
-                      ? Text(
-                          fullName.isNotEmpty ? fullName[0].toUpperCase() : 'S',
-                          style: const TextStyle(color: Colors.white, fontSize: 32, fontWeight: FontWeight.w700),
+                      ? NetworkImage(photoUrl)
+                      : null,
+                  child:
+                      _selectedImageBytes == null &&
+                          (photoUrl == null || photoUrl.isEmpty)
+                      ? const Icon(
+                          Icons.person_rounded,
+                          color: Colors.white,
+                          size: 46,
                         )
                       : null,
                 ),
@@ -341,7 +535,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     color: Colors.white,
                     shape: BoxShape.circle,
                   ),
-                  child: const Icon(Icons.camera_alt, size: 20, color: Color(0xFF2962FF)),
+                  child: const Icon(
+                    Icons.camera_alt,
+                    size: 20,
+                    color: AppColors.primaryAction,
+                  ),
                 ),
               ],
             ),
@@ -350,7 +548,24 @@ class _ProfileScreenState extends State<ProfileScreen> {
           Text(
             fullName,
             textAlign: TextAlign.center,
-            style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w700),
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 22,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 10),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            alignment: WrapAlignment.center,
+            children: [
+              _pill(
+                verified ? 'Verified account' : 'Verification pending',
+                verified ? AppColors.successLight : AppColors.warning,
+              ),
+              _pill('OG Vibes student', AppColors.vibeBlue),
+            ],
           ),
           const SizedBox(height: 6),
           Text(
@@ -369,33 +584,86 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  Widget _buildEditableField(TextEditingController controller, String label, String hint, bool required) {
-    return TextFormField(
-      controller: controller,
-      validator: required
-          ? (value) {
-              if (value == null || value.trim().isEmpty) {
-                return 'This field is required.';
+  Widget _buildEditableField(
+    TextEditingController controller,
+    String label,
+    String hint,
+    bool required,
+  ) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 12),
+      child: TextFormField(
+        controller: controller,
+        validator: required
+            ? (value) {
+                if (value == null || value.trim().isEmpty) {
+                  return 'This field is required.';
+                }
+                return null;
               }
-              return null;
-            }
-          : null,
-      decoration: InputDecoration(
-        labelText: label,
-        hintText: hint,
-        filled: true,
-        fillColor: Colors.white,
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
+            : null,
+        decoration: InputDecoration(labelText: label, hintText: hint),
       ),
     );
   }
 
-  Widget _buildAccountCard(String email) {
+  Widget _sectionCard({
+    required String title,
+    required String subtitle,
+    required IconData icon,
+    required List<Widget> children,
+  }) {
+    return Card(
+      elevation: 0,
+      child: Padding(
+        padding: const EdgeInsets.all(18),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                CircleAvatar(child: Icon(icon)),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        title,
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                      Text(
+                        subtitle,
+                        style: const TextStyle(
+                          fontSize: 12,
+                          color: Colors.grey,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            ...children,
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAccountCard(
+    String email,
+    Map<String, dynamic> profile,
+    bool verified,
+  ) {
+    final createdAt = DateTime.tryParse(profile['createdAt']?.toString() ?? '');
     return Container(
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        color: const Color(0xFFF7F9FC),
+        color: AppColors.surfaceMuted,
         borderRadius: BorderRadius.circular(20),
       ),
       child: Column(
@@ -403,18 +671,38 @@ class _ProfileScreenState extends State<ProfileScreen> {
         children: [
           const Text(
             'Account',
-            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: Color(0xFF0F4C81)),
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.w700,
+              color: AppColors.primaryStrong,
+            ),
           ),
           const SizedBox(height: 10),
-          Text(
-            email.isNotEmpty ? email : 'No email connected yet.',
-            style: const TextStyle(fontSize: 14, color: Colors.black87),
+          _detailRow(
+            Icons.alternate_email_rounded,
+            'Email',
+            email.isNotEmpty ? email : 'Not connected',
           ),
-          const SizedBox(height: 6),
-          const Text(
-            'Your profile information is pulled from your Supabase profile record.',
-            style: TextStyle(fontSize: 13, color: Colors.black54),
+          const SizedBox(height: 14),
+          _detailRow(
+            Icons.verified_user_outlined,
+            'Account status',
+            verified ? 'Verified' : 'Pending verification',
           ),
+          const SizedBox(height: 14),
+          _detailRow(
+            Icons.groups_2_outlined,
+            'Student type',
+            profile['studentType']?.toString() ?? 'Student',
+          ),
+          if (createdAt != null) ...[
+            const SizedBox(height: 14),
+            _detailRow(
+              Icons.calendar_month_outlined,
+              'Member since',
+              '${createdAt.year}',
+            ),
+          ],
         ],
       ),
     );
@@ -424,15 +712,29 @@ class _ProfileScreenState extends State<ProfileScreen> {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Icon(icon, color: const Color(0xFF2962FF), size: 18),
+        Icon(icon, color: AppColors.primaryAction, size: 18),
         const SizedBox(width: 10),
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(label, style: const TextStyle(fontSize: 12, color: Colors.black54, fontWeight: FontWeight.w700)),
+              Text(
+                label,
+                style: const TextStyle(
+                  fontSize: 12,
+                  color: Colors.black54,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
               const SizedBox(height: 2),
-              Text(value, style: const TextStyle(fontSize: 14, color: Colors.black87, fontWeight: FontWeight.w600)),
+              Text(
+                value,
+                style: const TextStyle(
+                  fontSize: 14,
+                  color: Colors.black87,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
             ],
           ),
         ),
@@ -450,7 +752,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
       child: Text(
         label,
         style: TextStyle(
-          color: color == const Color(0xFFB9E8FF) ? const Color(0xFF0F4C81) : Colors.white,
+          color: color == const Color(0xFFB9E8FF)
+              ? AppColors.primaryStrong
+              : Colors.white,
           fontSize: 12,
           fontWeight: FontWeight.w600,
         ),

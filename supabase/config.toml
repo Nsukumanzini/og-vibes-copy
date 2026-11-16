@@ -1,0 +1,5 @@
+[functions.brevo-webhook]
+verify_jwt = false
+
+[functions.notification-push]
+verify_jwt = false

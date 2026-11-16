@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
@@ -7,7 +8,10 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../utils/theme_constants.dart';
 import '../widgets/vibe_scaffold.dart';
+import '../widgets/profile_photo_viewer.dart';
+import '../services/offline_cache_service.dart';
 import 'chat_detail_screen.dart';
+import 'student_profile_screen.dart';
 
 class FriendRequestsScreen extends StatefulWidget {
   const FriendRequestsScreen({super.key});
@@ -28,6 +32,8 @@ class _FriendRequestsScreenState extends State<FriendRequestsScreen>
   bool _loading = true;
   bool _refreshing = false;
   bool _filtersExpanded = false;
+  int _discoveryPages = 1;
+  bool _hasMoreStudents = false;
   String? _error;
   String _search = '';
   String _campus = 'All';
@@ -37,6 +43,27 @@ class _FriendRequestsScreenState extends State<FriendRequestsScreen>
 
   SupabaseClient get _supabase => Supabase.instance.client;
   User? get _user => _supabase.auth.currentUser;
+
+  Future<List<Map<String, dynamic>>> _studentDirectory(String userId) async {
+    final rows = <Map<String, dynamic>>[];
+    String? cursor;
+    for (var page = 0; page < _discoveryPages; page++) {
+      var query = _supabase
+          .from('profiles')
+          .select(
+            'id,nickname,campus,department,faculty,course,level,photo_url,is_verified,is_online,role',
+          )
+          .eq('role', 'student')
+          .neq('id', userId);
+      if (cursor != null) query = query.gt('id', cursor);
+      final batch = await query.order('id').limit(30);
+      rows.addAll(batch);
+      _hasMoreStudents = batch.length == 30;
+      if (!_hasMoreStudents) break;
+      cursor = batch.last['id'].toString();
+    }
+    return rows;
+  }
 
   @override
   void initState() {
@@ -76,28 +103,68 @@ class _FriendRequestsScreenState extends State<FriendRequestsScreen>
     }
 
     try {
-      final responses = await Future.wait<dynamic>(<Future<dynamic>>[
-        _supabase
-            .from('profiles')
-            .select(
-              'id, name, surname, nickname, campus, department, faculty, '
-              'course, level, photo_url, is_verified, is_online',
-            )
-            .neq('id', user.id)
-            .order('name'),
-        _supabase
-            .from('friend_requests')
-            .select(
-              'id, sender_id, receiver_id, status, created_at, updated_at',
-            )
-            .or('sender_id.eq.${user.id},receiver_id.eq.${user.id}')
-            .eq('status', 'pending')
-            .order('created_at', ascending: false),
-        _supabase
-            .from('friendships')
-            .select('user_id, friend_id, created_at')
-            .or('user_id.eq.${user.id},friend_id.eq.${user.id}'),
-      ]);
+      List<dynamic> responses;
+      try {
+        responses = await Future.wait<dynamic>(<Future<dynamic>>[
+          _studentDirectory(user.id),
+          _supabase
+              .from('friend_requests')
+              .select(
+                'id, sender_id, receiver_id, status, created_at, updated_at',
+              )
+              .or('sender_id.eq.${user.id},receiver_id.eq.${user.id}')
+              .eq('status', 'pending')
+              .order('created_at', ascending: false)
+              .limit(30),
+          _supabase
+              .from('friendships')
+              .select('user_id, friend_id, created_at')
+              .or('user_id.eq.${user.id},friend_id.eq.${user.id}')
+              .limit(30),
+        ]);
+        final knownIds = (responses[0] as List)
+            .map((row) => row['id'].toString())
+            .toSet();
+        final relatedIds =
+            <String>{
+                for (final row in responses[1] as List) ...[
+                  row['sender_id'].toString(),
+                  row['receiver_id'].toString(),
+                ],
+                for (final row in responses[2] as List) ...[
+                  row['user_id'].toString(),
+                  row['friend_id'].toString(),
+                ],
+              }
+              ..remove(user.id)
+              ..removeAll(knownIds);
+        final missing = relatedIds.toList();
+        for (var start = 0; start < missing.length; start += 30) {
+          final end = (start + 30).clamp(0, missing.length);
+          final profiles = await _supabase
+              .from('profiles')
+              .select(
+                'id,nickname,campus,department,faculty,course,level,photo_url,is_verified,is_online,role',
+              )
+              .eq('role', 'student')
+              .inFilter('id', missing.sublist(start, end));
+          (responses[0] as List).addAll(profiles);
+        }
+        unawaited(
+          OfflineCacheService.writeList(
+            'student_friends_v2',
+            <Map<String, dynamic>>[
+              {'results': responses},
+            ],
+            maxRecords: 1,
+          ),
+        );
+      } catch (_) {
+        _hasMoreStudents = false;
+        final cached = await OfflineCacheService.readList('student_friends_v2');
+        if (cached.isEmpty || cached.first['results'] is! List) rethrow;
+        responses = List<dynamic>.from(cached.first['results'] as List);
+      }
 
       final profileRows = List<Map<String, dynamic>>.from(
         responses[0] as List<dynamic>,
@@ -108,7 +175,10 @@ class _FriendRequestsScreenState extends State<FriendRequestsScreen>
       final friendshipRows = List<Map<String, dynamic>>.from(
         responses[2] as List<dynamic>,
       );
-      final profiles = profileRows.map(FriendProfile.fromRow).toList();
+      final profiles = profileRows
+          .where((row) => row['role'] == 'student')
+          .map(FriendProfile.fromRow)
+          .toList();
       final profileMap = <String, FriendProfile>{
         for (final profile in profiles) profile.id: profile,
       };
@@ -120,20 +190,24 @@ class _FriendRequestsScreenState extends State<FriendRequestsScreen>
 
       final counts = <String, int>{};
       if (profiles.isNotEmpty) {
-        final mutualRows = List<Map<String, dynamic>>.from(
-          await _supabase.rpc(
-                'get_mutual_friend_counts',
-                params: <String, dynamic>{
-                  'candidate_ids': profiles
-                      .map((profile) => profile.id)
-                      .toList(),
-                },
-              )
-              as List<dynamic>,
-        );
-        for (final row in mutualRows) {
-          counts[row['candidate_id'].toString()] =
-              int.tryParse(row['mutual_count']?.toString() ?? '') ?? 0;
+        try {
+          final mutualRows = List<Map<String, dynamic>>.from(
+            await _supabase.rpc(
+                  'get_mutual_friend_counts',
+                  params: <String, dynamic>{
+                    'candidate_ids': profiles
+                        .map((profile) => profile.id)
+                        .toList(),
+                  },
+                )
+                as List<dynamic>,
+          );
+          for (final row in mutualRows) {
+            counts[row['candidate_id'].toString()] =
+                int.tryParse(row['mutual_count']?.toString() ?? '') ?? 0;
+          }
+        } catch (_) {
+          // Mutual counts are optional while offline.
         }
       }
 
@@ -268,6 +342,17 @@ class _FriendRequestsScreenState extends State<FriendRequestsScreen>
     final user = _user;
     if (user == null) return;
     try {
+      final recipient = await _supabase
+          .from('profiles')
+          .select('id')
+          .eq('id', profile.id)
+          .eq('role', 'student')
+          .maybeSingle();
+      if (recipient == null) {
+        _showSnack('Friend requests are only available between students.');
+        await _loadData(showLoader: false);
+        return;
+      }
       HapticFeedback.mediumImpact();
       await _supabase.from('friend_requests').insert(<String, dynamic>{
         'sender_id': user.id,
@@ -503,6 +588,18 @@ class _FriendRequestsScreenState extends State<FriendRequestsScreen>
               const SizedBox(height: 10),
               _ProfileInfoPanel(profile: profile),
               const SizedBox(height: 24),
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: () {
+                    Navigator.pop(sheetContext);
+                    StudentProfileNavigator.open(context, profile.id);
+                  },
+                  icon: const Icon(Icons.account_circle_outlined),
+                  label: const Text('View full profile'),
+                ),
+              ),
+              const SizedBox(height: 10),
               if (relationship == FriendRelationship.friend)
                 Row(
                   children: <Widget>[
@@ -608,7 +705,7 @@ class _FriendRequestsScreenState extends State<FriendRequestsScreen>
   Widget build(BuildContext context) {
     return VibeScaffold(
       appBar: AppBar(
-        title: const Text('Find Friends'),
+        title: const Text('Find friends'),
         actions: <Widget>[
           IconButton(
             tooltip: 'Refresh connections',
@@ -655,6 +752,22 @@ class _FriendRequestsScreenState extends State<FriendRequestsScreen>
                       padding: const EdgeInsets.fromLTRB(16, 8, 16, 110),
                       sliver: _buildActiveTab(),
                     ),
+                    if (_hasMoreStudents)
+                      SliverToBoxAdapter(
+                        child: Padding(
+                          padding: const EdgeInsets.fromLTRB(16, 0, 16, 32),
+                          child: OutlinedButton.icon(
+                            onPressed: _refreshing
+                                ? null
+                                : () {
+                                    _discoveryPages++;
+                                    _loadData(showLoader: false);
+                                  },
+                            icon: const Icon(Icons.expand_more),
+                            label: const Text('Load more students'),
+                          ),
+                        ),
+                      ),
                   ],
                 ),
               ),
@@ -868,103 +981,96 @@ class _FriendRequestsScreenState extends State<FriendRequestsScreen>
   }
 
   Widget _buildFilterPanel() {
-    return ClipRRect(
-      borderRadius: AppStyles.bentoRadius,
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 14, sigmaY: 14),
-        child: Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: .83),
-            borderRadius: AppStyles.bentoRadius,
-            border: Border.all(color: AppColors.glassBorder),
-            boxShadow: AppStyles.softShadow,
-          ),
-          child: Column(
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceElevated,
+        borderRadius: AppStyles.bentoRadius,
+        border: Border.all(color: AppColors.outline),
+        boxShadow: AppStyles.softShadow,
+      ),
+      child: Column(
+        children: <Widget>[
+          Row(
             children: <Widget>[
-              Row(
-                children: <Widget>[
-                  const Icon(
-                    Icons.tune_rounded,
-                    color: AppColors.vibeBlue,
-                    size: 19,
-                  ),
-                  const SizedBox(width: 8),
-                  const Expanded(
-                    child: Text(
-                      'Refine your campus network',
-                      style: TextStyle(
-                        color: AppColors.midnightInk,
-                        fontWeight: FontWeight.w900,
-                      ),
-                    ),
-                  ),
-                  if (_activeFilterCount > 0)
-                    TextButton(
-                      onPressed: _clearFilters,
-                      child: const Text('Clear all'),
-                    ),
-                ],
+              const Icon(
+                Icons.tune_rounded,
+                color: AppColors.vibeBlue,
+                size: 19,
               ),
-              const SizedBox(height: 12),
-              LayoutBuilder(
-                builder: (context, constraints) {
-                  final twoColumns = constraints.maxWidth >= 620;
-                  final width = twoColumns
-                      ? (constraints.maxWidth - 10) / 2
-                      : constraints.maxWidth;
-                  return Wrap(
-                    spacing: 10,
-                    runSpacing: 10,
-                    children: <Widget>[
-                      SizedBox(
-                        width: width,
-                        child: _FilterDropdown(
-                          label: 'Campus',
-                          icon: Icons.location_on_outlined,
-                          value: _campus,
-                          options: _options((profile) => profile.campus),
-                          onChanged: (value) => setState(() => _campus = value),
-                        ),
-                      ),
-                      SizedBox(
-                        width: width,
-                        child: _FilterDropdown(
-                          label: 'Faculty',
-                          icon: Icons.account_balance_outlined,
-                          value: _faculty,
-                          options: _options((profile) => profile.faculty),
-                          onChanged: (value) =>
-                              setState(() => _faculty = value),
-                        ),
-                      ),
-                      SizedBox(
-                        width: width,
-                        child: _FilterDropdown(
-                          label: 'Course',
-                          icon: Icons.school_outlined,
-                          value: _course,
-                          options: _options((profile) => profile.course),
-                          onChanged: (value) => setState(() => _course = value),
-                        ),
-                      ),
-                      SizedBox(
-                        width: width,
-                        child: _FilterDropdown(
-                          label: 'Level',
-                          icon: Icons.stairs_outlined,
-                          value: _level,
-                          options: _options((profile) => profile.level),
-                          onChanged: (value) => setState(() => _level = value),
-                        ),
-                      ),
-                    ],
-                  );
-                },
+              const SizedBox(width: 8),
+              const Expanded(
+                child: Text(
+                  'Refine your campus network',
+                  style: TextStyle(
+                    color: AppColors.midnightInk,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
               ),
+              if (_activeFilterCount > 0)
+                TextButton(
+                  onPressed: _clearFilters,
+                  child: const Text('Clear all'),
+                ),
             ],
           ),
-        ),
+          const SizedBox(height: 12),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final twoColumns = constraints.maxWidth >= 620;
+              final width = twoColumns
+                  ? (constraints.maxWidth - 10) / 2
+                  : constraints.maxWidth;
+              return Wrap(
+                spacing: 10,
+                runSpacing: 10,
+                children: <Widget>[
+                  SizedBox(
+                    width: width,
+                    child: _FilterDropdown(
+                      label: 'Campus',
+                      icon: Icons.location_on_outlined,
+                      value: _campus,
+                      options: _options((profile) => profile.campus),
+                      onChanged: (value) => setState(() => _campus = value),
+                    ),
+                  ),
+                  SizedBox(
+                    width: width,
+                    child: _FilterDropdown(
+                      label: 'Faculty',
+                      icon: Icons.account_balance_outlined,
+                      value: _faculty,
+                      options: _options((profile) => profile.faculty),
+                      onChanged: (value) => setState(() => _faculty = value),
+                    ),
+                  ),
+                  SizedBox(
+                    width: width,
+                    child: _FilterDropdown(
+                      label: 'Course',
+                      icon: Icons.school_outlined,
+                      value: _course,
+                      options: _options((profile) => profile.course),
+                      onChanged: (value) => setState(() => _course = value),
+                    ),
+                  ),
+                  SizedBox(
+                    width: width,
+                    child: _FilterDropdown(
+                      label: 'Level',
+                      icon: Icons.stairs_outlined,
+                      value: _level,
+                      options: _options((profile) => profile.level),
+                      onChanged: (value) => setState(() => _level = value),
+                    ),
+                  ),
+                ],
+              );
+            },
+          ),
+        ],
       ),
     );
   }
@@ -1224,120 +1330,115 @@ class _ConnectionCard extends StatelessWidget {
       button: true,
       label:
           '${profile.displayName}, ${profile.course}, ${profile.campus}, ${profile.mutualFriendCount} mutual friends',
-      child: ClipRRect(
+      child: Material(
+        color: AppColors.surfaceElevated,
         borderRadius: AppStyles.bentoRadius,
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15),
-          child: Material(
-            color: Colors.white.withValues(alpha: .86),
-            child: InkWell(
-              onTap: onTap,
-              child: Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  borderRadius: AppStyles.bentoRadius,
-                  border: Border.all(color: AppColors.glassBorder),
-                  boxShadow: AppStyles.softShadow,
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+        child: InkWell(
+          onTap: onTap,
+          child: Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              borderRadius: AppStyles.bentoRadius,
+              border: Border.all(color: AppColors.outline),
+              boxShadow: AppStyles.softShadow,
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                Row(
                   children: <Widget>[
-                    Row(
-                      children: <Widget>[
-                        _ProfileAvatar(profile: profile, radius: 32),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
+                    _ProfileAvatar(profile: profile, radius: 32),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: <Widget>[
+                          Row(
                             children: <Widget>[
-                              Row(
-                                children: <Widget>[
-                                  Flexible(
-                                    child: Text(
-                                      profile.displayName,
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: const TextStyle(
-                                        color: AppColors.midnightInk,
-                                        fontSize: 17,
-                                        fontWeight: FontWeight.w900,
-                                      ),
-                                    ),
+                              Flexible(
+                                child: Text(
+                                  profile.displayName,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                    color: AppColors.midnightInk,
+                                    fontSize: 17,
+                                    fontWeight: FontWeight.w900,
                                   ),
-                                  if (profile.isVerified) ...<Widget>[
-                                    const SizedBox(width: 5),
-                                    const Icon(
-                                      Icons.verified_rounded,
-                                      color: AppColors.vibeBlue,
-                                      size: 17,
-                                    ),
-                                  ],
-                                ],
-                              ),
-                              const SizedBox(height: 4),
-                              Text(
-                                eyebrow,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: TextStyle(
-                                  color: accent,
-                                  fontSize: 9,
-                                  letterSpacing: .8,
-                                  fontWeight: FontWeight.w900,
                                 ),
                               ),
+                              if (profile.isVerified) ...<Widget>[
+                                const SizedBox(width: 5),
+                                const Icon(
+                                  Icons.verified_rounded,
+                                  color: AppColors.vibeBlue,
+                                  size: 17,
+                                ),
+                              ],
                             ],
                           ),
-                        ),
-                        const Icon(
-                          Icons.arrow_forward_ios_rounded,
-                          color: AppColors.textMuted,
-                          size: 14,
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 15),
-                    Text(
-                      profile.course,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: AppColors.midnightInk,
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                    const SizedBox(height: 5),
-                    Text(
-                      '${profile.faculty} • ${profile.level}',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: AppColors.textMuted,
-                        fontSize: 11,
-                      ),
-                    ),
-                    const Spacer(),
-                    Wrap(
-                      spacing: 6,
-                      runSpacing: 6,
-                      children: <Widget>[
-                        _MiniChip(
-                          icon: Icons.location_on_outlined,
-                          label: profile.campus,
-                        ),
-                        if (profile.mutualFriendCount > 0)
-                          _MiniChip(
-                            icon: Icons.people_outline_rounded,
-                            label: '${profile.mutualFriendCount} mutual',
-                            highlight: true,
+                          const SizedBox(height: 4),
+                          Text(
+                            eyebrow,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              color: accent,
+                              fontSize: 9,
+                              letterSpacing: .8,
+                              fontWeight: FontWeight.w900,
+                            ),
                           ),
-                      ],
+                        ],
+                      ),
                     ),
-                    const SizedBox(height: 14),
-                    Row(children: actions),
+                    const Icon(
+                      Icons.arrow_forward_ios_rounded,
+                      color: AppColors.textMuted,
+                      size: 14,
+                    ),
                   ],
                 ),
-              ),
+                const SizedBox(height: 15),
+                Text(
+                  profile.course,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: AppColors.midnightInk,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                const SizedBox(height: 5),
+                Text(
+                  '${profile.faculty} • ${profile.level}',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: AppColors.textMuted,
+                    fontSize: 11,
+                  ),
+                ),
+                const Spacer(),
+                Wrap(
+                  spacing: 6,
+                  runSpacing: 6,
+                  children: <Widget>[
+                    _MiniChip(
+                      icon: Icons.location_on_outlined,
+                      label: profile.campus,
+                    ),
+                    if (profile.mutualFriendCount > 0)
+                      _MiniChip(
+                        icon: Icons.people_outline_rounded,
+                        label: '${profile.mutualFriendCount} mutual',
+                        highlight: true,
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 14),
+                Row(children: actions),
+              ],
             ),
           ),
         ),
@@ -1357,22 +1458,23 @@ class _ProfileAvatar extends StatelessWidget {
     return Stack(
       clipBehavior: Clip.none,
       children: <Widget>[
-        CircleAvatar(
-          radius: radius,
-          backgroundColor: AppColors.vibeBlue.withValues(alpha: .12),
-          backgroundImage: profile.photoUrl == null
-              ? null
-              : NetworkImage(profile.photoUrl!),
-          child: profile.photoUrl == null
-              ? Text(
-                  profile.initials,
-                  style: TextStyle(
+        ProfilePhotoButton(
+          url: profile.photoUrl,
+          name: profile.displayName,
+          child: CircleAvatar(
+            radius: radius,
+            backgroundColor: AppColors.vibeBlue.withValues(alpha: .12),
+            backgroundImage: profile.photoUrl == null
+                ? null
+                : NetworkImage(profile.photoUrl!),
+            child: profile.photoUrl == null
+                ? Icon(
+                    Icons.person_rounded,
                     color: AppColors.vibeBlue,
-                    fontSize: radius * .55,
-                    fontWeight: FontWeight.w900,
-                  ),
-                )
-              : null,
+                    size: radius,
+                  )
+                : null,
+          ),
         ),
         Positioned(
           right: -1,
@@ -1806,17 +1908,12 @@ class FriendProfile {
 
   factory FriendProfile.fromRow(Map<String, dynamic> row) {
     final nickname = row['nickname']?.toString().trim() ?? '';
-    final fullName = '${row['name'] ?? ''} ${row['surname'] ?? ''}'.trim();
     final department = row['department']?.toString().trim() ?? '';
     final course = row['course']?.toString().trim() ?? '';
     final faculty = row['faculty']?.toString().trim() ?? '';
     return FriendProfile(
       id: row['id'].toString(),
-      displayName: nickname.isNotEmpty
-          ? nickname
-          : fullName.isNotEmpty
-          ? fullName
-          : 'OG Student',
+      displayName: nickname.isNotEmpty ? nickname : 'OG Vibester',
       campus: _valueOr(row['campus'], 'Campus not set'),
       faculty: faculty.isNotEmpty ? faculty : 'Faculty not set',
       course: course.isNotEmpty

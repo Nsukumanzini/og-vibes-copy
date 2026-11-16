@@ -1,4 +1,4 @@
-import 'dart:typed_data';
+import 'dart:async';
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
@@ -7,9 +7,12 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../services/diagnostics_service.dart';
+
 import '../utils/theme_constants.dart';
 import '../widgets/vibe_scaffold.dart';
 import 'chat_detail_screen.dart';
+import '../services/offline_cache_service.dart';
 
 class LostAndFoundScreen extends StatefulWidget {
   const LostAndFoundScreen({super.key});
@@ -69,24 +72,42 @@ class _LostAndFoundScreenState extends State<LostAndFoundScreen>
     }
 
     try {
-      final responses = await Future.wait<dynamic>(<Future<dynamic>>[
-        _supabase
-            .from('lost_and_found_items')
-            .select(
-              'id, user_id, title, found_at, collect_at, requirements, '
-              'image_url, image_path, status, report_type, description, '
-              'category, incident_at, claim_question, reward_text, created_at, '
-              'updated_at',
-            )
-            .order('created_at', ascending: false),
-        _supabase
-            .from('lost_and_found_claims')
-            .select(
-              'id, item_id, claimant_id, verification_answer, status, '
-              'owner_note, created_at, responded_at',
-            )
-            .order('created_at', ascending: false),
-      ]);
+      List<dynamic> responses;
+      try {
+        responses = await Future.wait<dynamic>(<Future<dynamic>>[
+          _supabase
+              .from('lost_and_found_items')
+              .select(
+                'id, user_id, title, found_at, collect_at, requirements, '
+                'image_url, image_path, status, report_type, description, '
+                'category, incident_at, claim_question, reward_text, created_at, '
+                'updated_at',
+              )
+              .order('created_at', ascending: false)
+              .limit(30),
+          _supabase
+              .from('lost_and_found_claims')
+              .select(
+                'id, item_id, claimant_id, verification_answer, status, '
+                'owner_note, created_at, responded_at',
+              )
+              .order('created_at', ascending: false)
+              .limit(30),
+        ]);
+        unawaited(
+          OfflineCacheService.writeList(
+            'lost_and_found',
+            <Map<String, dynamic>>[
+              {'results': responses},
+            ],
+            maxRecords: 1,
+          ),
+        );
+      } catch (_) {
+        final cached = await OfflineCacheService.readList('lost_and_found');
+        if (cached.isEmpty || cached.first['results'] is! List) rethrow;
+        responses = List<dynamic>.from(cached.first['results'] as List);
+      }
 
       final reportRows = List<Map<String, dynamic>>.from(
         responses[0] as List<dynamic>,
@@ -170,7 +191,7 @@ class _LostAndFoundScreenState extends State<LostAndFoundScreen>
   Widget build(BuildContext context) {
     return VibeScaffold(
       appBar: AppBar(
-        title: const Text('Lost & Found'),
+        title: const Text('Lost and found'),
         actions: <Widget>[
           IconButton(
             tooltip: 'Refresh reports',
@@ -1131,6 +1152,12 @@ class _LostAndFoundScreenState extends State<LostAndFoundScreen>
               if (!sheetContext.mounted) return;
               Navigator.pop(sheetContext, true);
             } catch (error) {
+              unawaited(
+                DiagnosticsService.record(
+                  'upload_failed_lost_and_found',
+                  metadata: {'error_type': error.runtimeType.toString()},
+                ),
+              );
               setSheetState(() => submitting = false);
               _showSnack(_friendlyError(error));
             }
@@ -1666,130 +1693,124 @@ class _ReportCard extends StatelessWidget {
       button: true,
       label:
           '${report.reportTypeLabel} item: ${report.title}, ${report.statusLabel}',
-      child: ClipRRect(
+      child: Material(
+        color: AppColors.surfaceElevated,
         borderRadius: AppStyles.bentoRadius,
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
-          child: Material(
-            color: Colors.white.withValues(alpha: .86),
-            child: InkWell(
-              onTap: onTap,
-              child: Container(
-                decoration: BoxDecoration(
-                  borderRadius: AppStyles.bentoRadius,
-                  border: Border.all(color: AppColors.glassBorder),
-                  boxShadow: AppStyles.softShadow,
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: <Widget>[
-                    Expanded(
-                      flex: 5,
-                      child: Stack(
-                        fit: StackFit.expand,
-                        children: <Widget>[
-                          _Photo(report: report),
-                          DecoratedBox(
-                            decoration: BoxDecoration(
-                              gradient: LinearGradient(
-                                colors: <Color>[
-                                  Colors.transparent,
-                                  AppColors.midnightInk.withValues(alpha: .66),
-                                ],
-                                begin: Alignment.topCenter,
-                                end: Alignment.bottomCenter,
-                              ),
-                            ),
+        child: InkWell(
+          onTap: onTap,
+          child: Container(
+            decoration: BoxDecoration(
+              borderRadius: AppStyles.bentoRadius,
+              border: Border.all(color: AppColors.outline),
+              boxShadow: AppStyles.softShadow,
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                Expanded(
+                  flex: 5,
+                  child: Stack(
+                    fit: StackFit.expand,
+                    children: <Widget>[
+                      _Photo(report: report),
+                      DecoratedBox(
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            colors: <Color>[
+                              Colors.transparent,
+                              AppColors.midnightInk.withValues(alpha: .66),
+                            ],
+                            begin: Alignment.topCenter,
+                            end: Alignment.bottomCenter,
                           ),
-                          Positioned(
-                            top: 12,
-                            left: 12,
-                            child: _TypePill(report: report),
-                          ),
-                          Positioned(
-                            top: 12,
-                            right: 12,
-                            child: _StatusPill(report: report),
-                          ),
-                          Positioned(
-                            left: 14,
-                            right: 14,
-                            bottom: 12,
-                            child: Text(
-                              report.title,
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 18,
-                                height: 1.1,
-                                fontWeight: FontWeight.w900,
-                              ),
-                            ),
-                          ),
-                        ],
+                        ),
                       ),
-                    ),
-                    Expanded(
-                      flex: 3,
-                      child: Padding(
-                        padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
+                      Positioned(
+                        top: 12,
+                        left: 12,
+                        child: _TypePill(report: report),
+                      ),
+                      Positioned(
+                        top: 12,
+                        right: 12,
+                        child: _StatusPill(report: report),
+                      ),
+                      Positioned(
+                        left: 14,
+                        right: 14,
+                        bottom: 12,
+                        child: Text(
+                          report.title,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 18,
+                            height: 1.1,
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Expanded(
+                  flex: 3,
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: <Widget>[
+                        _CompactDetail(
+                          icon: Icons.location_on_outlined,
+                          value: report.location,
+                        ),
+                        const SizedBox(height: 7),
+                        _CompactDetail(
+                          icon: Icons.schedule_rounded,
+                          value: '${report.formattedDate} • ${report.category}',
+                        ),
+                        const Spacer(),
+                        Row(
                           children: <Widget>[
-                            _CompactDetail(
-                              icon: Icons.location_on_outlined,
-                              value: report.location,
-                            ),
-                            const SizedBox(height: 7),
-                            _CompactDetail(
-                              icon: Icons.schedule_rounded,
-                              value:
-                                  '${report.formattedDate} • ${report.category}',
-                            ),
+                            if (report.rewardText.isNotEmpty)
+                              const _MiniBadge(
+                                icon: Icons.card_giftcard_rounded,
+                                label: 'Reward',
+                                color: AppColors.warning,
+                              ),
+                            if (mine && claimCount > 0) ...<Widget>[
+                              if (report.rewardText.isNotEmpty)
+                                const SizedBox(width: 6),
+                              _MiniBadge(
+                                icon: Icons.fact_check_outlined,
+                                label:
+                                    '$claimCount claim${claimCount == 1 ? '' : 's'}',
+                                color: AppColors.vibeBlue,
+                              ),
+                            ],
+                            if (claim != null) ...<Widget>[
+                              if (report.rewardText.isNotEmpty)
+                                const SizedBox(width: 6),
+                              _MiniBadge(
+                                icon: Icons.verified_user_outlined,
+                                label: claim!.label,
+                                color: claim!.color,
+                              ),
+                            ],
                             const Spacer(),
-                            Row(
-                              children: <Widget>[
-                                if (report.rewardText.isNotEmpty)
-                                  const _MiniBadge(
-                                    icon: Icons.card_giftcard_rounded,
-                                    label: 'Reward',
-                                    color: AppColors.warning,
-                                  ),
-                                if (mine && claimCount > 0) ...<Widget>[
-                                  if (report.rewardText.isNotEmpty)
-                                    const SizedBox(width: 6),
-                                  _MiniBadge(
-                                    icon: Icons.fact_check_outlined,
-                                    label:
-                                        '$claimCount claim${claimCount == 1 ? '' : 's'}',
-                                    color: AppColors.vibeBlue,
-                                  ),
-                                ],
-                                if (claim != null) ...<Widget>[
-                                  if (report.rewardText.isNotEmpty)
-                                    const SizedBox(width: 6),
-                                  _MiniBadge(
-                                    icon: Icons.verified_user_outlined,
-                                    label: claim!.label,
-                                    color: claim!.color,
-                                  ),
-                                ],
-                                const Spacer(),
-                                const Icon(
-                                  Icons.arrow_forward_rounded,
-                                  color: AppColors.vibeBlue,
-                                  size: 19,
-                                ),
-                              ],
+                            const Icon(
+                              Icons.arrow_forward_rounded,
+                              color: AppColors.vibeBlue,
+                              size: 19,
                             ),
                           ],
                         ),
-                      ),
+                      ],
                     ),
-                  ],
+                  ),
                 ),
-              ),
+              ],
             ),
           ),
         ),
@@ -2088,7 +2109,7 @@ class _DetailChip extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 8),
       decoration: BoxDecoration(
-        color: const Color(0xFFF3F6FC),
+        color: AppColors.canvas,
         borderRadius: AppStyles.pillRadius,
         border: Border.all(color: AppColors.glassBorder),
       ),

@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
-import 'dart:ui';
 
 import 'package:desktop_drop/desktop_drop.dart';
 import 'package:file_picker/file_picker.dart';
@@ -12,11 +11,14 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+
+import '../services/diagnostics_service.dart';
 import 'package:syncfusion_flutter_pdfviewer/pdfviewer.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../utils/theme_constants.dart';
 import '../widgets/vibe_scaffold.dart';
+import '../services/download_history_service.dart';
 
 class DocumentWalletScreen extends StatefulWidget {
   const DocumentWalletScreen({super.key});
@@ -26,8 +28,8 @@ class DocumentWalletScreen extends StatefulWidget {
 }
 
 class _DocumentWalletScreenState extends State<DocumentWalletScreen> {
-  static const capacity = 500 * 1024 * 1024;
-  static const maxFileSize = 50 * 1024 * 1024;
+  static const capacity = 30 * 1024 * 1024;
+  static const maxFileSize = 30 * 1024 * 1024;
   static const folders = <String>[
     'Personal',
     'Academic',
@@ -151,12 +153,16 @@ class _DocumentWalletScreenState extends State<DocumentWalletScreen> {
 
   Future<void> queueFiles(List<PendingFile> files) async {
     var rejected = 0;
+    var remaining = (capacity - used).clamp(0, capacity);
     final accepted = <UploadTask>[];
     for (final file in files) {
-      if (file.bytes.isEmpty || file.bytes.length > maxFileSize) {
+      if (file.bytes.isEmpty ||
+          file.bytes.length > maxFileSize ||
+          file.bytes.length > remaining) {
         rejected++;
       } else {
         accepted.add(UploadTask(file));
+        remaining -= file.bytes.length;
       }
     }
     if (accepted.isNotEmpty && mounted) {
@@ -165,7 +171,7 @@ class _DocumentWalletScreenState extends State<DocumentWalletScreen> {
     }
     if (rejected > 0) {
       message(
-        '$rejected file${rejected == 1 ? '' : 's'} skipped. The limit is 50 MB per file.',
+        '$rejected file${rejected == 1 ? '' : 's'} skipped. Your private wallet can store up to 30 MB in total.',
         isError: true,
       );
     }
@@ -221,6 +227,12 @@ class _DocumentWalletScreenState extends State<DocumentWalletScreen> {
       HapticFeedback.mediumImpact();
       await loadDocuments(showLoader: false);
     } catch (caught) {
+      unawaited(
+        DiagnosticsService.record(
+          'upload_failed_document_wallet',
+          metadata: {'error_type': caught.runtimeType.toString()},
+        ),
+      );
       if (path != null) {
         try {
           await db.storage.from('documents').remove(<String>[path]);
@@ -301,6 +313,15 @@ class _DocumentWalletScreenState extends State<DocumentWalletScreen> {
           XFile(file.path, mimeType: document.mimeType),
         ], text: document.title);
       }
+      await DownloadHistoryService.record(
+        sourceType: 'document_wallet',
+        sourceId: document.id,
+        title: document.title,
+        url: document.legacyUrl,
+        storagePath: document.storagePath,
+        storageBucket: 'documents',
+        fileSizeBytes: document.fileSize,
+      );
       HapticFeedback.mediumImpact();
       message('Download prepared for ${document.fileName}.');
     } catch (caught) {
@@ -766,7 +787,7 @@ class _DocumentWalletScreenState extends State<DocumentWalletScreen> {
               ),
               const SizedBox(width: 10),
               Text(
-                '${(progress * 100).round()}% of 500 MB',
+                '${(progress * 100).round()}% of 30 MB',
                 style: TextStyle(
                   color: Colors.white.withValues(alpha: .7),
                   fontSize: 11,
@@ -822,7 +843,7 @@ class _DocumentWalletScreenState extends State<DocumentWalletScreen> {
                     ),
                   ),
                   const Text(
-                    'Or tap to select multiple files • 50 MB each',
+                    'Or tap to select files • 30 MB total per student',
                     style: TextStyle(color: AppColors.textMuted, fontSize: 12),
                   ),
                 ],
@@ -1579,21 +1600,15 @@ class GlassCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ClipRRect(
-      borderRadius: AppStyles.bentoRadius,
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 14, sigmaY: 14),
-        child: Container(
-          padding: padding,
-          decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: .78),
-            borderRadius: AppStyles.bentoRadius,
-            border: Border.all(color: Colors.white.withValues(alpha: .88)),
-            boxShadow: AppStyles.softShadow,
-          ),
-          child: child,
-        ),
+    return Container(
+      padding: padding,
+      decoration: BoxDecoration(
+        color: AppColors.surfaceElevated,
+        borderRadius: AppStyles.bentoRadius,
+        border: Border.all(color: AppColors.outline),
+        boxShadow: AppStyles.softShadow,
       ),
+      child: child,
     );
   }
 }
@@ -1908,7 +1923,7 @@ String friendlyError(Object error) {
   }
   if (value.contains('maximum allowed size') ||
       value.contains('Payload too large')) {
-    return 'This file is larger than the 50 MB limit.';
+    return 'This upload would exceed your 30 MB Document Wallet limit.';
   }
   if (value.contains('Missing storage path')) {
     return 'This legacy document is not linked to its stored file.';

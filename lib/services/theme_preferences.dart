@@ -7,7 +7,7 @@ class ThemePreferences {
 
   static const _storageKey = 'og_vibes_theme_mode';
   static final ValueNotifier<ThemeMode> mode =
-      ValueNotifier<ThemeMode>(ThemeMode.system);
+      ValueNotifier<ThemeMode>(ThemeMode.light);
 
   static Future<void> initialise() async {
     final preferences = await SharedPreferences.getInstance();
@@ -24,7 +24,7 @@ class ThemePreferences {
   static ThemeMode _fromName(String? name) {
     return ThemeMode.values.firstWhere(
       (value) => value.name == name,
-      orElse: () => ThemeMode.system,
+      orElse: () => ThemeMode.light,
     );
   }
 }

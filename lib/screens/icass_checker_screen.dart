@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
@@ -7,6 +8,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../utils/theme_constants.dart';
 import '../widgets/vibe_scaffold.dart';
+import '../services/offline_cache_service.dart';
 
 class IcassCheckerScreen extends StatefulWidget {
   const IcassCheckerScreen({super.key});
@@ -24,7 +26,6 @@ class _IcassCheckerScreenState extends State<IcassCheckerScreen> {
   String? _error;
   StudentContext? _student;
   int? _selectedYear;
-  int? _selectedSemester;
   String _selectedStatus = 'all';
 
   SupabaseClient get _supabase => Supabase.instance.client;
@@ -53,59 +54,81 @@ class _IcassCheckerScreenState extends State<IcassCheckerScreen> {
     }
 
     try {
-      final responses = await Future.wait<dynamic>(<Future<dynamic>>[
-        _supabase
-            .from('profiles')
-            .select('id, name, surname, student_number, department, level')
-            .eq('id', user.id)
-            .maybeSingle(),
-        _supabase
-            .from('student_module_registrations')
-            .select(
-              'student_id, module_id, academic_year, semester, status, '
-              'registered_at',
-            )
-            .eq('student_id', user.id)
-            .neq('status', 'cancelled')
-            .order('academic_year', ascending: false),
-        _supabase
-            .from('modules')
-            .select('id, programme_id, level, name, code')
-            .order('name'),
-        _supabase
-            .from('icass_marks')
-            .select(
-              'id, student_id, module_id, subject_name, lecturer_name, '
-              'component_name, component_score, component_weight, '
-              'mark_status, assessment_date, academic_year, semester, '
-              'created_at, updated_at',
-            )
-            .eq('student_id', user.id)
-            .order('assessment_date', ascending: false),
-      ]);
+      List<dynamic> responses;
+      try {
+        responses = await Future.wait<dynamic>(<Future<dynamic>>[
+          _supabase
+              .from('profiles')
+              .select('id, name, surname, student_number, department, level')
+              .eq('id', user.id)
+              .maybeSingle(),
+          _supabase
+              .from('student_module_registrations')
+              .select(
+                'student_id, module_id, academic_year, semester, status, '
+                'registered_at',
+              )
+              .eq('student_id', user.id)
+              .neq('status', 'cancelled')
+              .order('academic_year', ascending: false)
+              .limit(30),
+          _supabase
+              .from('modules')
+              .select('id, programme_id, level, name, code')
+              .order('name'),
+          _supabase
+              .from('icass_marks')
+              .select(
+                'id, student_id, module_id, subject_name, lecturer_name, '
+                'component_name, component_score, component_weight, '
+                'max_score, '
+                'mark_status, assessment_date, academic_year, semester, '
+                'created_at, updated_at',
+              )
+              .eq('student_id', user.id)
+              .order('assessment_date', ascending: false)
+              .limit(30),
+        ]);
+        unawaited(
+          OfflineCacheService.writeList(
+            'icass_dashboard',
+            <Map<String, dynamic>>[
+              {'results': responses},
+            ],
+            maxRecords: 1,
+          ),
+        );
+      } catch (_) {
+        final cached = await OfflineCacheService.readList('icass_dashboard');
+        if (cached.isEmpty || cached.first['results'] is! List) rethrow;
+        responses = List<dynamic>.from(cached.first['results'] as List);
+      }
 
       final profileRow = responses[0] == null
           ? <String, dynamic>{}
           : Map<String, dynamic>.from(responses[0] as Map);
-      final registrationRows =
-          List<Map<String, dynamic>>.from(responses[1] as List<dynamic>);
-      final moduleRows =
-          List<Map<String, dynamic>>.from(responses[2] as List<dynamic>);
-      final markRows =
-          List<Map<String, dynamic>>.from(responses[3] as List<dynamic>);
+      final registrationRows = List<Map<String, dynamic>>.from(
+        responses[1] as List<dynamic>,
+      );
+      final moduleRows = List<Map<String, dynamic>>.from(
+        responses[2] as List<dynamic>,
+      );
+      final markRows = List<Map<String, dynamic>>.from(
+        responses[3] as List<dynamic>,
+      );
 
       final modules = <String, AcademicModule>{
         for (final row in moduleRows)
           row['id'].toString(): AcademicModule.fromRow(row),
       };
-      final registrations =
-          registrationRows.map(RegisteredModule.fromRow).toList();
+      final registrations = registrationRows
+          .map(RegisteredModule.fromRow)
+          .toList();
       final marks = markRows.map(IcassMark.fromRow).toList();
       final availableYears = <int>{
         ...registrations.map((item) => item.academicYear),
         ...marks.map((item) => item.academicYear),
-      }.toList()
-        ..sort((a, b) => b.compareTo(a));
+      }.toList()..sort((a, b) => b.compareTo(a));
 
       if (!mounted) return;
       setState(() {
@@ -119,8 +142,7 @@ class _IcassCheckerScreenState extends State<IcassCheckerScreen> {
         _marks
           ..clear()
           ..addAll(marks);
-        if (_selectedYear == null ||
-            !availableYears.contains(_selectedYear)) {
+        if (_selectedYear == null || !availableYears.contains(_selectedYear)) {
           _selectedYear = availableYears.isEmpty
               ? DateTime.now().year
               : availableYears.first;
@@ -141,8 +163,7 @@ class _IcassCheckerScreenState extends State<IcassCheckerScreen> {
     final values = <int>{
       ..._registeredModules.map((item) => item.academicYear),
       ..._marks.map((item) => item.academicYear),
-    }.toList()
-      ..sort((a, b) => b.compareTo(a));
+    }.toList()..sort((a, b) => b.compareTo(a));
     return values.isEmpty ? <int>[DateTime.now().year] : values;
   }
 
@@ -152,20 +173,12 @@ class _IcassCheckerScreenState extends State<IcassCheckerScreen> {
 
     final registrations = _registeredModules.where((registration) {
       if (registration.academicYear != year) return false;
-      if (_selectedSemester != null &&
-          registration.semester != _selectedSemester) {
-        return false;
-      }
       return true;
     }).toList();
 
     final filteredMarks = _marks.where((mark) {
       if (mark.academicYear != year) return false;
-      if (_selectedSemester != null && mark.semester != _selectedSemester) {
-        return false;
-      }
-      if (_selectedStatus != 'all' &&
-          mark.status != _selectedStatus) {
+      if (_selectedStatus != 'all' && mark.status != _selectedStatus) {
         return false;
       }
       return true;
@@ -173,9 +186,7 @@ class _IcassCheckerScreenState extends State<IcassCheckerScreen> {
 
     final moduleIds = <String>{
       ...registrations.map((item) => item.moduleId),
-      ...filteredMarks
-          .map((item) => item.moduleId)
-          .whereType<String>(),
+      ...filteredMarks.map((item) => item.moduleId).whereType<String>(),
     };
     final subjectOnly = filteredMarks
         .where((item) => item.moduleId == null)
@@ -184,13 +195,15 @@ class _IcassCheckerScreenState extends State<IcassCheckerScreen> {
 
     final performances = <ModulePerformance>[];
     for (final moduleId in moduleIds) {
-      final module = _modules[moduleId] ??
+      final module =
+          _modules[moduleId] ??
           AcademicModule(
             id: moduleId,
-            name: filteredMarks
-                .where((item) => item.moduleId == moduleId)
-                .map((item) => item.subjectName)
-                .firstOrNull ??
+            name:
+                filteredMarks
+                    .where((item) => item.moduleId == moduleId)
+                    .map((item) => item.subjectName)
+                    .firstOrNull ??
                 'Registered module',
             code: '',
             level: '',
@@ -211,8 +224,7 @@ class _IcassCheckerScreenState extends State<IcassCheckerScreen> {
           ),
           marks: filteredMarks
               .where(
-                (item) =>
-                    item.moduleId == null && item.subjectName == subject,
+                (item) => item.moduleId == null && item.subjectName == subject,
               )
               .toList(),
         ),
@@ -252,45 +264,44 @@ class _IcassCheckerScreenState extends State<IcassCheckerScreen> {
               child: CircularProgressIndicator(color: AppColors.vibeBlue),
             )
           : _error != null
-              ? _buildError()
-              : RefreshIndicator(
-                  onRefresh: () => _loadDashboard(showLoader: false),
-                  child: LayoutBuilder(
-                    builder: (context, constraints) {
-                      final desktop = constraints.maxWidth >= 980;
-                      return CustomScrollView(
-                        physics: const AlwaysScrollableScrollPhysics(),
-                        slivers: <Widget>[
-                          SliverPadding(
-                            padding: EdgeInsets.fromLTRB(
-                              desktop ? 34 : 16,
-                              8,
-                              desktop ? 34 : 16,
-                              16,
-                            ),
-                            sliver: SliverToBoxAdapter(
-                              child: Center(
-                                child: ConstrainedBox(
-                                  constraints:
-                                      const BoxConstraints(maxWidth: 1180),
-                                  child: Column(
-                                    children: <Widget>[
-                                      _buildHero(desktop: desktop),
-                                      const SizedBox(height: 16),
-                                      _buildFilters(),
-                                    ],
-                                  ),
-                                ),
+          ? _buildError()
+          : RefreshIndicator(
+              onRefresh: () => _loadDashboard(showLoader: false),
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  final desktop = constraints.maxWidth >= 980;
+                  return CustomScrollView(
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    slivers: <Widget>[
+                      SliverPadding(
+                        padding: EdgeInsets.fromLTRB(
+                          desktop ? 34 : 16,
+                          8,
+                          desktop ? 34 : 16,
+                          16,
+                        ),
+                        sliver: SliverToBoxAdapter(
+                          child: Center(
+                            child: ConstrainedBox(
+                              constraints: const BoxConstraints(maxWidth: 1180),
+                              child: Column(
+                                children: <Widget>[
+                                  _buildHero(desktop: desktop),
+                                  const SizedBox(height: 16),
+                                  _buildFilters(),
+                                ],
                               ),
                             ),
                           ),
-                          _buildPerformanceGrid(desktop: desktop),
-                          const SliverToBoxAdapter(child: SizedBox(height: 40)),
-                        ],
-                      );
-                    },
-                  ),
-                ),
+                        ),
+                      ),
+                      _buildPerformanceGrid(desktop: desktop),
+                      const SliverToBoxAdapter(child: SizedBox(height: 40)),
+                    ],
+                  );
+                },
+              ),
+            ),
     );
   }
 
@@ -414,9 +425,7 @@ class _IcassCheckerScreenState extends State<IcassCheckerScreen> {
               mainAxisSize: MainAxisSize.min,
               children: <Widget>[
                 Text(
-                  summary.hasScores
-                      ? summary.average.toStringAsFixed(1)
-                      : '—',
+                  summary.hasScores ? summary.average.toStringAsFixed(1) : '—',
                   style: TextStyle(
                     color: Colors.white,
                     fontSize: compact ? 24 : 31,
@@ -492,23 +501,6 @@ class _IcassCheckerScreenState extends State<IcassCheckerScreen> {
               setState(() => _selectedYear = value);
             },
           );
-          final semester = DropdownButtonFormField<int?>(
-            initialValue: _selectedSemester,
-            decoration: const InputDecoration(
-              labelText: 'Academic period',
-              prefixIcon: Icon(Icons.school_outlined),
-            ),
-            items: const <DropdownMenuItem<int?>>[
-              DropdownMenuItem(value: null, child: Text('All semesters')),
-              DropdownMenuItem(value: 1, child: Text('Semester 1')),
-              DropdownMenuItem(value: 2, child: Text('Semester 2')),
-              DropdownMenuItem(value: 3, child: Text('Annual')),
-            ],
-            onChanged: (value) {
-              HapticFeedback.selectionClick();
-              setState(() => _selectedSemester = value);
-            },
-          );
           final status = DropdownButtonFormField<String>(
             initialValue: _selectedStatus,
             decoration: const InputDecoration(
@@ -530,20 +522,12 @@ class _IcassCheckerScreenState extends State<IcassCheckerScreen> {
 
           if (narrow) {
             return Column(
-              children: <Widget>[
-                year,
-                const SizedBox(height: 10),
-                semester,
-                const SizedBox(height: 10),
-                status,
-              ],
+              children: <Widget>[year, const SizedBox(height: 10), status],
             );
           }
           return Row(
             children: <Widget>[
               Expanded(child: year),
-              const SizedBox(width: 10),
-              Expanded(child: semester),
               const SizedBox(width: 10),
               Expanded(child: status),
             ],
@@ -560,12 +544,10 @@ class _IcassCheckerScreenState extends State<IcassCheckerScreen> {
         hasScrollBody: false,
         child: _EmptyState(
           icon: Icons.insights_outlined,
-          title: 'No modules for this period',
-          subtitle:
-              'Try another academic year, semester, or mark-status filter.',
+          title: 'No modules for this year',
+          subtitle: 'Try another academic year or mark-status filter.',
           onReset: () => setState(() {
             _selectedYear = _availableYears.first;
-            _selectedSemester = null;
             _selectedStatus = 'all';
           }),
         ),
@@ -582,31 +564,27 @@ class _IcassCheckerScreenState extends State<IcassCheckerScreen> {
                 final columns = constraints.maxWidth >= 1040
                     ? 3
                     : constraints.maxWidth >= 680
-                        ? 2
-                        : 1;
+                    ? 2
+                    : 1;
                 final width =
                     (constraints.maxWidth - ((columns - 1) * 14)) / columns;
                 return Wrap(
                   spacing: 14,
                   runSpacing: 14,
-                  children: List<Widget>.generate(
-                    performances.length,
-                    (index) {
-                      final card = SizedBox(
-                        width: width,
-                        child: _ModuleCard(
-                          performance: performances[index],
-                          onTap: () =>
-                              _showModuleDetails(performances[index]),
-                        ),
-                      );
-                      if (MediaQuery.disableAnimationsOf(context)) return card;
-                      return card
-                          .animate(delay: (index * 45).ms)
-                          .fadeIn(duration: 320.ms)
-                          .slideY(begin: .06, end: 0);
-                    },
-                  ),
+                  children: List<Widget>.generate(performances.length, (index) {
+                    final card = SizedBox(
+                      width: width,
+                      child: _ModuleCard(
+                        performance: performances[index],
+                        onTap: () => _showModuleDetails(performances[index]),
+                      ),
+                    );
+                    if (MediaQuery.disableAnimationsOf(context)) return card;
+                    return card
+                        .animate(delay: (index * 45).ms)
+                        .fadeIn(duration: 320.ms)
+                        .slideY(begin: .06, end: 0);
+                  }),
                 );
               },
             ),
@@ -657,7 +635,7 @@ class _IcassCheckerScreenState extends State<IcassCheckerScreen> {
                       Text(
                         performance.hasScores
                             ? '${performance.average.toStringAsFixed(1)}% • '
-                                '${performance.band.label}'
+                                  '${performance.band.label}'
                             : 'Awaiting published marks',
                         style: TextStyle(
                           color: performance.band.color,
@@ -710,7 +688,10 @@ class _IcassCheckerScreenState extends State<IcassCheckerScreen> {
         text.contains('row-level security')) {
       return 'Your marks are protected, but this session no longer has access. Sign in again.';
     }
-    return text.replaceFirst('PostgrestException(message: ', '').split(',').first;
+    return text
+        .replaceFirst('PostgrestException(message: ', '')
+        .split(',')
+        .first;
   }
 }
 
@@ -746,10 +727,7 @@ class _GlassCard extends StatelessWidget {
 }
 
 class _ModuleCard extends StatelessWidget {
-  const _ModuleCard({
-    required this.performance,
-    required this.onTap,
-  });
+  const _ModuleCard({required this.performance, required this.onTap});
 
   final ModulePerformance performance;
   final VoidCallback onTap;
@@ -761,7 +739,7 @@ class _ModuleCard extends StatelessWidget {
       button: true,
       label: performance.hasScores
           ? '${performance.module.displayName}, '
-              '${performance.average.toStringAsFixed(1)} percent, ${band.label}'
+                '${performance.average.toStringAsFixed(1)} percent, ${band.label}'
           : '${performance.module.displayName}, marks pending',
       child: _GlassCard(
         child: InkWell(
@@ -856,8 +834,9 @@ class _ModuleCard extends StatelessWidget {
                 ClipRRect(
                   borderRadius: AppStyles.pillRadius,
                   child: LinearProgressIndicator(
-                    value:
-                        performance.hasScores ? performance.average / 100 : 0,
+                    value: performance.hasScores
+                        ? performance.average / 100
+                        : 0,
                     minHeight: 8,
                     color: band.color,
                     backgroundColor: band.color.withValues(alpha: .12),
@@ -953,15 +932,31 @@ class _AssessmentCard extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 10),
-          Text(
-            mark.score == null ? '—' : '${mark.score!.toStringAsFixed(1)}%',
-            style: TextStyle(
-              color: mark.score == null
-                  ? AppColors.textMuted
-                  : PerformanceBand.fromScore(mark.score!).color,
-              fontSize: 18,
-              fontWeight: FontWeight.w900,
-            ),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: <Widget>[
+              Text(
+                mark.percentage == null
+                    ? '—'
+                    : '${mark.percentage!.toStringAsFixed(1)}%',
+                style: TextStyle(
+                  color: mark.percentage == null
+                      ? AppColors.textMuted
+                      : PerformanceBand.fromScore(mark.percentage!).color,
+                  fontSize: 18,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+              if (mark.rawScore != null)
+                Text(
+                  '${mark.rawScore!.toStringAsFixed(1)}/${mark.maxScore.toStringAsFixed(1)}',
+                  style: const TextStyle(
+                    color: AppColors.textMuted,
+                    fontSize: 10,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+            ],
           ),
         ],
       ),
@@ -970,11 +965,7 @@ class _AssessmentCard extends StatelessWidget {
 }
 
 class _ModuleIcon extends StatelessWidget {
-  const _ModuleIcon({
-    required this.color,
-    required this.label,
-    this.size = 46,
-  });
+  const _ModuleIcon({required this.color, required this.label, this.size = 46});
 
   final Color color;
   final String label;
@@ -1230,10 +1221,7 @@ class _EmptyState extends StatelessWidget {
             Text(
               subtitle,
               textAlign: TextAlign.center,
-              style: const TextStyle(
-                color: AppColors.textMuted,
-                height: 1.4,
-              ),
+              style: const TextStyle(color: AppColors.textMuted, height: 1.4),
             ),
             const SizedBox(height: 18),
             FilledButton.icon(
@@ -1256,7 +1244,8 @@ class IcassMark {
     required this.subjectName,
     required this.lecturerName,
     required this.componentName,
-    required this.score,
+    required this.rawScore,
+    required this.maxScore,
     required this.weight,
     required this.status,
     required this.assessmentDate,
@@ -1265,25 +1254,22 @@ class IcassMark {
   });
 
   factory IcassMark.fromRow(Map<String, dynamic> row) => IcassMark(
-        id: row['id'].toString(),
-        studentId: row['student_id'].toString(),
-        moduleId: _optional(row['module_id']),
-        subjectName: row['subject_name']?.toString().trim() ?? 'Module',
-        lecturerName:
-            row['lecturer_name']?.toString().trim() ?? 'Module lecturer',
-        componentName:
-            row['component_name']?.toString().trim() ?? 'Assessment',
-        score: _number(row['component_score']),
-        weight: _number(row['component_weight']) ?? 0,
-        status: row['mark_status']?.toString() ?? 'captured',
-        assessmentDate: DateTime.tryParse(
-          row['assessment_date']?.toString() ?? '',
-        ),
-        academicYear:
-            int.tryParse(row['academic_year']?.toString() ?? '') ??
-                DateTime.now().year,
-        semester: int.tryParse(row['semester']?.toString() ?? '') ?? 1,
-      );
+    id: row['id'].toString(),
+    studentId: row['student_id'].toString(),
+    moduleId: _optional(row['module_id']),
+    subjectName: row['subject_name']?.toString().trim() ?? 'Module',
+    lecturerName: row['lecturer_name']?.toString().trim() ?? 'Module lecturer',
+    componentName: row['component_name']?.toString().trim() ?? 'Assessment',
+    rawScore: _number(row['component_score']),
+    maxScore: _number(row['max_score']) ?? 100,
+    weight: _number(row['component_weight']) ?? 0,
+    status: row['mark_status']?.toString() ?? 'captured',
+    assessmentDate: DateTime.tryParse(row['assessment_date']?.toString() ?? ''),
+    academicYear:
+        int.tryParse(row['academic_year']?.toString() ?? '') ??
+        DateTime.now().year,
+    semester: int.tryParse(row['semester']?.toString() ?? '') ?? 1,
+  );
 
   final String id;
   final String studentId;
@@ -1291,7 +1277,12 @@ class IcassMark {
   final String subjectName;
   final String lecturerName;
   final String componentName;
-  final double? score;
+  final double? rawScore;
+  final double maxScore;
+  double? get percentage => rawScore == null || maxScore <= 0
+      ? null
+      : (rawScore! / maxScore * 100).clamp(0, 100).toDouble();
+  double? get score => percentage;
   final double weight;
   final String status;
   final DateTime? assessmentDate;
@@ -1314,7 +1305,7 @@ class RegisteredModule {
         moduleId: row['module_id'].toString(),
         academicYear:
             int.tryParse(row['academic_year']?.toString() ?? '') ??
-                DateTime.now().year,
+            DateTime.now().year,
         semester: int.tryParse(row['semester']?.toString() ?? '') ?? 1,
         status: row['status']?.toString() ?? 'active',
       );
@@ -1335,11 +1326,11 @@ class AcademicModule {
   });
 
   factory AcademicModule.fromRow(Map<String, dynamic> row) => AcademicModule(
-        id: row['id'].toString(),
-        name: row['name']?.toString().trim() ?? 'Registered module',
-        code: row['code']?.toString().trim() ?? '',
-        level: row['level']?.toString().trim() ?? '',
-      );
+    id: row['id'].toString(),
+    name: row['name']?.toString().trim() ?? 'Registered module',
+    code: row['code']?.toString().trim() ?? '',
+    level: row['level']?.toString().trim() ?? '',
+  );
 
   final String id;
   final String name;
@@ -1359,10 +1350,7 @@ class AcademicModule {
 }
 
 class ModulePerformance {
-  const ModulePerformance({
-    required this.module,
-    required this.marks,
-  });
+  const ModulePerformance({required this.module, required this.marks});
 
   final AcademicModule module;
   final List<IcassMark> marks;
@@ -1375,8 +1363,10 @@ class ModulePerformance {
     final scored = scoredMarks;
     if (scored.isEmpty) return 0;
     final weighted = scored.where((mark) => mark.weight > 0).toList();
-    final totalWeight =
-        weighted.fold<double>(0, (sum, mark) => sum + mark.weight);
+    final totalWeight = weighted.fold<double>(
+      0,
+      (sum, mark) => sum + mark.weight,
+    );
     if (weighted.isNotEmpty && totalWeight > 0) {
       return weighted.fold<double>(
             0,
@@ -1390,17 +1380,17 @@ class ModulePerformance {
 
   PerformanceBand get band =>
       hasScores ? PerformanceBand.fromScore(average) : PerformanceBand.pending;
-  int get publishedCount =>
-      marks.where((mark) => mark.score != null).length;
+  int get publishedCount => marks.where((mark) => mark.score != null).length;
   int get moderatedCount =>
       marks.where((mark) => mark.status == 'moderated').length;
   int get pendingCount => marks
       .where((mark) => mark.status == 'pending' || mark.status == 'missing')
       .length;
-  String get lecturer => marks
-      .map((mark) => mark.lecturerName)
-      .where((value) => value.isNotEmpty)
-      .firstOrNull ??
+  String get lecturer =>
+      marks
+          .map((mark) => mark.lecturerName)
+          .where((value) => value.isNotEmpty)
+          .firstOrNull ??
       'Module lecturer';
 }
 
@@ -1414,15 +1404,16 @@ class DashboardSummary {
   });
 
   factory DashboardSummary.from(List<ModulePerformance> performances) {
-    final scored =
-        performances.where((performance) => performance.hasScores).toList();
+    final scored = performances
+        .where((performance) => performance.hasScores)
+        .toList();
     final average = scored.isEmpty
         ? 0.0
         : scored.fold<double>(
-              0,
-              (sum, performance) => sum + performance.average,
-            ) /
-            scored.length;
+                0,
+                (sum, performance) => sum + performance.average,
+              ) /
+              scored.length;
     return DashboardSummary(
       average: average,
       moduleCount: performances.length,
@@ -1430,9 +1421,7 @@ class DashboardSummary {
         0,
         (sum, performance) => sum + performance.publishedCount,
       ),
-      riskCount: scored
-          .where((performance) => performance.average < 40)
-          .length,
+      riskCount: scored.where((performance) => performance.average < 40).length,
       hasScores: scored.isNotEmpty,
     );
   }
@@ -1462,49 +1451,47 @@ enum PerformanceBand {
   }
 
   int get rank => switch (this) {
-        risk => 0,
-        focus => 1,
-        pending => 2,
-        pass => 3,
-        distinction => 4,
-      };
+    risk => 0,
+    focus => 1,
+    pending => 2,
+    pass => 3,
+    distinction => 4,
+  };
 
   String get label => switch (this) {
-        risk => 'At risk',
-        focus => 'Needs focus',
-        pass => 'On track',
-        distinction => 'Distinction',
-        pending => 'Pending',
-      };
+    risk => 'At risk',
+    focus => 'Needs focus',
+    pass => 'On track',
+    distinction => 'Distinction',
+    pending => 'Pending',
+  };
 
   String get heroMessage => switch (this) {
-        risk =>
-          'Some modules need immediate attention. Start with the lowest result.',
-        focus =>
-          'You are close to a pass. Consistent improvement can change the outcome.',
-        pass =>
-          'You are currently on track. Keep building on this performance.',
-        distinction =>
-          'Excellent performance. You are currently in distinction territory.',
-        pending =>
-          'Published marks will appear here as they become available.',
-      };
+    risk =>
+      'Some modules need immediate attention. Start with the lowest result.',
+    focus =>
+      'You are close to a pass. Consistent improvement can change the outcome.',
+    pass => 'You are currently on track. Keep building on this performance.',
+    distinction =>
+      'Excellent performance. You are currently in distinction territory.',
+    pending => 'Published marks will appear here as they become available.',
+  };
 
   Color get color => switch (this) {
-        risk => AppColors.danger,
-        focus => AppColors.warning,
-        pass => AppColors.success,
-        distinction => AppColors.ogGold,
-        pending => AppColors.textMuted,
-      };
+    risk => AppColors.danger,
+    focus => AppColors.warning,
+    pass => AppColors.success,
+    distinction => AppColors.ogGold,
+    pending => AppColors.textMuted,
+  };
 
   IconData get icon => switch (this) {
-        risk => Icons.warning_amber_rounded,
-        focus => Icons.trending_up_rounded,
-        pass => Icons.check_circle_outline_rounded,
-        distinction => Icons.workspace_premium_outlined,
-        pending => Icons.schedule_outlined,
-      };
+    risk => Icons.warning_amber_rounded,
+    focus => Icons.trending_up_rounded,
+    pass => Icons.check_circle_outline_rounded,
+    distinction => Icons.workspace_premium_outlined,
+    pending => Icons.schedule_outlined,
+  };
 }
 
 class MarkStatusStyle {
@@ -1517,25 +1504,25 @@ class MarkStatusStyle {
   factory MarkStatusStyle.from(IcassMark mark) {
     return switch (mark.status) {
       'moderated' => const MarkStatusStyle(
-          label: 'Moderated',
-          color: AppColors.success,
-          icon: Icons.verified_outlined,
-        ),
+        label: 'Moderated',
+        color: AppColors.success,
+        icon: Icons.verified_outlined,
+      ),
       'pending' => const MarkStatusStyle(
-          label: 'Pending',
-          color: AppColors.warning,
-          icon: Icons.schedule_outlined,
-        ),
+        label: 'Pending',
+        color: AppColors.warning,
+        icon: Icons.schedule_outlined,
+      ),
       'missing' => const MarkStatusStyle(
-          label: 'Missing',
-          color: AppColors.danger,
-          icon: Icons.error_outline_rounded,
-        ),
+        label: 'Missing',
+        color: AppColors.danger,
+        icon: Icons.error_outline_rounded,
+      ),
       _ => const MarkStatusStyle(
-          label: 'Captured',
-          color: AppColors.vibeBlue,
-          icon: Icons.fact_check_outlined,
-        ),
+        label: 'Captured',
+        color: AppColors.vibeBlue,
+        icon: Icons.fact_check_outlined,
+      ),
     };
   }
 

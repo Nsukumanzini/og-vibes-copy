@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:ui';
 
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
@@ -12,6 +11,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../utils/theme_constants.dart';
+import '../services/feature_flag_service.dart';
+import '../services/diagnostics_service.dart';
 import '../widgets/vibe_scaffold.dart';
 
 class MarketScreen extends StatefulWidget {
@@ -55,6 +56,19 @@ class _MarketScreenState extends State<MarketScreen> {
   }
 
   Future<void> _start() async {
+    final availability = await FeatureFlagService.availability(
+      'marketplace',
+      client: _supabase,
+      forceRefresh: true,
+    );
+    if (!availability.enabled) {
+      if (!mounted) return;
+      setState(() {
+        _loading = false;
+        _error = availability.message;
+      });
+      return;
+    }
     await _hydrateCache();
     await _loadData(showLoader: _products.isEmpty);
     _subscribeToChanges();
@@ -138,7 +152,7 @@ class _MarketScreenState extends State<MarketScreen> {
               'id, seller_id, title, price, category, description, '
               'is_negotiable, images, image_paths, status, condition, campus, '
               'meetup_point, created_at, updated_at, '
-              'profiles!products_seller_id_fkey(name, surname, photo_url, is_verified)',
+              'profiles!products_seller_id_fkey(nickname, photo_url, is_verified)',
             )
             .order('created_at', ascending: false),
         _supabase
@@ -147,8 +161,8 @@ class _MarketScreenState extends State<MarketScreen> {
               'id, product_id, buyer_id, seller_id, kind, amount, status, '
               'meetup_point, created_at, updated_at, '
               'products!marketplace_orders_product_id_fkey(id, title, price, images, image_paths, status), '
-              'buyer:profiles!marketplace_orders_buyer_id_fkey(name, surname), '
-              'seller:profiles!marketplace_orders_seller_id_fkey(name, surname)',
+              'buyer:profiles!marketplace_orders_buyer_id_fkey(nickname), '
+              'seller:profiles!marketplace_orders_seller_id_fkey(nickname)',
             )
             .order('created_at', ascending: false),
       ]);
@@ -249,7 +263,20 @@ class _MarketScreenState extends State<MarketScreen> {
     return _products.where((product) => product.sellerId == userId).toList();
   }
 
+  Future<bool> _requireMarketplaceEnabled() async {
+    final availability = await FeatureFlagService.availability(
+      'marketplace',
+      client: _supabase,
+      forceRefresh: true,
+    );
+    if (availability.enabled) return true;
+    _showMessage(availability.message, error: true);
+    return false;
+  }
+
   Future<void> _openListingWizard() async {
+    if (!await _requireMarketplaceEnabled()) return;
+    if (!mounted) return;
     HapticFeedback.selectionClick();
     final created = await showModalBottomSheet<bool>(
       context: context,
@@ -291,6 +318,8 @@ class _MarketScreenState extends State<MarketScreen> {
   }
 
   Future<void> _placeOrder(_MarketProduct product, String kind) async {
+    if (!await _requireMarketplaceEnabled()) return;
+    if (!mounted) return;
     final user = _user;
     if (user == null || user.id == product.sellerId) return;
     final result = await showDialog<_OrderDraft>(
@@ -330,6 +359,8 @@ class _MarketScreenState extends State<MarketScreen> {
   }
 
   Future<void> _reportProduct(_MarketProduct product) async {
+    if (!await _requireMarketplaceEnabled()) return;
+    if (!mounted) return;
     final result = await showDialog<Map<String, String>>(
       context: context,
       builder: (_) => const _ReportDialog(),
@@ -355,6 +386,7 @@ class _MarketScreenState extends State<MarketScreen> {
   }
 
   Future<void> _updateOrderStatus(_MarketOrder order, String status) async {
+    if (!await _requireMarketplaceEnabled()) return;
     try {
       await _supabase
           .from('marketplace_orders')
@@ -373,6 +405,7 @@ class _MarketScreenState extends State<MarketScreen> {
   }
 
   Future<void> _toggleListing(_MarketProduct product) async {
+    if (!await _requireMarketplaceEnabled()) return;
     final nextStatus = product.status == 'archived' ? 'available' : 'archived';
     try {
       await _supabase
@@ -405,7 +438,7 @@ class _MarketScreenState extends State<MarketScreen> {
   Widget build(BuildContext context) {
     return VibeScaffold(
       appBar: AppBar(
-        title: const Text('OG Marketplace'),
+        title: const Text('Marketplace'),
         backgroundColor: Colors.transparent,
         actions: <Widget>[
           if (_refreshing)
@@ -966,6 +999,15 @@ class _ListingWizardState extends State<_ListingWizard> {
   Future<void> _publish() async {
     final user = _supabase.auth.currentUser;
     if (user == null || _saving) return;
+    final availability = await FeatureFlagService.availability(
+      'marketplace',
+      client: _supabase,
+      forceRefresh: true,
+    );
+    if (!availability.enabled) {
+      _message(availability.message);
+      return;
+    }
     setState(() => _saving = true);
     final uploadedPaths = <String>[];
     try {
@@ -1005,6 +1047,12 @@ class _ListingWizardState extends State<_ListingWizard> {
       HapticFeedback.mediumImpact();
       if (mounted) Navigator.pop(context, true);
     } catch (error) {
+      unawaited(
+        DiagnosticsService.record(
+          'upload_failed_marketplace_listing',
+          metadata: {'error_type': error.runtimeType.toString()},
+        ),
+      );
       if (uploadedPaths.isNotEmpty) {
         try {
           await _supabase.storage.from('products').remove(uploadedPaths);
@@ -1624,13 +1672,9 @@ class _ProductDetailsSheetState extends State<_ProductDetailsSheet> {
                                         product.sellerPhoto,
                                       ),
                                 child: product.sellerPhoto.isEmpty
-                                    ? Text(
-                                        product.sellerName.characters.first
-                                            .toUpperCase(),
-                                        style: const TextStyle(
-                                          color: AppColors.vibeBlue,
-                                          fontWeight: FontWeight.w900,
-                                        ),
+                                    ? const Icon(
+                                        Icons.person_rounded,
+                                        color: AppColors.vibeBlue,
                                       )
                                     : null,
                               ),
@@ -2381,10 +2425,7 @@ class _MarketProduct {
     SupabaseClient client,
   ) {
     final profile = _asMap(row['profiles']);
-    final names = <String>[
-      (profile['name'] ?? '').toString().trim(),
-      (profile['surname'] ?? '').toString().trim(),
-    ].where((part) => part.isNotEmpty).toList();
+    final nickname = (profile['nickname'] ?? '').toString().trim();
     final imageUrls = <String>[];
     for (final value in _asStringList(row['images'])) {
       if (value.startsWith('http')) imageUrls.add(value);
@@ -2411,7 +2452,7 @@ class _MarketProduct {
       createdAt:
           DateTime.tryParse((row['created_at'] ?? '').toString()) ??
           DateTime.now(),
-      sellerName: names.isEmpty ? 'Campus seller' : names.join(' '),
+      sellerName: nickname.isEmpty ? 'OG Vibester' : nickname,
       sellerPhoto: (profile['photo_url'] ?? '').toString(),
       sellerVerified: profile['is_verified'] == true,
     );
@@ -2507,21 +2548,15 @@ class _GlassCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ClipRRect(
-      borderRadius: AppStyles.bentoRadius,
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 14, sigmaY: 14),
-        child: Container(
-          padding: padding,
-          decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: .78),
-            borderRadius: AppStyles.bentoRadius,
-            border: Border.all(color: Colors.white.withValues(alpha: .86)),
-            boxShadow: AppStyles.softShadow,
-          ),
-          child: child,
-        ),
+    return Container(
+      padding: padding,
+      decoration: BoxDecoration(
+        color: AppColors.surfaceElevated,
+        borderRadius: AppStyles.bentoRadius,
+        border: Border.all(color: AppColors.outline),
+        boxShadow: AppStyles.softShadow,
       ),
+      child: child,
     );
   }
 }
@@ -2536,7 +2571,7 @@ class _ImageFallback extends StatelessWidget {
     return DecoratedBox(
       decoration: const BoxDecoration(
         gradient: LinearGradient(
-          colors: <Color>[Color(0xFFE8EEFF), Color(0xFFD9FAFF)],
+          colors: <Color>[AppColors.blueTint, AppColors.cyanTint],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
@@ -2874,11 +2909,8 @@ double _toDouble(dynamic value) {
 
 String _profileName(dynamic value) {
   final profile = _asMap(value);
-  final parts = <String>[
-    (profile['name'] ?? '').toString().trim(),
-    (profile['surname'] ?? '').toString().trim(),
-  ].where((part) => part.isNotEmpty).toList();
-  return parts.isEmpty ? 'Campus student' : parts.join(' ');
+  final nickname = (profile['nickname'] ?? '').toString().trim();
+  return nickname.isEmpty ? 'OG Vibester' : nickname;
 }
 
 String _money(double value) {

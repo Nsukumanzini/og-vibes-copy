@@ -1,5 +1,3 @@
-import 'dart:ui';
-
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
@@ -73,7 +71,7 @@ class _EventsScreenState extends State<EventsScreen> {
               'date, created_at, description, end_date, campus, '
               'organisation, club, faculty, category, organizer_name, '
               'agenda, accessibility, capacity, attendee_count, status, '
-              'accent_color, updated_at',
+              'accent_color, updated_at, approval_status, submitted_by',
             )
             .order('date'),
         _supabase
@@ -97,17 +95,22 @@ class _EventsScreenState extends State<EventsScreen> {
       final events = List<Map<String, dynamic>>.from(
         responses[0] as List<dynamic>,
       ).map(CampusEvent.fromRow).toList();
-      final attendanceRows =
-          List<Map<String, dynamic>>.from(responses[1] as List<dynamic>);
+      final attendanceRows = List<Map<String, dynamic>>.from(
+        responses[1] as List<dynamic>,
+      );
       final invitations = List<Map<String, dynamic>>.from(
         responses[2] as List<dynamic>,
       ).map(EventInvitation.fromRow).toList();
-      final friendshipRows =
-          List<Map<String, dynamic>>.from(responses[3] as List<dynamic>);
-      final friendIds = friendshipRows.map((row) {
-        final first = row['user_id'].toString();
-        return first == user.id ? row['friend_id'].toString() : first;
-      }).toSet().toList();
+      final friendshipRows = List<Map<String, dynamic>>.from(
+        responses[3] as List<dynamic>,
+      );
+      final friendIds = friendshipRows
+          .map((row) {
+            final first = row['user_id'].toString();
+            return first == user.id ? row['friend_id'].toString() : first;
+          })
+          .toSet()
+          .toList();
       final friends = await _loadFriendProfiles(friendIds);
 
       if (!mounted) return;
@@ -117,9 +120,7 @@ class _EventsScreenState extends State<EventsScreen> {
           ..addAll(events);
         _attendingEventIds
           ..clear()
-          ..addAll(
-            attendanceRows.map((row) => row['event_id'].toString()),
-          );
+          ..addAll(attendanceRows.map((row) => row['event_id'].toString()));
         _invitations
           ..clear()
           ..addAll(invitations);
@@ -142,9 +143,10 @@ class _EventsScreenState extends State<EventsScreen> {
     if (ids.isEmpty) return <StudentFriend>[];
     final rows = List<Map<String, dynamic>>.from(
       await _supabase
-          .from('profiles')
-          .select('id, name, surname, nickname, photo_url, campus, department')
-          .inFilter('id', ids) as List<dynamic>,
+              .from('profiles')
+              .select('id, nickname, photo_url, campus, department')
+              .inFilter('id', ids)
+          as List<dynamic>,
     );
     return rows.map(StudentFriend.fromRow).toList()
       ..sort((a, b) => a.displayName.compareTo(b.displayName));
@@ -165,18 +167,18 @@ class _EventsScreenState extends State<EventsScreen> {
       }
       if (_filterType == 'all' || _filterValue == null) return true;
       return event.filterValue(_filterType) == _filterValue;
-    }).toList()
-      ..sort((a, b) => a.date.compareTo(b.date));
+    }).toList()..sort((a, b) => a.date.compareTo(b.date));
   }
 
   List<String> get _filterOptions {
     if (_filterType == 'all') return <String>[];
-    final values = _events
-        .map((event) => event.filterValue(_filterType))
-        .where((value) => value.isNotEmpty)
-        .toSet()
-        .toList()
-      ..sort();
+    final values =
+        _events
+            .map((event) => event.filterValue(_filterType))
+            .where((value) => value.isNotEmpty)
+            .toSet()
+            .toList()
+          ..sort();
     return values;
   }
 
@@ -227,13 +229,192 @@ class _EventsScreenState extends State<EventsScreen> {
   Future<void> _shareEvent(CampusEvent event) async {
     HapticFeedback.selectionClick();
     final link =
-        'https://og-vibes.vercel.app/?event_id=${Uri.encodeQueryComponent(event.id)}';
+        'https://student.ogvibes.co.za/?event_id=${Uri.encodeQueryComponent(event.id)}';
     await Share.share(
       '${event.title}\n'
       '${event.formattedDate} • ${event.venue}\n'
       '${event.price}\n\n'
       'View on OG Vibes: $link',
     );
+  }
+
+  Future<void> _submitEvent() async {
+    final title = TextEditingController();
+    final description = TextEditingController();
+    final venue = TextEditingController();
+    final contact = TextEditingController();
+    DateTime date = DateTime.now().add(const Duration(days: 7));
+    String category = 'Campus life';
+    final approved = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setSheetState) => Padding(
+          padding: EdgeInsets.fromLTRB(
+            20,
+            4,
+            20,
+            MediaQuery.viewInsetsOf(context).bottom + 24,
+          ),
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const Text(
+                  'Submit a student event',
+                  style: TextStyle(fontSize: 23, fontWeight: FontWeight.w900),
+                ),
+                const SizedBox(height: 6),
+                const Text(
+                  'Your event will be reviewed by an administrator before other students can see it.',
+                ),
+                const SizedBox(height: 18),
+                TextField(
+                  controller: title,
+                  decoration: const InputDecoration(
+                    labelText: 'Event name',
+                    prefixIcon: Icon(Icons.celebration_outlined),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: description,
+                  maxLines: 3,
+                  decoration: const InputDecoration(
+                    labelText: 'What is the event about?',
+                    prefixIcon: Icon(Icons.notes_rounded),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: venue,
+                  decoration: const InputDecoration(
+                    labelText: 'Venue',
+                    prefixIcon: Icon(Icons.location_on_outlined),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: contact,
+                  decoration: const InputDecoration(
+                    labelText: 'Contact details',
+                    prefixIcon: Icon(Icons.contact_phone_outlined),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                DropdownButtonFormField<String>(
+                  initialValue: category,
+                  decoration: const InputDecoration(labelText: 'Category'),
+                  items:
+                      [
+                            'Campus life',
+                            'Academic',
+                            'Sports',
+                            'Arts and culture',
+                            'Career',
+                            'Wellness',
+                          ]
+                          .map(
+                            (value) => DropdownMenuItem(
+                              value: value,
+                              child: Text(value),
+                            ),
+                          )
+                          .toList(),
+                  onChanged: (value) =>
+                      setSheetState(() => category = value ?? category),
+                ),
+                const SizedBox(height: 12),
+                OutlinedButton.icon(
+                  onPressed: () async {
+                    final picked = await showDatePicker(
+                      context: context,
+                      initialDate: date,
+                      firstDate: DateTime.now(),
+                      lastDate: DateTime.now().add(const Duration(days: 730)),
+                    );
+                    if (picked == null || !context.mounted) return;
+                    final time = await showTimePicker(
+                      context: context,
+                      initialTime: TimeOfDay.fromDateTime(date),
+                    );
+                    if (time != null) {
+                      setSheetState(
+                        () => date = DateTime(
+                          picked.year,
+                          picked.month,
+                          picked.day,
+                          time.hour,
+                          time.minute,
+                        ),
+                      );
+                    }
+                  },
+                  icon: const Icon(Icons.calendar_month_rounded),
+                  label: Text(
+                    '${date.day}/${date.month}/${date.year} at ${TimeOfDay.fromDateTime(date).format(context)}',
+                  ),
+                ),
+                const SizedBox(height: 18),
+                FilledButton.icon(
+                  onPressed: () => Navigator.pop(context, true),
+                  icon: const Icon(Icons.send_rounded),
+                  label: const Text('Send for approval'),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+    if (approved != true || _user == null) {
+      title.dispose();
+      description.dispose();
+      venue.dispose();
+      contact.dispose();
+      return;
+    }
+    if (title.text.trim().isEmpty ||
+        venue.text.trim().isEmpty ||
+        description.text.trim().isEmpty) {
+      _showMessage('Add an event name, description and venue.');
+      return;
+    }
+    try {
+      final nickname = _user!.userMetadata?['nickname']?.toString().trim();
+      await _supabase.from('events').insert({
+        'title': title.text.trim(),
+        'description': description.text.trim(),
+        'venue': venue.text.trim(),
+        'contact': contact.text.trim(),
+        'date': date.toUtc().toIso8601String(),
+        'date_label': '${date.day}/${date.month}/${date.year}',
+        'price': 'Free',
+        'campus': _user!.userMetadata?['campus']?.toString() ?? 'All campuses',
+        'category': category,
+        'organizer_name': nickname?.isNotEmpty == true
+            ? nickname
+            : 'Student organiser',
+        'organizer_id': _user!.id,
+        'submitted_by': _user!.id,
+        'approval_status': 'pending',
+        'published': false,
+        'status': 'scheduled',
+      });
+      _showMessage(
+        'Event submitted. You will see it here while the admin reviews it.',
+      );
+      await _loadEvents(showLoader: false);
+    } catch (error) {
+      _showError('Unable to submit event', error);
+    } finally {
+      title.dispose();
+      description.dispose();
+      venue.dispose();
+      contact.dispose();
+    }
   }
 
   Future<void> _inviteFriends(CampusEvent event) async {
@@ -244,8 +425,7 @@ class _EventsScreenState extends State<EventsScreen> {
     final alreadyInvited = _invitations
         .where(
           (invite) =>
-              invite.eventId == event.id &&
-              invite.senderId == _user?.id,
+              invite.eventId == event.id && invite.senderId == _user?.id,
         )
         .map((invite) => invite.receiverId)
         .toSet();
@@ -297,9 +477,7 @@ class _EventsScreenState extends State<EventsScreen> {
                           style: const TextStyle(fontWeight: FontWeight.w800),
                         ),
                         subtitle: Text(
-                          invited
-                              ? 'Invitation already sent'
-                              : friend.subtitle,
+                          invited ? 'Invitation already sent' : friend.subtitle,
                         ),
                         onChanged: (checked) {
                           setSheetState(() {
@@ -337,7 +515,9 @@ class _EventsScreenState extends State<EventsScreen> {
     if (result == null || result.isEmpty || _user == null) return;
 
     try {
-      await _supabase.from('event_invitations').insert(
+      await _supabase
+          .from('event_invitations')
+          .insert(
             result
                 .map(
                   (friendId) => <String, dynamic>{
@@ -421,10 +601,7 @@ class _EventsScreenState extends State<EventsScreen> {
                   icon: Icons.location_on_outlined,
                   label: event.venue,
                 ),
-                _DetailChip(
-                  icon: Icons.payments_outlined,
-                  label: event.price,
-                ),
+                _DetailChip(icon: Icons.payments_outlined, label: event.price),
               ],
             ),
             if (event.description.isNotEmpty) ...<Widget>[
@@ -450,12 +627,12 @@ class _EventsScreenState extends State<EventsScreen> {
               ),
               const SizedBox(height: 10),
               ...event.agenda.asMap().entries.map(
-                    (entry) => _AgendaItem(
-                      index: entry.key + 1,
-                      value: entry.value,
-                      color: event.accentColor,
-                    ),
-                  ),
+                (entry) => _AgendaItem(
+                  index: entry.key + 1,
+                  value: entry.value,
+                  color: event.accentColor,
+                ),
+              ),
             ],
             const SizedBox(height: 24),
             const _SectionHeading(
@@ -473,10 +650,7 @@ class _EventsScreenState extends State<EventsScreen> {
             if (event.contact.isNotEmpty)
               _InfoRow(label: 'Contact', value: event.contact),
             if (event.accessibility.isNotEmpty)
-              _InfoRow(
-                label: 'Accessibility',
-                value: event.accessibility,
-              ),
+              _InfoRow(label: 'Accessibility', value: event.accessibility),
             const SizedBox(height: 24),
             Row(
               children: <Widget>[
@@ -525,8 +699,8 @@ class _EventsScreenState extends State<EventsScreen> {
                   _attendingEventIds.contains(event.id)
                       ? 'You’re going • Cancel attendance'
                       : event.isFull
-                          ? 'Event is full'
-                          : 'I’m going',
+                      ? 'Event is full'
+                      : 'I’m going',
                 ),
               ),
             ),
@@ -539,6 +713,11 @@ class _EventsScreenState extends State<EventsScreen> {
   @override
   Widget build(BuildContext context) {
     return VibeScaffold(
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: _submitEvent,
+        icon: const Icon(Icons.add_rounded),
+        label: const Text('Submit event'),
+      ),
       appBar: AppBar(
         title: const Text(
           'Events',
@@ -560,45 +739,44 @@ class _EventsScreenState extends State<EventsScreen> {
               child: CircularProgressIndicator(color: AppColors.vibeBlue),
             )
           : _error != null
-              ? _buildError()
-              : RefreshIndicator(
-                  onRefresh: () => _loadEvents(showLoader: false),
-                  child: LayoutBuilder(
-                    builder: (context, constraints) {
-                      final desktop = constraints.maxWidth >= 980;
-                      return CustomScrollView(
-                        physics: const AlwaysScrollableScrollPhysics(),
-                        slivers: <Widget>[
-                          SliverPadding(
-                            padding: EdgeInsets.fromLTRB(
-                              desktop ? 34 : 16,
-                              8,
-                              desktop ? 34 : 16,
-                              16,
-                            ),
-                            sliver: SliverToBoxAdapter(
-                              child: Center(
-                                child: ConstrainedBox(
-                                  constraints:
-                                      const BoxConstraints(maxWidth: 1180),
-                                  child: Column(
-                                    children: <Widget>[
-                                      _buildHero(desktop: desktop),
-                                      const SizedBox(height: 16),
-                                      _buildFilters(),
-                                    ],
-                                  ),
-                                ),
+          ? _buildError()
+          : RefreshIndicator(
+              onRefresh: () => _loadEvents(showLoader: false),
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  final desktop = constraints.maxWidth >= 980;
+                  return CustomScrollView(
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    slivers: <Widget>[
+                      SliverPadding(
+                        padding: EdgeInsets.fromLTRB(
+                          desktop ? 34 : 16,
+                          8,
+                          desktop ? 34 : 16,
+                          16,
+                        ),
+                        sliver: SliverToBoxAdapter(
+                          child: Center(
+                            child: ConstrainedBox(
+                              constraints: const BoxConstraints(maxWidth: 1180),
+                              child: Column(
+                                children: <Widget>[
+                                  _buildHero(desktop: desktop),
+                                  const SizedBox(height: 16),
+                                  _buildFilters(),
+                                ],
                               ),
                             ),
                           ),
-                          _buildEventGrid(desktop: desktop),
-                          const SliverToBoxAdapter(child: SizedBox(height: 40)),
-                        ],
-                      );
-                    },
-                  ),
-                ),
+                        ),
+                      ),
+                      _buildEventGrid(desktop: desktop),
+                      const SliverToBoxAdapter(child: SizedBox(height: 40)),
+                    ],
+                  );
+                },
+              ),
+            ),
     );
   }
 
@@ -693,14 +871,12 @@ class _EventsScreenState extends State<EventsScreen> {
                     avatar: Icon(
                       filter.$3,
                       size: 17,
-                      color:
-                          selected ? Colors.white : AppColors.textMuted,
+                      color: selected ? Colors.white : AppColors.textMuted,
                     ),
                     label: Text(filter.$2),
                     selectedColor: AppColors.midnightInk,
                     labelStyle: TextStyle(
-                      color:
-                          selected ? Colors.white : AppColors.textMuted,
+                      color: selected ? Colors.white : AppColors.textMuted,
                       fontWeight: FontWeight.w800,
                     ),
                     onSelected: (_) {
@@ -725,15 +901,9 @@ class _EventsScreenState extends State<EventsScreen> {
                 prefixIcon: const Icon(Icons.tune_rounded),
               ),
               items: <DropdownMenuItem<String?>>[
-                const DropdownMenuItem(
-                  value: null,
-                  child: Text('Show all'),
-                ),
+                const DropdownMenuItem(value: null, child: Text('Show all')),
                 ..._filterOptions.map(
-                  (value) => DropdownMenuItem(
-                    value: value,
-                    child: Text(value),
-                  ),
+                  (value) => DropdownMenuItem(value: value, child: Text(value)),
                 ),
               ],
               onChanged: (value) => setState(() => _filterValue = value),
@@ -775,8 +945,8 @@ class _EventsScreenState extends State<EventsScreen> {
                 final columns = constraints.maxWidth >= 1040
                     ? 3
                     : constraints.maxWidth >= 680
-                        ? 2
-                        : 1;
+                    ? 2
+                    : 1;
                 final width =
                     (constraints.maxWidth - ((columns - 1) * 14)) / columns;
                 return Wrap(
@@ -821,9 +991,7 @@ class _EventsScreenState extends State<EventsScreen> {
 
   void _showMessage(String value) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(value)),
-    );
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(value)));
   }
 
   void _showError(String title, Object error) {
@@ -839,7 +1007,10 @@ class _EventsScreenState extends State<EventsScreen> {
         text.contains('permission denied')) {
       return 'You do not have permission for this action.';
     }
-    return text.replaceFirst('PostgrestException(message: ', '').split(',').first;
+    return text
+        .replaceFirst('PostgrestException(message: ', '')
+        .split(',')
+        .first;
   }
 }
 
@@ -854,21 +1025,15 @@ class _GlassCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ClipRRect(
-      borderRadius: AppStyles.bentoRadius,
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
-        child: Container(
-          padding: padding,
-          decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: .8),
-            borderRadius: AppStyles.bentoRadius,
-            border: Border.all(color: Colors.white.withValues(alpha: .88)),
-            boxShadow: AppStyles.softShadow,
-          ),
-          child: child,
-        ),
+    return Container(
+      padding: padding,
+      decoration: BoxDecoration(
+        color: AppColors.surfaceElevated,
+        borderRadius: AppStyles.bentoRadius,
+        border: Border.all(color: AppColors.outline),
+        boxShadow: AppStyles.softShadow,
       ),
+      child: child,
     );
   }
 }
@@ -1018,10 +1183,7 @@ class _EventCard extends StatelessWidget {
 }
 
 class _EventBanner extends StatelessWidget {
-  const _EventBanner({
-    required this.event,
-    required this.height,
-  });
+  const _EventBanner({required this.event, required this.height});
 
   final CampusEvent event;
   final double height;
@@ -1035,10 +1197,7 @@ class _EventBanner extends StatelessWidget {
       clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
         gradient: LinearGradient(
-          colors: <Color>[
-            event.accentColor,
-            AppColors.midnightInk,
-          ],
+          colors: <Color>[event.accentColor, AppColors.midnightInk],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
@@ -1069,11 +1228,7 @@ class _EventBanner extends StatelessWidget {
               image,
               fit: BoxFit.cover,
               errorBuilder: (_, _, _) => Center(
-                child: Icon(
-                  event.categoryIcon,
-                  color: Colors.white,
-                  size: 52,
-                ),
+                child: Icon(event.categoryIcon, color: Colors.white, size: 52),
               ),
             ),
     );
@@ -1091,11 +1246,7 @@ class _HeroCopy extends StatelessWidget {
         Row(
           mainAxisSize: MainAxisSize.min,
           children: <Widget>[
-            Icon(
-              Icons.bolt_rounded,
-              color: AppColors.electricCyan,
-              size: 18,
-            ),
+            Icon(Icons.bolt_rounded, color: AppColors.electricCyan, size: 18),
             SizedBox(width: 7),
             Text(
               'OG CAMPUS EXPERIENCES',
@@ -1133,10 +1284,7 @@ class _HeroCopy extends StatelessWidget {
 }
 
 class _HeroArtwork extends StatelessWidget {
-  const _HeroArtwork({
-    required this.count,
-    this.compact = false,
-  });
+  const _HeroArtwork({required this.count, this.compact = false});
 
   final int count;
   final bool compact;
@@ -1247,8 +1395,8 @@ class _EventStatusPill extends StatelessWidget {
     final color = event.status == 'cancelled'
         ? AppColors.danger
         : event.status == 'postponed'
-            ? AppColors.warning
-            : event.accentColor;
+        ? AppColors.warning
+        : event.accentColor;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
       decoration: BoxDecoration(
@@ -1268,10 +1416,7 @@ class _EventStatusPill extends StatelessWidget {
 }
 
 class _DetailChip extends StatelessWidget {
-  const _DetailChip({
-    required this.icon,
-    required this.label,
-  });
+  const _DetailChip({required this.icon, required this.label});
 
   final IconData icon;
   final String label;
@@ -1281,7 +1426,7 @@ class _DetailChip extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 8),
       decoration: BoxDecoration(
-        color: const Color(0xFFF3F6FC),
+        color: AppColors.canvas,
         borderRadius: AppStyles.pillRadius,
         border: Border.all(color: AppColors.glassBorder),
       ),
@@ -1305,10 +1450,7 @@ class _DetailChip extends StatelessWidget {
 }
 
 class _CompactDetail extends StatelessWidget {
-  const _CompactDetail({
-    required this.icon,
-    required this.value,
-  });
+  const _CompactDetail({required this.icon, required this.value});
 
   final IconData icon;
   final String value;
@@ -1337,10 +1479,7 @@ class _CompactDetail extends StatelessWidget {
 }
 
 class _SectionHeading extends StatelessWidget {
-  const _SectionHeading({
-    required this.icon,
-    required this.title,
-  });
+  const _SectionHeading({required this.icon, required this.title});
 
   final IconData icon;
   final String title;
@@ -1405,10 +1544,7 @@ class _AgendaItem extends StatelessWidget {
               padding: const EdgeInsets.only(top: 4),
               child: Text(
                 value,
-                style: const TextStyle(
-                  color: AppColors.textMuted,
-                  height: 1.4,
-                ),
+                style: const TextStyle(color: AppColors.textMuted, height: 1.4),
               ),
             ),
           ),
@@ -1419,10 +1555,7 @@ class _AgendaItem extends StatelessWidget {
 }
 
 class _InfoRow extends StatelessWidget {
-  const _InfoRow({
-    required this.label,
-    required this.value,
-  });
+  const _InfoRow({required this.label, required this.value});
 
   final String label;
   final String value;
@@ -1499,16 +1632,11 @@ class _FriendAvatar extends StatelessWidget {
   Widget build(BuildContext context) {
     return CircleAvatar(
       backgroundColor: AppColors.vibeBlue.withValues(alpha: .12),
-      backgroundImage:
-          friend.photoUrl == null ? null : NetworkImage(friend.photoUrl!),
+      backgroundImage: friend.photoUrl == null
+          ? null
+          : NetworkImage(friend.photoUrl!),
       child: friend.photoUrl == null
-          ? Text(
-              friend.initials,
-              style: const TextStyle(
-                color: AppColors.vibeBlue,
-                fontWeight: FontWeight.w900,
-              ),
-            )
+          ? const Icon(Icons.person_rounded, color: AppColors.vibeBlue)
           : null,
     );
   }
@@ -1559,10 +1687,7 @@ class _EmptyState extends StatelessWidget {
             Text(
               subtitle,
               textAlign: TextAlign.center,
-              style: const TextStyle(
-                color: AppColors.textMuted,
-                height: 1.4,
-              ),
+              style: const TextStyle(color: AppColors.textMuted, height: 1.4),
             ),
             const SizedBox(height: 18),
             FilledButton.icon(
@@ -1600,35 +1725,33 @@ class CampusEvent {
     required this.attendeeCount,
     required this.status,
     required this.accentHex,
+    required this.approvalStatus,
   });
 
   factory CampusEvent.fromRow(Map<String, dynamic> row) => CampusEvent(
-        id: row['id'].toString(),
-        title: row['title']?.toString().trim() ?? 'Campus event',
-        venue: row['venue']?.toString().trim() ?? 'Campus venue',
-        price: row['price']?.toString().trim() ?? 'Free',
-        imageUrl: _optional(row['image_url']),
-        contact: row['contact']?.toString().trim() ?? '',
-        date: _date(row['date']),
-        description: row['description']?.toString().trim() ?? '',
-        endDate: DateTime.tryParse(row['end_date']?.toString() ?? '')?.toLocal(),
-        campus: row['campus']?.toString().trim() ?? 'All campuses',
-        organisation: row['organisation']?.toString().trim() ?? '',
-        club: row['club']?.toString().trim() ?? '',
-        faculty: row['faculty']?.toString().trim() ?? '',
-        category: row['category']?.toString().trim() ?? 'Campus life',
-        organizerName:
-            row['organizer_name']?.toString().trim() ?? 'OG Vibes',
-        agenda: List<String>.from(
-          row['agenda'] as List<dynamic>? ?? <dynamic>[],
-        ),
-        accessibility: row['accessibility']?.toString().trim() ?? '',
-        capacity: int.tryParse(row['capacity']?.toString() ?? ''),
-        attendeeCount:
-            int.tryParse(row['attendee_count']?.toString() ?? '') ?? 0,
-        status: row['status']?.toString() ?? 'scheduled',
-        accentHex: row['accent_color']?.toString() ?? '#2457F5',
-      );
+    id: row['id'].toString(),
+    title: row['title']?.toString().trim() ?? 'Campus event',
+    venue: row['venue']?.toString().trim() ?? 'Campus venue',
+    price: row['price']?.toString().trim() ?? 'Free',
+    imageUrl: _optional(row['image_url']),
+    contact: row['contact']?.toString().trim() ?? '',
+    date: _date(row['date']),
+    description: row['description']?.toString().trim() ?? '',
+    endDate: DateTime.tryParse(row['end_date']?.toString() ?? '')?.toLocal(),
+    campus: row['campus']?.toString().trim() ?? 'All campuses',
+    organisation: row['organisation']?.toString().trim() ?? '',
+    club: row['club']?.toString().trim() ?? '',
+    faculty: row['faculty']?.toString().trim() ?? '',
+    category: row['category']?.toString().trim() ?? 'Campus life',
+    organizerName: row['organizer_name']?.toString().trim() ?? 'OG Vibes',
+    agenda: List<String>.from(row['agenda'] as List<dynamic>? ?? <dynamic>[]),
+    accessibility: row['accessibility']?.toString().trim() ?? '',
+    capacity: int.tryParse(row['capacity']?.toString() ?? ''),
+    attendeeCount: int.tryParse(row['attendee_count']?.toString() ?? '') ?? 0,
+    status: row['status']?.toString() ?? 'scheduled',
+    accentHex: row['accent_color']?.toString() ?? '#2457F5',
+    approvalStatus: row['approval_status']?.toString() ?? 'approved',
+  );
 
   final String id;
   final String title;
@@ -1651,26 +1774,38 @@ class CampusEvent {
   final int attendeeCount;
   final String status;
   final String accentHex;
+  final String approvalStatus;
 
   Color get accentColor => _hexColor(accentHex);
   bool get isFull => capacity != null && attendeeCount >= capacity!;
   bool get canAttend =>
+      approvalStatus == 'approved' &&
       !isFull &&
       date.isAfter(DateTime.now()) &&
       (status == 'scheduled' || status == 'postponed');
 
   String filterValue(String type) => switch (type) {
-        'campus' => campus,
-        'organisation' => organisation,
-        'club' => club,
-        'faculty' => faculty,
-        _ => '',
-      };
+    'campus' => campus,
+    'organisation' => organisation,
+    'club' => club,
+    'faculty' => faculty,
+    _ => '',
+  };
 
   String get formattedDate {
     const months = <String>[
-      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
     ];
     return '${date.day} ${months[date.month - 1]} ${date.year}';
   }
@@ -1702,12 +1837,12 @@ class EventInvitation {
   });
 
   factory EventInvitation.fromRow(Map<String, dynamic> row) => EventInvitation(
-        id: row['id'].toString(),
-        eventId: row['event_id'].toString(),
-        senderId: row['sender_id'].toString(),
-        receiverId: row['receiver_id'].toString(),
-        status: row['status']?.toString() ?? 'pending',
-      );
+    id: row['id'].toString(),
+    eventId: row['event_id'].toString(),
+    senderId: row['sender_id'].toString(),
+    receiverId: row['receiver_id'].toString(),
+    status: row['status']?.toString() ?? 'pending',
+  );
 
   final String id;
   final String eventId;
@@ -1727,14 +1862,9 @@ class StudentFriend {
 
   factory StudentFriend.fromRow(Map<String, dynamic> row) {
     final nickname = row['nickname']?.toString().trim() ?? '';
-    final fullName = '${row['name'] ?? ''} ${row['surname'] ?? ''}'.trim();
     return StudentFriend(
       id: row['id'].toString(),
-      displayName: nickname.isNotEmpty
-          ? nickname
-          : fullName.isNotEmpty
-              ? fullName
-              : 'OG Student',
+      displayName: nickname.isNotEmpty ? nickname : 'OG Vibester',
       photoUrl: _optional(row['photo_url']),
       campus: row['campus']?.toString().trim() ?? '',
       department: row['department']?.toString().trim() ?? '',
@@ -1753,9 +1883,10 @@ class StudentFriend {
       .take(2)
       .map((word) => word[0].toUpperCase())
       .join();
-  String get subtitle => <String>[campus, department]
-      .where((value) => value.isNotEmpty)
-      .join(' • ');
+  String get subtitle => <String>[
+    campus,
+    department,
+  ].where((value) => value.isNotEmpty).join(' • ');
 }
 
 DateTime _date(dynamic value) =>

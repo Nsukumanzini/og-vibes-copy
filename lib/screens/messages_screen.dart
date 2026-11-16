@@ -12,8 +12,11 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../utils/theme_constants.dart';
 import '../widgets/vibe_scaffold.dart';
+import '../widgets/notification_bell_button.dart';
 import 'chat_detail_screen.dart';
 import 'friend_requests_screen.dart';
+import 'group_chats_screen.dart';
+import 'student_profile_screen.dart';
 
 class MessagesScreen extends StatefulWidget {
   const MessagesScreen({super.key});
@@ -34,6 +37,7 @@ class _MessagesScreenState extends State<MessagesScreen> {
   bool _loading = true;
   bool _refreshing = false;
   bool _offline = false;
+  bool _showingGroups = false;
   String? _error;
 
   String get _cacheKey =>
@@ -159,7 +163,7 @@ class _MessagesScreenState extends State<MessagesScreen> {
               await _client
                       .from('profiles')
                       .select(
-                        'id, name, surname, photo_url, is_online, is_verified, '
+                        'id, nickname, photo_url, is_online, is_verified, '
                         'course, campus',
                       )
                       .inFilter('id', profileIds)
@@ -355,96 +359,169 @@ class _MessagesScreenState extends State<MessagesScreen> {
   @override
   Widget build(BuildContext context) {
     return VibeScaffold(
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: _showNewChat,
-        icon: const Icon(Icons.edit_square),
-        label: const Text('New chat'),
-      ),
-      body: RefreshIndicator(
-        onRefresh: _refresh,
-        child: LayoutBuilder(
-          builder: (context, constraints) => CustomScrollView(
-            physics: const AlwaysScrollableScrollPhysics(),
-            slivers: [
-              SliverPadding(
-                padding: EdgeInsets.fromLTRB(
-                  constraints.maxWidth >= 900 ? 32 : 16,
-                  14,
-                  constraints.maxWidth >= 900 ? 32 : 16,
-                  104,
-                ),
-                sliver: SliverToBoxAdapter(
-                  child: Center(
-                    child: ConstrainedBox(
-                      constraints: const BoxConstraints(maxWidth: 920),
+      floatingActionButton: _showingGroups
+          ? null
+          : FloatingActionButton.extended(
+              onPressed: _showNewChat,
+              icon: const Icon(Icons.edit_square),
+              label: const Text('New chat'),
+            ),
+      body: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 18, 16, 8),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    const Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          _ChatsHero(
-                            conversationCount: _conversations.length,
-                            unreadCount: _unreadTotal,
-                            onlineCount: _onlineFriends,
-                            offline: _offline,
-                            refreshing: _refreshing,
-                            onRefresh: _refresh,
-                          ),
-                          const SizedBox(height: 16),
-                          _ChatsTabBar(
-                            selectedIndex: _selectedTab,
-                            allCount: _conversations
-                                .where((chat) => chat['isArchived'] != true)
-                                .length,
-                            unreadCount: _conversations
-                                .where(
-                                  (chat) =>
-                                      chat['isArchived'] != true &&
-                                      (chat['unread'] as int? ?? 0) > 0,
-                                )
-                                .length,
-                            archivedCount: _conversations
-                                .where((chat) => chat['isArchived'] == true)
-                                .length,
-                            onSelected: _selectTab,
-                          ),
-                          const SizedBox(height: 14),
-                          TextField(
-                            controller: _searchController,
-                            textInputAction: TextInputAction.search,
-                            decoration: InputDecoration(
-                              hintText: 'Search by name',
-                              prefixIcon: const Icon(Icons.search_rounded),
-                              suffixIcon: _searchController.text.isEmpty
-                                  ? null
-                                  : IconButton(
-                                      tooltip: 'Clear search',
-                                      onPressed: _searchController.clear,
-                                      icon: const Icon(Icons.close_rounded),
-                                    ),
+                          Text(
+                            'Chats',
+                            style: TextStyle(
+                              fontSize: 27,
+                              fontWeight: FontWeight.w900,
                             ),
                           ),
-                          if (_error != null) ...[
-                            const SizedBox(height: 12),
-                            _ConnectionBanner(
-                              message: _error!,
-                              offline: _offline,
-                              onRetry: _refresh,
+                          SizedBox(height: 3),
+                          Text(
+                            'Private conversations and module groups',
+                            style: TextStyle(
+                              color: AppColors.textMuted,
+                              fontWeight: FontWeight.w600,
                             ),
-                          ],
-                          const SizedBox(height: 16),
-                          AnimatedSwitcher(
-                            duration: const Duration(milliseconds: 260),
-                            switchInCurve: Curves.easeOutCubic,
-                            child: _buildConversationList(),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const NotificationBellButton(),
+                  ],
+                ),
+                const SizedBox(height: 14),
+                _ChatsModeSwitch(
+                  groupsSelected: _showingGroups,
+                  onChanged: (groups) {
+                    HapticFeedback.selectionClick();
+                    setState(() => _showingGroups = groups);
+                  },
+                ),
+              ],
+            ),
+          ),
+          Expanded(
+            child: _showingGroups
+                ? const GroupChatsScreen()
+                : RefreshIndicator(
+                    onRefresh: _refresh,
+                    child: LayoutBuilder(
+                      builder: (context, constraints) => CustomScrollView(
+                        physics: const AlwaysScrollableScrollPhysics(),
+                        slivers: [
+                          SliverPadding(
+                            padding: EdgeInsets.fromLTRB(
+                              constraints.maxWidth >= 900 ? 32 : 16,
+                              14,
+                              constraints.maxWidth >= 900 ? 32 : 16,
+                              104,
+                            ),
+                            sliver: SliverToBoxAdapter(
+                              child: Center(
+                                child: ConstrainedBox(
+                                  constraints: const BoxConstraints(
+                                    maxWidth: 920,
+                                  ),
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      _ChatsHero(
+                                        conversationCount:
+                                            _conversations.length,
+                                        unreadCount: _unreadTotal,
+                                        onlineCount: _onlineFriends,
+                                        offline: _offline,
+                                        refreshing: _refreshing,
+                                        onRefresh: _refresh,
+                                      ),
+                                      const SizedBox(height: 16),
+                                      _ChatsTabBar(
+                                        selectedIndex: _selectedTab,
+                                        allCount: _conversations
+                                            .where(
+                                              (chat) =>
+                                                  chat['isArchived'] != true,
+                                            )
+                                            .length,
+                                        unreadCount: _conversations
+                                            .where(
+                                              (chat) =>
+                                                  chat['isArchived'] != true &&
+                                                  (chat['unread'] as int? ??
+                                                          0) >
+                                                      0,
+                                            )
+                                            .length,
+                                        archivedCount: _conversations
+                                            .where(
+                                              (chat) =>
+                                                  chat['isArchived'] == true,
+                                            )
+                                            .length,
+                                        onSelected: _selectTab,
+                                      ),
+                                      const SizedBox(height: 14),
+                                      TextField(
+                                        controller: _searchController,
+                                        textInputAction: TextInputAction.search,
+                                        decoration: InputDecoration(
+                                          hintText: 'Search by name',
+                                          prefixIcon: const Icon(
+                                            Icons.search_rounded,
+                                          ),
+                                          suffixIcon:
+                                              _searchController.text.isEmpty
+                                              ? null
+                                              : IconButton(
+                                                  tooltip: 'Clear search',
+                                                  onPressed:
+                                                      _searchController.clear,
+                                                  icon: const Icon(
+                                                    Icons.close_rounded,
+                                                  ),
+                                                ),
+                                        ),
+                                      ),
+                                      if (_error != null) ...[
+                                        const SizedBox(height: 12),
+                                        _ConnectionBanner(
+                                          message: _error!,
+                                          offline: _offline,
+                                          onRetry: _refresh,
+                                        ),
+                                      ],
+                                      const SizedBox(height: 16),
+                                      AnimatedSwitcher(
+                                        duration: const Duration(
+                                          milliseconds: 260,
+                                        ),
+                                        switchInCurve: Curves.easeOutCubic,
+                                        child: _buildConversationList(),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ),
                           ),
                         ],
                       ),
                     ),
                   ),
-                ),
-              ),
-            ],
           ),
-        ),
+        ],
       ),
     );
   }
@@ -479,6 +556,8 @@ class _MessagesScreenState extends State<MessagesScreen> {
             child: _ConversationCard(
               chat: chat,
               onTap: () => _openChat(chat),
+              onProfile: () =>
+                  StudentProfileNavigator.open(context, chat['id']?.toString()),
               onArchive: () => _setArchived(chat, chat['isArchived'] != true),
             ),
           ),
@@ -571,7 +650,7 @@ class _ChatsHero extends StatelessWidget {
                           ),
                           SizedBox(width: 6),
                           Text(
-                            'OG CONNECTIONS',
+                            'STUDENT MESSAGES',
                             style: TextStyle(
                               color: Colors.white,
                               fontSize: 11,
@@ -618,7 +697,7 @@ class _ChatsHero extends StatelessWidget {
                 Text(
                   offline
                       ? 'Offline · your recent conversations are still here.'
-                      : 'Private conversations with your student community.',
+                      : 'Message your friends and open your module groups.',
                   style: TextStyle(
                     color: Colors.white.withValues(alpha: .72),
                     height: 1.4,
@@ -816,11 +895,13 @@ class _ConversationCard extends StatelessWidget {
   const _ConversationCard({
     required this.chat,
     required this.onTap,
+    required this.onProfile,
     required this.onArchive,
   });
 
   final Map<String, dynamic> chat;
   final VoidCallback onTap;
+  final VoidCallback onProfile;
   final VoidCallback onArchive;
 
   @override
@@ -854,7 +935,11 @@ class _ConversationCard extends StatelessWidget {
             ),
             child: Row(
               children: [
-                _ConversationAvatar(chat: chat),
+                InkWell(
+                  customBorder: const CircleBorder(),
+                  onTap: onProfile,
+                  child: _ConversationAvatar(chat: chat),
+                ),
                 const SizedBox(width: 13),
                 Expanded(
                   child: Column(
@@ -1016,20 +1101,12 @@ class _ConversationAvatar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final name = chat['name'].toString();
     final photoUrl = (chat['photoUrl'] ?? '').toString();
     final online = chat['isOnline'] == true;
     final fallback = Container(
       alignment: Alignment.center,
       decoration: const BoxDecoration(gradient: AppStyles.brandGradient),
-      child: Text(
-        name.trim().isEmpty ? '?' : name.trim()[0].toUpperCase(),
-        style: const TextStyle(
-          color: Colors.white,
-          fontSize: 19,
-          fontWeight: FontWeight.w900,
-        ),
-      ),
+      child: const Icon(Icons.person_rounded, color: Colors.white, size: 27),
     );
 
     return Stack(
@@ -1067,7 +1144,7 @@ class _ConversationAvatar extends StatelessWidget {
             height: 14,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              color: online ? AppColors.success : const Color(0xFFB7C2D4),
+              color: online ? AppColors.success : AppColors.neutralMuted,
               border: Border.all(color: Colors.white, width: 2.5),
             ),
           ),
@@ -1252,7 +1329,12 @@ class _FriendTile extends StatelessWidget {
         leading: CircleAvatar(
           backgroundColor: AppColors.vibeBlue.withValues(alpha: .1),
           foregroundColor: AppColors.vibeBlue,
-          child: Text(name.isEmpty ? '?' : name[0].toUpperCase()),
+          backgroundImage: (friend['photo_url'] ?? '').toString().trim().isEmpty
+              ? null
+              : NetworkImage(friend['photo_url'].toString()),
+          child: (friend['photo_url'] ?? '').toString().trim().isEmpty
+              ? const Icon(Icons.person_rounded)
+              : null,
         ),
         title: Text(name, style: const TextStyle(fontWeight: FontWeight.w800)),
         subtitle: Text(
@@ -1319,7 +1401,7 @@ class _InboxSkeleton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Shimmer.fromColors(
-      baseColor: const Color(0xFFE5ECF8),
+      baseColor: AppColors.surfaceBlue,
       highlightColor: Colors.white,
       child: Column(
         children: List.generate(
@@ -1437,24 +1519,15 @@ class _GlassSurface extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(radius),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 14, sigmaY: 14),
-        child: Container(
-          padding: padding,
-          decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: .73),
-            borderRadius: BorderRadius.circular(radius),
-            border: Border.all(
-              color: Colors.white.withValues(alpha: .9),
-              width: 1.2,
-            ),
-            boxShadow: AppStyles.glassShadow,
-          ),
-          child: child,
-        ),
+    return Container(
+      padding: padding,
+      decoration: BoxDecoration(
+        color: AppColors.surfaceElevated,
+        borderRadius: BorderRadius.circular(radius),
+        border: Border.all(color: AppColors.outline, width: 1.2),
+        boxShadow: AppStyles.softShadow,
       ),
+      child: child,
     );
   }
 }
@@ -1514,9 +1587,78 @@ String _messagePreview(Map<String, dynamic> message) {
 }
 
 String _displayName(Map<String, dynamic> profile) {
-  final name = (profile['name'] ?? '').toString().trim();
-  final surname = (profile['surname'] ?? '').toString().trim();
-  return [name, surname].where((value) => value.isNotEmpty).join(' ');
+  final nickname = (profile['nickname'] ?? '').toString().trim();
+  return nickname.isEmpty ? 'OG Vibester' : nickname;
+}
+
+class _ChatsModeSwitch extends StatelessWidget {
+  const _ChatsModeSwitch({
+    required this.groupsSelected,
+    required this.onChanged,
+  });
+
+  final bool groupsSelected;
+  final ValueChanged<bool> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      constraints: const BoxConstraints(maxWidth: 520),
+      padding: const EdgeInsets.all(5),
+      decoration: BoxDecoration(
+        color: Theme.of(
+          context,
+        ).colorScheme.surfaceContainerHighest.withValues(alpha: .72),
+        borderRadius: BorderRadius.circular(18),
+      ),
+      child: Row(
+        children: [
+          _item(context, false, Icons.person_rounded, 'Private chats'),
+          _item(context, true, Icons.groups_rounded, 'Group chats'),
+        ],
+      ),
+    );
+  }
+
+  Widget _item(BuildContext context, bool groups, IconData icon, String label) {
+    final selected = groupsSelected == groups;
+    return Expanded(
+      child: InkWell(
+        borderRadius: BorderRadius.circular(14),
+        onTap: () => onChanged(groups),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 220),
+          padding: const EdgeInsets.symmetric(vertical: 11),
+          decoration: BoxDecoration(
+            color: selected ? AppColors.midnightInk : Colors.transparent,
+            borderRadius: BorderRadius.circular(14),
+            boxShadow: selected ? AppStyles.glassShadow : null,
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                icon,
+                size: 19,
+                color: selected ? Colors.white : AppColors.textMuted,
+              ),
+              const SizedBox(width: 7),
+              Flexible(
+                child: Text(
+                  label,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: selected ? Colors.white : AppColors.textMuted,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 IconData _attachmentIcon(String type) => switch (type.toLowerCase()) {

@@ -2,7 +2,6 @@ import 'dart:ui';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:og_vibes_student/widgets/portal_web_frame.dart';
 import 'package:og_vibes_student/widgets/vibe_scaffold.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:webview_flutter/webview_flutter.dart';
@@ -19,7 +18,6 @@ class _PortalScreenState extends State<PortalScreen> {
     'https://ienabler.gscollege.edu.za/pls/prodi41/w99pkg.mi_login',
   );
   WebViewController? _controller;
-  Key _webKey = UniqueKey();
   double _progress = 0;
   bool _canGoBack = false;
   bool _failed = false;
@@ -31,6 +29,10 @@ class _PortalScreenState extends State<PortalScreen> {
       _controller = WebViewController()
         ..setBackgroundColor(Colors.white)
         ..setJavaScriptMode(JavaScriptMode.unrestricted)
+        ..setUserAgent(
+          'Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 '
+          '(KHTML, like Gecko) Chrome/124.0 Mobile Safari/537.36',
+        )
         ..setNavigationDelegate(NavigationDelegate(
           onProgress: (value) {
             if (mounted) setState(() => _progress = value / 100);
@@ -144,13 +146,48 @@ class _PortalScreenState extends State<PortalScreen> {
 
   Widget _portalView() {
     if (kIsWeb) {
-      return PortalWebFrame(key: _webKey, url: _portalUri.toString());
+      return _webPortalNotice();
     }
     return ColoredBox(
       color: Colors.white,
       child: WebViewWidget(controller: _controller!),
     );
   }
+
+  Widget _webPortalNotice() => Center(
+    child: Padding(
+      padding: const EdgeInsets.all(24),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 520),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.open_in_browser_rounded, size: 58),
+            const SizedBox(height: 16),
+            Text(
+              'Continue to the secure college portal',
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+            const SizedBox(height: 10),
+            const Text(
+              'The college login does not permit reliable embedding inside a '
+              'web app. Open it in a protected browser tab to sign in safely.',
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 20),
+            FilledButton.icon(
+              onPressed: _openExternal,
+              icon: const Icon(Icons.lock_open_rounded),
+              label: const Text('Open Gert Sibande portal'),
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
 
   Widget _controls() => SafeArea(
     top: false,
@@ -194,7 +231,7 @@ class _PortalScreenState extends State<PortalScreen> {
   Future<void> _refresh() async {
     setState(() => _failed = false);
     if (kIsWeb) {
-      setState(() => _webKey = UniqueKey());
+      return;
     } else {
       await _controller?.reload();
     }
@@ -202,7 +239,7 @@ class _PortalScreenState extends State<PortalScreen> {
 
   Future<void> _home() async {
     if (kIsWeb) {
-      setState(() => _webKey = UniqueKey());
+      await _openExternal();
     } else {
       await _controller?.loadRequest(_portalUri);
     }

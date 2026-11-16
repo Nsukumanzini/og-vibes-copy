@@ -2,11 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../services/push_notification_service.dart';
-import 'package:url_launcher/url_launcher.dart';
+import '../services/auth_persistence_service.dart';
 
-import '../screens/call_feature_screen.dart';
+import '../screens/call_history_screen.dart';
 import '../screens/helpful_contacts_screen.dart';
+import '../screens/download_history_screen.dart';
 import '../screens/login_screen.dart';
+import '../screens/my_modules_screen.dart';
+import '../screens/my_posts_screen.dart';
 import '../screens/profile_screen.dart';
 import '../screens/settings_screen.dart';
 import '../screens/suggestion_box_screen.dart';
@@ -21,7 +24,6 @@ class AppDrawer extends StatefulWidget {
 }
 
 class _AppDrawerState extends State<AppDrawer> {
-  bool _isExamMode = false;
   String? _userNickname;
   String _userName = 'OG Vibester';
   String _userCampus = 'Campus Unknown';
@@ -52,9 +54,7 @@ class _AppDrawerState extends State<AppDrawer> {
         _userNickname = (map?['nickname'] as String?)?.trim();
         _userName = (_userNickname?.isNotEmpty == true)
             ? _userNickname!
-            : (map?['name'] as String?)?.trim().isNotEmpty == true
-                ? map!['name'] as String
-                : (user.email?.split('@').first ?? 'OG Vibester');
+            : 'OG Vibester';
         _userCampus = (map?['campus'] as String?)?.trim().isNotEmpty == true
             ? map!['campus'] as String
             : 'Campus Unknown';
@@ -63,13 +63,16 @@ class _AppDrawerState extends State<AppDrawer> {
             ? department!
             : 'General Studies';
         _photoUrl = (map?['photo_url'] as String?)?.trim().isNotEmpty == true
-          ? map!['photo_url'] as String
-          : user.userMetadata?['avatar_url'] as String?;
+            ? map!['photo_url'] as String
+            : user.userMetadata?['avatar_url'] as String?;
       });
     } catch (_) {
       if (!mounted) return;
       setState(() {
-        _userName = user.email?.split('@').first ?? 'OG Vibester';
+        _userName =
+            user.userMetadata?['nickname']?.toString().trim().isNotEmpty == true
+            ? user.userMetadata!['nickname'].toString().trim()
+            : 'OG Vibester';
         _userCampus = 'Campus Unknown';
         _userCourse = 'General Studies';
         _photoUrl = user.userMetadata?['avatar_url'] as String?;
@@ -97,21 +100,23 @@ class _AppDrawerState extends State<AppDrawer> {
                   );
                 },
                 child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 14,
+                  ),
                   child: Row(
                     children: [
                       CircleAvatar(
                         radius: 30,
                         backgroundColor: Colors.white24,
-                        backgroundImage: _photoUrl != null ? NetworkImage(_photoUrl!) : null,
+                        backgroundImage: _photoUrl != null
+                            ? NetworkImage(_photoUrl!)
+                            : null,
                         child: _photoUrl == null
-                            ? Text(
-                                _userName.isNotEmpty ? _userName[0].toUpperCase() : 'O',
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 22,
-                                ),
+                            ? const Icon(
+                                Icons.person_rounded,
+                                color: Colors.white,
+                                size: 30,
                               )
                             : null,
                       ),
@@ -154,7 +159,11 @@ class _AppDrawerState extends State<AppDrawer> {
                           ],
                         ),
                       ),
-                      const Icon(Icons.arrow_forward_ios, color: Colors.white70, size: 18),
+                      const Icon(
+                        Icons.arrow_forward_ios,
+                        color: Colors.white70,
+                        size: 18,
+                      ),
                     ],
                   ),
                 ),
@@ -171,7 +180,7 @@ class _AppDrawerState extends State<AppDrawer> {
                     color: Colors.white70,
                   ),
                   title: const Text(
-                    'My Profile',
+                    'My profile',
                     style: TextStyle(color: Colors.white),
                   ),
                   onTap: () {
@@ -183,18 +192,45 @@ class _AppDrawerState extends State<AppDrawer> {
                 ),
                 ListTile(
                   leading: const Icon(
-                    Icons.circle_notifications,
-                    color: Colors.white70,
+                    Icons.dynamic_feed_rounded,
+                    color: Colors.cyanAccent,
                   ),
                   title: const Text(
-                    'Notification Settings',
+                    'My posts',
                     style: TextStyle(color: Colors.white),
+                  ),
+                  subtitle: const Text(
+                    'View, edit or delete your posts',
+                    style: TextStyle(color: Colors.white60),
+                  ),
+                  onTap: () {
+                    Navigator.of(context).pop();
+                    Navigator.of(context).push(
+                      MaterialPageRoute(builder: (_) => const MyPostsScreen()),
+                    );
+                  },
+                ),
+                ListTile(
+                  leading: const Icon(
+                    Icons.menu_book_rounded,
+                    color: Colors.cyanAccent,
+                  ),
+                  title: const Text(
+                    'My modules',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  subtitle: const Text(
+                    'Invitations and modules you joined',
+                    style: TextStyle(color: Colors.white60),
                   ),
                   onTap: () {
                     Navigator.of(context).pop();
                     Navigator.of(context).push(
                       MaterialPageRoute(
-                        builder: (_) => const SettingsScreen(),
+                        builder: (_) => const MyModulesScreen(),
                       ),
                     );
                   },
@@ -206,7 +242,7 @@ class _AppDrawerState extends State<AppDrawer> {
                     color: Colors.white70,
                   ),
                   title: const Text(
-                    'Helpful Contacts',
+                    'Helpful contacts',
                     style: TextStyle(color: Colors.white),
                   ),
                   onTap: () {
@@ -220,17 +256,19 @@ class _AppDrawerState extends State<AppDrawer> {
                 ),
                 ListTile(
                   leading: const Icon(
-                    Icons.video_call_rounded,
+                    Icons.history_rounded,
                     color: Colors.white70,
                   ),
                   title: const Text(
-                    'Call Feature',
+                    'Call history',
                     style: TextStyle(color: Colors.white),
                   ),
                   onTap: () {
                     Navigator.of(context).pop();
                     Navigator.of(context).push(
-                      MaterialPageRoute(builder: (_) => const CallFeatureScreen()),
+                      MaterialPageRoute(
+                        builder: (_) => const CallHistoryScreen(),
+                      ),
                     );
                   },
                 ),
@@ -240,7 +278,7 @@ class _AppDrawerState extends State<AppDrawer> {
                     color: Colors.white70,
                   ),
                   title: const Text(
-                    'Report a Problem',
+                    'Report a problem',
                     style: TextStyle(color: Colors.white),
                   ),
                   onTap: () {
@@ -258,7 +296,7 @@ class _AppDrawerState extends State<AppDrawer> {
                     color: Colors.white70,
                   ),
                   title: const Text(
-                    'Suggest an Idea',
+                    'Suggest an idea',
                     style: TextStyle(color: Colors.white),
                   ),
                   onTap: () {
@@ -271,31 +309,10 @@ class _AppDrawerState extends State<AppDrawer> {
                   },
                 ),
                 const Divider(color: Colors.white24),
-                SwitchListTile.adaptive(
-                  value: _isExamMode,
-                  title: const Text(
-                    'Exam Mode',
-                    style: TextStyle(color: Colors.white),
-                  ),
-                  subtitle: const Text(
-                    'Silence notifications for 2 hrs',
-                    style: TextStyle(color: Colors.white70),
-                  ),
-                  onChanged: (value) {
-                    setState(() => _isExamMode = value);
-                    if (value) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text('Study hard! Notifications silenced.'),
-                        ),
-                      );
-                    }
-                  },
-                ),
                 ListTile(
                   leading: const Icon(Icons.history, color: Colors.white70),
                   title: const Text(
-                    'Download History',
+                    'Downloads',
                     style: TextStyle(color: Colors.white),
                   ),
                   onTap: () {
@@ -327,7 +344,7 @@ class _AppDrawerState extends State<AppDrawer> {
                     color: Colors.white70,
                   ),
                   title: const Text(
-                    "What's New",
+                    'Version updates',
                     style: TextStyle(color: Colors.white),
                   ),
                   onTap: () {
@@ -338,20 +355,9 @@ class _AppDrawerState extends State<AppDrawer> {
                   },
                 ),
                 ListTile(
-                  leading: const Icon(Icons.privacy_tip, color: Colors.white70),
-                  title: const Text(
-                    'Legal & Privacy',
-                    style: TextStyle(color: Colors.white),
-                  ),
-                  onTap: () {
-                    Navigator.of(context).pop();
-                    _launchLegalPage();
-                  },
-                ),
-                ListTile(
                   leading: const Icon(Icons.logout, color: Colors.red),
                   title: const Text(
-                    'Log Out',
+                    'Log out',
                     style: TextStyle(
                       color: Colors.red,
                       fontWeight: FontWeight.bold,
@@ -362,11 +368,23 @@ class _AppDrawerState extends State<AppDrawer> {
               ],
             ),
           ),
-          Padding(
-            padding: const EdgeInsets.only(bottom: 20),
-            child: const Text(
-              'v1.0.0 (Stable)',
-              style: TextStyle(color: Colors.grey),
+          const Padding(
+            padding: EdgeInsets.only(bottom: 20),
+            child: Column(
+              children: [
+                Text(
+                  'Powered by OG Technologies',
+                  style: TextStyle(
+                    color: Colors.white70,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                SizedBox(height: 3),
+                Text(
+                  '© 2026 OG Technologies',
+                  style: TextStyle(color: Colors.white38, fontSize: 11),
+                ),
+              ],
             ),
           ),
         ],
@@ -379,6 +397,7 @@ class _AppDrawerState extends State<AppDrawer> {
     final messenger = ScaffoldMessenger.of(context);
     try {
       await PushNotificationService.unregisterCurrentDevice();
+      await AuthPersistenceService.clear();
       await Supabase.instance.client.auth.signOut();
       if (!mounted) return;
       navigator.pushAndRemoveUntil(
@@ -391,89 +410,5 @@ class _AppDrawerState extends State<AppDrawer> {
         SnackBar(content: Text('Failed to log out: $error')),
       );
     }
-  }
-
-  Future<void> _launchLegalPage() async {
-    const url = 'https://www.nsfas.org.za';
-    try {
-      if (!await launchUrl(Uri.parse(url))) {
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Unable to open legal information.')),
-        );
-      }
-    } catch (error) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Unable to open legal information.')),
-      );
-    }
-  }
-}
-
-class DownloadHistoryScreen extends StatelessWidget {
-  const DownloadHistoryScreen({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    final List<Map<String, String>> downloads = const [];
-
-    return Scaffold(
-      extendBodyBehindAppBar: true,
-      appBar: AppBar(
-        title: const Text(
-          'Download History',
-          style: TextStyle(color: Colors.white),
-        ),
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        iconTheme: const IconThemeData(color: Colors.white),
-      ),
-      body: Container(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [Color(0xFF0D47A1), Color(0xFF2962FF), Color(0xFF6200EA)],
-          ),
-        ),
-        child: SafeArea(
-          child: downloads.isEmpty
-              ? const Center(
-                  child: Text(
-                    'No downloads yet',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                )
-              : ListView.separated(
-                  padding: const EdgeInsets.all(20),
-                  itemCount: downloads.length,
-                  separatorBuilder: (_, index) => const SizedBox(height: 12),
-                  itemBuilder: (context, index) {
-                    final entry = downloads[index];
-                    return ListTile(
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(18),
-                        side: const BorderSide(color: Colors.white24),
-                      ),
-                      tileColor: Colors.white.withValues(alpha: 0.08),
-                      leading: const Icon(Icons.picture_as_pdf),
-                      title: Text(entry['title'] ?? 'Unknown file'),
-                      subtitle: Text(
-                        '${entry['size'] ?? '--'} • ${entry['date'] ?? ''}',
-                      ),
-                      trailing: const Icon(Icons.arrow_forward_ios, size: 16),
-                      textColor: Colors.white,
-                      iconColor: Colors.white70,
-                      onTap: () {},
-                    );
-                  },
-                ),
-        ),
-      ),
-    );
   }
 }

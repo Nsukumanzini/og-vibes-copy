@@ -1,13 +1,13 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
-import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:shimmer/shimmer.dart';
+import '../widgets/academic_attachment_actions.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'package:og_vibes_student/screens/lms_quiz_lockdown_screen.dart';
@@ -28,11 +28,12 @@ class _QuizScreenState extends State<QuizScreen>
   final List<QuizAttempt> _attempts = <QuizAttempt>[];
   final List<ModuleRef> _modules = <ModuleRef>[];
   final Set<String> _registeredModuleIds = <String>{};
-  final Map<String, LecturerProfile> _lecturers =
-      <String, LecturerProfile>{};
+  final Map<String, LecturerProfile> _lecturers = <String, LecturerProfile>{};
+  final TextEditingController _searchController = TextEditingController();
 
   Timer? _clock;
   StreamSubscription<List<Map<String, dynamic>>>? _quizSubscription;
+  StreamSubscription<List<Map<String, dynamic>>>? _attemptSubscription;
   String _search = '';
   String _moduleFilter = 'All';
   String _lecturerFilter = 'All';
@@ -42,6 +43,7 @@ class _QuizScreenState extends State<QuizScreen>
   bool _myModulesOnly = true;
   bool _hasRegistrationMatch = false;
   bool _isLoading = true;
+  bool _usingOfflineCache = false;
   String? _errorMessage;
 
   @override
@@ -64,6 +66,8 @@ class _QuizScreenState extends State<QuizScreen>
   void dispose() {
     _clock?.cancel();
     _quizSubscription?.cancel();
+    _attemptSubscription?.cancel();
+    _searchController.dispose();
     _tabController.dispose();
     super.dispose();
   }
@@ -99,7 +103,9 @@ class _QuizScreenState extends State<QuizScreen>
         Supabase.instance.client
             .from('profiles')
             .select('id, name, surname, photo_url, is_verified'),
-        Supabase.instance.client.from('quizzes').select('''
+        Supabase.instance.client
+            .from('quizzes')
+            .select('''
           id,
           module_id,
           lecturer_id,
@@ -120,6 +126,7 @@ class _QuizScreenState extends State<QuizScreen>
           reward_points,
           instructions,
           results_release,
+          created_at,
           published,
           questions:quiz_questions(
             id,
@@ -132,7 +139,9 @@ class _QuizScreenState extends State<QuizScreen>
             points,
             position
           )
-        ''').eq('published', true).order('quiz_date', ascending: true),
+        ''')
+            .eq('published', true)
+            .order('quiz_date', ascending: true),
         Supabase.instance.client
             .from('quiz_attempts')
             .select(
@@ -145,7 +154,7 @@ class _QuizScreenState extends State<QuizScreen>
             .order('started_at', ascending: false),
       ]);
 
-      _buildAcademicContext(
+      _applyDashboardRows(
         profile: results[0] is Map
             ? Map<String, dynamic>.from(results[0] as Map)
             : <String, dynamic>{},
@@ -158,44 +167,118 @@ class _QuizScreenState extends State<QuizScreen>
         lecturerRows: List<Map<String, dynamic>>.from(
           results[3] as List<dynamic>? ?? <dynamic>[],
         ),
+        quizRows: List<Map<String, dynamic>>.from(
+          results[4] as List<dynamic>? ?? <dynamic>[],
+        ),
+        attemptRows: List<Map<String, dynamic>>.from(
+          results[5] as List<dynamic>? ?? <dynamic>[],
+        ),
       );
-      final quizRows = List<Map<String, dynamic>>.from(
-        results[4] as List<dynamic>? ?? <dynamic>[],
-      );
-      final attemptRows = List<Map<String, dynamic>>.from(
-        results[5] as List<dynamic>? ?? <dynamic>[],
-      );
-      final attempts = attemptRows.map(QuizAttempt.fromRow).toList();
-      final quizzes = quizRows
-          .map(
-            (row) => QuizItem.fromSupabaseRow(
-              row,
-              module: _moduleById(_text(row['module_id'])),
-              lecturer: _lecturers[_text(row['lecturer_id'])],
-              attempts: attempts
-                  .where((attempt) => attempt.quizId == _text(row['id']))
-                  .toList(),
-            ),
-          )
-          .toList();
-
-      if (!mounted) return;
-      setState(() {
-        _attempts
-          ..clear()
-          ..addAll(attempts);
-        _quizzes
-          ..clear()
-          ..addAll(quizzes);
-        _isLoading = false;
-        _errorMessage = null;
-      });
+      try {
+        await _cacheDashboard(user.id, results);
+      } catch (_) {
+        // A cache write must never replace a successful live response.
+      }
     } catch (error) {
       if (!mounted) return;
+      if (await _restoreCachedDashboard(user.id)) return;
       setState(() {
         _isLoading = false;
         _errorMessage = error.toString();
       });
+    }
+  }
+
+  void _applyDashboardRows({
+    required Map<String, dynamic> profile,
+    required List<Map<String, dynamic>> programmes,
+    required List<Map<String, dynamic>> moduleRows,
+    required List<Map<String, dynamic>> lecturerRows,
+    required List<Map<String, dynamic>> quizRows,
+    required List<Map<String, dynamic>> attemptRows,
+    bool offline = false,
+  }) {
+    _buildAcademicContext(
+      profile: profile,
+      programmes: programmes,
+      moduleRows: moduleRows,
+      lecturerRows: lecturerRows,
+    );
+    final attempts = attemptRows.map(QuizAttempt.fromRow).toList();
+    final quizzes = quizRows
+        .map(
+          (row) => QuizItem.fromSupabaseRow(
+            row,
+            module: _moduleById(_text(row['module_id'])),
+            lecturer: _lecturers[_text(row['lecturer_id'])],
+            attempts: attempts
+                .where((attempt) => attempt.quizId == _text(row['id']))
+                .toList(),
+          ),
+        )
+        .toList();
+    if (!mounted) return;
+    setState(() {
+      _attempts
+        ..clear()
+        ..addAll(attempts);
+      _quizzes
+        ..clear()
+        ..addAll(quizzes);
+      _isLoading = false;
+      _usingOfflineCache = offline;
+      _errorMessage = null;
+    });
+  }
+
+  String _dashboardCacheKey(String userId) => 'quiz_hub_v2_$userId';
+
+  Future<void> _cacheDashboard(String userId, List<dynamic> results) async {
+    final preferences = await SharedPreferences.getInstance();
+    await preferences.setString(
+      _dashboardCacheKey(userId),
+      jsonEncode(<String, dynamic>{
+        'profile': results[0],
+        'programmes': results[1],
+        'modules': results[2],
+        'lecturers': results[3],
+        'quizzes': results[4],
+        'attempts': results[5],
+        'cached_at': DateTime.now().toUtc().toIso8601String(),
+      }),
+    );
+  }
+
+  Future<bool> _restoreCachedDashboard(String userId) async {
+    final preferences = await SharedPreferences.getInstance();
+    final raw = preferences.getString(_dashboardCacheKey(userId));
+    if (raw == null) return false;
+    try {
+      final data = Map<String, dynamic>.from(jsonDecode(raw) as Map);
+      _applyDashboardRows(
+        profile: Map<String, dynamic>.from(
+          data['profile'] as Map? ?? <String, dynamic>{},
+        ),
+        programmes: List<Map<String, dynamic>>.from(
+          data['programmes'] as List<dynamic>? ?? <dynamic>[],
+        ),
+        moduleRows: List<Map<String, dynamic>>.from(
+          data['modules'] as List<dynamic>? ?? <dynamic>[],
+        ),
+        lecturerRows: List<Map<String, dynamic>>.from(
+          data['lecturers'] as List<dynamic>? ?? <dynamic>[],
+        ),
+        quizRows: List<Map<String, dynamic>>.from(
+          data['quizzes'] as List<dynamic>? ?? <dynamic>[],
+        ),
+        attemptRows: List<Map<String, dynamic>>.from(
+          data['attempts'] as List<dynamic>? ?? <dynamic>[],
+        ),
+        offline: true,
+      );
+      return true;
+    } catch (_) {
+      return false;
     }
   }
 
@@ -207,11 +290,14 @@ class _QuizScreenState extends State<QuizScreen>
   }) {
     final department = _normalize(profile['department']);
     final level = _normalize(profile['level']);
-    final programmeIds = programmes.where((programme) {
-      final name = _normalize(programme['name']);
-      return department.isNotEmpty &&
-          (department.contains(name) || name.contains(department));
-    }).map((programme) => _text(programme['id'])).toSet();
+    final programmeIds = programmes
+        .where((programme) {
+          final name = _normalize(programme['name']);
+          return department.isNotEmpty &&
+              (department.contains(name) || name.contains(department));
+        })
+        .map((programme) => _text(programme['id']))
+        .toSet();
 
     _modules
       ..clear()
@@ -219,14 +305,16 @@ class _QuizScreenState extends State<QuizScreen>
     _registeredModuleIds
       ..clear()
       ..addAll(
-        _modules.where((module) {
-          final moduleLevel = _normalize(module.level);
-          return programmeIds.contains(module.programmeId) &&
-              (level.isEmpty ||
-                  level == moduleLevel ||
-                  level.contains(moduleLevel) ||
-                  moduleLevel.contains(level));
-        }).map((module) => module.id),
+        _modules
+            .where((module) {
+              final moduleLevel = _normalize(module.level);
+              return programmeIds.contains(module.programmeId) &&
+                  (level.isEmpty ||
+                      level == moduleLevel ||
+                      level.contains(moduleLevel) ||
+                      moduleLevel.contains(level));
+            })
+            .map((module) => module.id),
       );
     _hasRegistrationMatch = _registeredModuleIds.isNotEmpty;
     if (!_hasRegistrationMatch) _myModulesOnly = false;
@@ -252,12 +340,21 @@ class _QuizScreenState extends State<QuizScreen>
   }
 
   void _listenForChanges() {
+    final userId = Supabase.instance.client.auth.currentUser?.id;
     _quizSubscription = Supabase.instance.client
         .from('quizzes')
         .stream(primaryKey: <String>['id'])
         .listen((_) {
-      if (mounted) unawaited(_loadDashboard(showLoader: false));
-    }, onError: (_) {});
+          if (mounted) unawaited(_loadDashboard(showLoader: false));
+        }, onError: (_) {});
+    if (userId == null) return;
+    _attemptSubscription = Supabase.instance.client
+        .from('quiz_attempts')
+        .stream(primaryKey: <String>['id'])
+        .eq('user_id', userId)
+        .listen((_) {
+          if (mounted) unawaited(_loadDashboard(showLoader: false));
+        }, onError: (_) {});
   }
 
   ModuleRef? _moduleById(String id) {
@@ -287,12 +384,10 @@ class _QuizScreenState extends State<QuizScreen>
       if (_moduleFilter != 'All' && quiz.moduleId != _moduleFilter) {
         return false;
       }
-      if (_lecturerFilter != 'All' &&
-          quiz.lecturer.name != _lecturerFilter) {
+      if (_lecturerFilter != 'All' && quiz.lecturer.name != _lecturerFilter) {
         return false;
       }
-      if (_difficultyFilter != 'All' &&
-          quiz.difficulty != _difficultyFilter) {
+      if (_difficultyFilter != 'All' && quiz.difficulty != _difficultyFilter) {
         return false;
       }
       if (_statusFilter != 'All' && quiz.statusLabel != _statusFilter) {
@@ -304,9 +399,9 @@ class _QuizScreenState extends State<QuizScreen>
       }
       if (_dateFilter == 'Next 7 days' &&
           (quiz.availableAt.toLocal().isBefore(now) ||
-              quiz.availableAt
-                  .toLocal()
-                  .isAfter(now.add(const Duration(days: 7))))) {
+              quiz.availableAt.toLocal().isAfter(
+                now.add(const Duration(days: 7)),
+              ))) {
         return false;
       }
       return true;
@@ -321,9 +416,16 @@ class _QuizScreenState extends State<QuizScreen>
       _filteredQuizzes.where((quiz) => quiz.hasCompletedAttempt).toList();
   List<QuizAttempt> get _completedAttempts =>
       _attempts.where((attempt) => attempt.status == 'completed').toList();
+  List<QuizAttempt> get _releasedAttempts =>
+      _completedAttempts.where((attempt) {
+        for (final quiz in _quizzes) {
+          if (quiz.id == attempt.quizId) return quiz.resultsAvailable;
+        }
+        return false;
+      }).toList();
 
   double get _averageScore {
-    final completed = _completedAttempts
+    final completed = _releasedAttempts
         .where((attempt) => attempt.percentage != null)
         .toList();
     if (completed.isEmpty) return 0;
@@ -334,13 +436,13 @@ class _QuizScreenState extends State<QuizScreen>
         completed.length;
   }
 
-  int get _rewardTotal => _completedAttempts.fold<int>(
-        0,
-        (total, attempt) => total + attempt.rewardPoints,
-      );
+  int get _rewardTotal => _releasedAttempts.fold<int>(
+    0,
+    (total, attempt) => total + attempt.rewardPoints,
+  );
 
   int get _passStreak {
-    final completed = List<QuizAttempt>.from(_completedAttempts)
+    final completed = List<QuizAttempt>.from(_releasedAttempts)
       ..sort((a, b) {
         final aDate = a.completedAt ?? a.startedAt;
         final bDate = b.completedAt ?? b.startedAt;
@@ -361,7 +463,7 @@ class _QuizScreenState extends State<QuizScreen>
   Widget build(BuildContext context) {
     return VibeScaffold(
       appBar: AppBar(
-        title: const Text('Quiz'),
+        title: const Text('Quizzes'),
         backgroundColor: Colors.transparent,
         actions: <Widget>[
           IconButton(
@@ -386,6 +488,7 @@ class _QuizScreenState extends State<QuizScreen>
     if (_errorMessage != null && _quizzes.isEmpty) return _buildErrorState();
     return Column(
       children: <Widget>[
+        if (_usingOfflineCache) _buildOfflineDashboardBanner(),
         Expanded(
           child: NestedScrollView(
             headerSliverBuilder: (_, _) => <Widget>[
@@ -420,12 +523,45 @@ class _QuizScreenState extends State<QuizScreen>
     );
   }
 
+  Widget _buildOfflineDashboardBanner() {
+    return Material(
+      color: AppColors.warning.withValues(alpha: .13),
+      child: Semantics(
+        liveRegion: true,
+        label: 'Offline. Showing your last saved quiz information.',
+        child: InkWell(
+          onTap: () => _loadDashboard(showLoader: false),
+          child: const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 16, vertical: 9),
+            child: Row(
+              children: <Widget>[
+                Icon(Icons.cloud_off_rounded, color: AppColors.warning),
+                SizedBox(width: 9),
+                Expanded(
+                  child: Text(
+                    'You’re offline. Showing your last saved quiz information.',
+                    style: TextStyle(
+                      color: Color(0xFF775700),
+                      fontSize: 11,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ),
+                Icon(Icons.refresh_rounded, color: AppColors.warning),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildHero() {
     final next = _upcomingQuizzes.isEmpty
         ? null
-        : (List<QuizItem>.from(_upcomingQuizzes)
-              ..sort((a, b) => a.availableAt.compareTo(b.availableAt)))
-            .first;
+        : (List<QuizItem>.from(
+            _upcomingQuizzes,
+          )..sort((a, b) => a.availableAt.compareTo(b.availableAt))).first;
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
       child: Container(
@@ -457,7 +593,7 @@ class _QuizScreenState extends State<QuizScreen>
                     Icon(Icons.bolt_rounded, color: AppColors.electricCyan),
                     SizedBox(width: 9),
                     Text(
-                      'OG QUIZ ARENA',
+                      'OG ACADEMIC QUIZZES',
                       style: TextStyle(
                         color: AppColors.electricCyan,
                         fontSize: 12,
@@ -469,7 +605,7 @@ class _QuizScreenState extends State<QuizScreen>
                 ),
                 const SizedBox(height: 12),
                 const Text(
-                  'Think fast. Learn deeper.',
+                  'Your quizzes',
                   style: TextStyle(
                     color: Colors.white,
                     fontSize: 27,
@@ -478,7 +614,7 @@ class _QuizScreenState extends State<QuizScreen>
                 ),
                 const SizedBox(height: 5),
                 const Text(
-                  'Secure attempts, instant progress and meaningful rewards.',
+                  'Find quizzes, continue saved work and check your results.',
                   style: TextStyle(
                     color: Colors.white70,
                     fontWeight: FontWeight.w600,
@@ -505,7 +641,7 @@ class _QuizScreenState extends State<QuizScreen>
                     _heroStat(
                       '${_averageScore.round()}%',
                       'Average',
-                      const Color(0xFFB8A5FF),
+                      AppColors.blueLight,
                     ),
                   ],
                 ),
@@ -566,7 +702,7 @@ class _QuizScreenState extends State<QuizScreen>
           ],
         ),
       ),
-    ).animate().fadeIn(duration: 420.ms).slideY(begin: .05, end: 0);
+    );
   }
 
   Widget _heroStat(String value, String label, Color color) {
@@ -609,15 +745,17 @@ class _QuizScreenState extends State<QuizScreen>
         child: Column(
           children: <Widget>[
             TextField(
+              controller: _searchController,
               onChanged: (value) => setState(() => _search = value),
               decoration: InputDecoration(
-                hintText: 'Search quizzes, modules or lecturers',
+                hintText: 'Search by quiz title or module',
                 prefixIcon: const Icon(Icons.search_rounded),
                 suffixIcon: _search.isEmpty
                     ? null
                     : IconButton(
                         onPressed: () {
                           FocusScope.of(context).unfocus();
+                          _searchController.clear();
                           setState(() => _search = '');
                         },
                         icon: const Icon(Icons.close_rounded),
@@ -652,8 +790,7 @@ class _QuizScreenState extends State<QuizScreen>
                           : 'All modules • registration not matched',
                       overflow: TextOverflow.ellipsis,
                     ),
-                    selectedColor:
-                        AppColors.vibeBlue.withValues(alpha: .14),
+                    selectedColor: AppColors.vibeBlue.withValues(alpha: .14),
                     side: BorderSide.none,
                   ),
                 ),
@@ -696,7 +833,7 @@ class _QuizScreenState extends State<QuizScreen>
             Tab(text: 'Available ${_availableQuizzes.length}'),
             Tab(text: 'Upcoming ${_upcomingQuizzes.length}'),
             Tab(text: 'Completed ${_completedQuizzes.length}'),
-            Tab(text: 'Results ${_completedAttempts.length}'),
+            Tab(text: 'Results ${_releasedAttempts.length}'),
           ],
         ),
       ),
@@ -718,7 +855,7 @@ class _QuizScreenState extends State<QuizScreen>
               padding: const EdgeInsets.fromLTRB(16, 2, 16, 110),
               gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
                 maxCrossAxisExtent: 520,
-                mainAxisExtent: 385,
+                mainAxisExtent: 415,
                 crossAxisSpacing: 14,
                 mainAxisSpacing: 14,
               ),
@@ -742,170 +879,203 @@ class _QuizScreenState extends State<QuizScreen>
   Widget _buildQuizCard(QuizItem quiz, int index, _QuizCardMode mode) {
     final attempt = quiz.latestAttempt;
     final accent = mode == _QuizCardMode.completed
-        ? AppColors.success
+        ? (quiz.resultsAvailable ? AppColors.success : AppColors.warning)
         : mode == _QuizCardMode.upcoming
-            ? AppColors.warning
-            : AppColors.vibeBlue;
-    return _glass(
-      padding: const EdgeInsets.all(17),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: <Widget>[
-          Row(
+        ? AppColors.warning
+        : AppColors.vibeBlue;
+    return _entryMotion(
+      Semantics(
+        button: true,
+        label:
+            '${quiz.title}, ${quiz.statusLabel}, ${quiz.remainingAttempts} attempts left',
+        child: _glass(
+          padding: const EdgeInsets.all(17),
+          child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: <Widget>[
-              Container(
-                width: 50,
-                height: 50,
-                decoration: BoxDecoration(
-                  gradient: mode == _QuizCardMode.completed
-                      ? const LinearGradient(
-                          colors: <Color>[
-                            AppColors.success,
-                            Color(0xFF42C997),
-                          ],
-                        )
-                      : AppStyles.brandGradient,
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                child: Icon(
-                  mode == _QuizCardMode.completed
-                      ? Icons.workspace_premium_rounded
-                      : Icons.quiz_rounded,
-                  color: Colors.white,
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: <Widget>[
-                    Row(
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  Container(
+                    width: 50,
+                    height: 50,
+                    decoration: BoxDecoration(
+                      gradient: mode == _QuizCardMode.completed
+                          ? const LinearGradient(
+                              colors: <Color>[
+                                AppColors.success,
+                                AppColors.successLight,
+                              ],
+                            )
+                          : AppStyles.brandGradient,
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    child: Icon(
+                      mode == _QuizCardMode.completed
+                          ? Icons.workspace_premium_rounded
+                          : Icons.quiz_rounded,
+                      color: Colors.white,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: <Widget>[
-                        Expanded(
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: <Widget>[
+                            Expanded(
+                              child: Text(
+                                quiz.title,
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  color: AppColors.midnightInk,
+                                  fontSize: 17,
+                                  height: 1.18,
+                                  fontWeight: FontWeight.w900,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            if (quiz.isNew) ...<Widget>[
+                              _newPill(),
+                              const SizedBox(width: 6),
+                            ],
+                            _difficultyPill(quiz.difficulty),
+                          ],
+                        ),
+                        const SizedBox(height: 5),
+                        Text(
+                          quiz.moduleLabel,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: AppColors.textMuted,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Text(
+                quiz.description,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  color: AppColors.textMuted,
+                  height: 1.4,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(height: 12),
+              Wrap(
+                spacing: 7,
+                runSpacing: 7,
+                children: <Widget>[
+                  _metaPill(
+                    Icons.timer_outlined,
+                    '${quiz.durationMinutes} min',
+                  ),
+                  _metaPill(
+                    Icons.emoji_events_outlined,
+                    'Pass ${quiz.passingScore}%',
+                  ),
+                  _metaPill(
+                    Icons.help_outline_rounded,
+                    '${quiz.questions.length} questions',
+                  ),
+                  _metaPill(
+                    Icons.replay_rounded,
+                    '${quiz.remainingAttempts} attempt${quiz.remainingAttempts == 1 ? '' : 's'} left',
+                  ),
+                ],
+              ),
+              const SizedBox(height: 9),
+              Text(
+                'Opens ${_dateTimeLabel(quiz.availableAt)}${quiz.closesAt == null ? '' : '  •  Closes ${_dateTimeLabel(quiz.closesAt!)}'}',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  color: AppColors.textMuted,
+                  fontSize: 10,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 13),
+              Row(
+                children: <Widget>[
+                  _lecturerAvatar(quiz.lecturer),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Row(
+                      children: <Widget>[
+                        Flexible(
                           child: Text(
-                            quiz.title,
-                            maxLines: 2,
+                            quiz.lecturer.name,
                             overflow: TextOverflow.ellipsis,
                             style: const TextStyle(
                               color: AppColors.midnightInk,
-                              fontSize: 17,
-                              height: 1.18,
-                              fontWeight: FontWeight.w900,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w800,
                             ),
                           ),
                         ),
-                        const SizedBox(width: 8),
-                        _difficultyPill(quiz.difficulty),
+                        if (quiz.lecturer.verified) ...<Widget>[
+                          const SizedBox(width: 4),
+                          const Icon(
+                            Icons.verified_rounded,
+                            color: AppColors.vibeBlue,
+                            size: 15,
+                          ),
+                        ],
                       ],
                     ),
-                    const SizedBox(height: 5),
-                    Text(
-                      quiz.moduleLabel,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: AppColors.textMuted,
-                        fontWeight: FontWeight.w700,
-                      ),
+                  ),
+                  Text(
+                    mode == _QuizCardMode.completed
+                        ? quiz.resultsAvailable
+                              ? '${attempt?.percentage?.round() ?? 0}%'
+                              : 'Results pending'
+                        : _countdown(
+                            mode == _QuizCardMode.upcoming
+                                ? quiz.availableAt
+                                : quiz.closesAt,
+                          ),
+                    style: TextStyle(
+                      color: accent,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w900,
                     ),
-                  ],
-                ),
+                  ),
+                ],
               ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Text(
-            quiz.description,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(
-              color: AppColors.textMuted,
-              height: 1.4,
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          const SizedBox(height: 12),
-          Wrap(
-            spacing: 7,
-            runSpacing: 7,
-            children: <Widget>[
-              _metaPill(Icons.timer_outlined, '${quiz.durationMinutes} min'),
-              _metaPill(
-                Icons.emoji_events_outlined,
-                'Pass ${quiz.passingScore}%',
-              ),
-              _metaPill(
-                Icons.help_outline_rounded,
-                '${quiz.questions.length} questions',
-              ),
-              _metaPill(
-                Icons.replay_rounded,
-                '${quiz.attempts.length}/${quiz.maxAttempts} attempts',
-              ),
-            ],
-          ),
-          const SizedBox(height: 13),
-          Row(
-            children: <Widget>[
-              _lecturerAvatar(quiz.lecturer),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Row(
-                  children: <Widget>[
-                    Flexible(
-                      child: Text(
-                        quiz.lecturer.name,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          color: AppColors.midnightInk,
-                          fontSize: 11,
-                          fontWeight: FontWeight.w800,
+              const Spacer(),
+              const SizedBox(height: 13),
+              SizedBox(
+                width: double.infinity,
+                child: mode == _QuizCardMode.completed
+                    ? OutlinedButton.icon(
+                        onPressed: attempt == null || !quiz.resultsAvailable
+                            ? null
+                            : () => _openResult(quiz, attempt),
+                        icon: Icon(
+                          quiz.resultsAvailable
+                              ? Icons.insights_rounded
+                              : Icons.lock_clock_rounded,
                         ),
-                      ),
-                    ),
-                    if (quiz.lecturer.verified) ...<Widget>[
-                      const SizedBox(width: 4),
-                      const Icon(
-                        Icons.verified_rounded,
-                        color: AppColors.vibeBlue,
-                        size: 15,
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-              Text(
-                mode == _QuizCardMode.completed
-                    ? '${attempt?.percentage?.round() ?? 0}%'
-                    : _countdown(
-                        mode == _QuizCardMode.upcoming
-                            ? quiz.availableAt
-                            : quiz.closesAt,
-                      ),
-                style: TextStyle(
-                  color: accent,
-                  fontSize: 11,
-                  fontWeight: FontWeight.w900,
-                ),
-              ),
-            ],
-          ),
-          const Spacer(),
-          const SizedBox(height: 13),
-          SizedBox(
-            width: double.infinity,
-            child: mode == _QuizCardMode.completed
-                ? OutlinedButton.icon(
-                    onPressed: attempt == null
-                        ? null
-                        : () => _openResult(quiz, attempt),
-                    icon: const Icon(Icons.insights_rounded),
-                    label: const Text('View result'),
-                  )
-                : mode == _QuizCardMode.upcoming
+                        label: Text(
+                          quiz.resultsAvailable
+                              ? 'View result'
+                              : quiz.resultsAvailabilityLabel,
+                        ),
+                      )
+                    : mode == _QuizCardMode.upcoming
                     ? FilledButton.tonalIcon(
                         onPressed: () => _showQuizDetails(quiz),
                         icon: const Icon(Icons.visibility_outlined),
@@ -931,13 +1101,13 @@ class _QuizScreenState extends State<QuizScreen>
                           style: const TextStyle(fontWeight: FontWeight.w900),
                         ),
                       ),
+              ),
+            ],
           ),
-        ],
+        ),
       ),
-    )
-        .animate(delay: (45 * index).ms)
-        .fadeIn(duration: 340.ms)
-        .slideY(begin: .06, end: 0);
+      index,
+    );
   }
 
   Widget _buildResultsTab() {
@@ -996,12 +1166,7 @@ class _QuizScreenState extends State<QuizScreen>
     );
   }
 
-  Widget _achievement(
-    IconData icon,
-    String value,
-    String label,
-    Color color,
-  ) {
+  Widget _achievement(IconData icon, String value, String label, Color color) {
     return Expanded(
       child: Column(
         children: <Widget>[
@@ -1026,81 +1191,138 @@ class _QuizScreenState extends State<QuizScreen>
   }
 
   Widget _buildResultCard(QuizItem quiz, QuizAttempt attempt, int index) {
-    final color = attempt.passed == true ? AppColors.success : AppColors.danger;
-    return InkWell(
-      onTap: () => _openResult(quiz, attempt),
-      borderRadius: AppStyles.controlRadius,
-      child: _glass(
-        padding: const EdgeInsets.all(15),
-        child: Row(
-          children: <Widget>[
-            SizedBox(
-              width: 55,
-              height: 55,
-              child: Stack(
-                alignment: Alignment.center,
-                children: <Widget>[
-                  CircularProgressIndicator(
-                    value: (attempt.percentage ?? 0) / 100,
-                    strokeWidth: 6,
-                    backgroundColor: color.withValues(alpha: .10),
-                    color: color,
+    final released = quiz.resultsAvailable;
+    final color = released
+        ? (attempt.passed == true ? AppColors.success : AppColors.danger)
+        : AppColors.warning;
+    return _entryMotion(
+      Semantics(
+        button: released,
+        label: released
+            ? '${quiz.title}, result ${attempt.percentage?.round() ?? 0} percent'
+            : '${quiz.title}, ${quiz.resultsAvailabilityLabel}',
+        child: InkWell(
+          onTap: released ? () => _openResult(quiz, attempt) : null,
+          borderRadius: AppStyles.controlRadius,
+          child: _glass(
+            padding: const EdgeInsets.all(15),
+            child: Row(
+              children: <Widget>[
+                SizedBox(
+                  width: 55,
+                  height: 55,
+                  child: Stack(
+                    alignment: Alignment.center,
+                    children: <Widget>[
+                      CircularProgressIndicator(
+                        value: released ? (attempt.percentage ?? 0) / 100 : 1,
+                        strokeWidth: 6,
+                        backgroundColor: color.withValues(alpha: .10),
+                        color: color,
+                      ),
+                      released
+                          ? Text(
+                              '${attempt.percentage?.round() ?? 0}%',
+                              style: TextStyle(
+                                color: color,
+                                fontSize: 10,
+                                fontWeight: FontWeight.w900,
+                              ),
+                            )
+                          : const Icon(
+                              Icons.lock_clock_rounded,
+                              color: AppColors.warning,
+                            ),
+                    ],
                   ),
-                  Text(
-                    '${attempt.percentage?.round() ?? 0}%',
-                    style: TextStyle(
-                      color: color,
-                      fontSize: 10,
-                      fontWeight: FontWeight.w900,
-                    ),
+                ),
+                const SizedBox(width: 13),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: <Widget>[
+                      Text(
+                        quiz.title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: AppColors.midnightInk,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        released
+                            ? '${attempt.passed == true ? 'Passed' : 'Not passed'} • '
+                                  'Attempt ${attempt.attemptNumber} • '
+                                  '+${attempt.rewardPoints} points'
+                            : quiz.resultsAvailabilityLabel,
+                        style: TextStyle(
+                          color: color,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    ],
                   ),
-                ],
-              ),
+                ),
+                Icon(
+                  released
+                      ? Icons.chevron_right_rounded
+                      : Icons.schedule_rounded,
+                  color: released ? AppColors.textMuted : AppColors.warning,
+                ),
+              ],
             ),
-            const SizedBox(width: 13),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: <Widget>[
-                  Text(
-                    quiz.title,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      color: AppColors.midnightInk,
-                      fontWeight: FontWeight.w900,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    '${attempt.passed == true ? 'Passed' : 'Not passed'} • '
-                    'Attempt ${attempt.attemptNumber} • '
-                    '+${attempt.rewardPoints} points',
-                    style: TextStyle(
-                      color: color,
-                      fontSize: 11,
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const Icon(Icons.chevron_right_rounded, color: AppColors.textMuted),
-          ],
+          ),
         ),
       ),
-    )
+      index,
+      horizontal: true,
+    );
+  }
+
+  Widget _newPill() {
+    return Semantics(
+      label: 'Newly published quiz',
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
+        decoration: BoxDecoration(
+          color: AppColors.ogGold.withValues(alpha: .17),
+          borderRadius: AppStyles.pillRadius,
+        ),
+        child: const Text(
+          'NEW',
+          style: TextStyle(
+            color: AppColors.midnightInk,
+            fontSize: 8,
+            fontWeight: FontWeight.w900,
+            letterSpacing: .4,
+          ),
+        ),
+      ),
+    );
+  }
+
+  bool get _reduceMotion =>
+      MediaQuery.maybeOf(context)?.disableAnimations ?? false;
+
+  Widget _entryMotion(Widget child, int index, {bool horizontal = false}) {
+    if (_reduceMotion) return child;
+    final animation = child
         .animate(delay: (45 * index).ms)
-        .fadeIn()
-        .slideX(begin: .04, end: 0);
+        .fadeIn(duration: 340.ms);
+    return horizontal
+        ? animation.slideX(begin: .04, end: 0)
+        : animation.slideY(begin: .06, end: 0);
   }
 
   Widget _difficultyPill(String difficulty) {
     final color = difficulty.toLowerCase() == 'advanced'
         ? AppColors.danger
         : difficulty.toLowerCase() == 'easy'
-            ? AppColors.success
-            : AppColors.vibeBlue;
+        ? AppColors.success
+        : AppColors.vibeBlue;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
       decoration: BoxDecoration(
@@ -1147,8 +1369,9 @@ class _QuizScreenState extends State<QuizScreen>
     return CircleAvatar(
       radius: radius,
       backgroundColor: AppColors.vibeBlue.withValues(alpha: .11),
-      backgroundImage:
-          lecturer.photoUrl.isEmpty ? null : NetworkImage(lecturer.photoUrl),
+      backgroundImage: lecturer.photoUrl.isEmpty
+          ? null
+          : NetworkImage(lecturer.photoUrl),
       child: lecturer.photoUrl.isEmpty
           ? Text(
               lecturer.initials,
@@ -1168,7 +1391,7 @@ class _QuizScreenState extends State<QuizScreen>
       context: context,
       isScrollControlled: true,
       showDragHandle: true,
-      backgroundColor: const Color(0xFFF8FAFF),
+      backgroundColor: AppColors.surfaceSoft,
       builder: (sheetContext) => SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.fromLTRB(22, 0, 22, 26),
@@ -1242,7 +1465,7 @@ class _QuizScreenState extends State<QuizScreen>
                   ),
                   _metaPill(
                     Icons.replay_rounded,
-                    '${quiz.maxAttempts} attempt${quiz.maxAttempts == 1 ? '' : 's'}',
+                    '${quiz.remainingAttempts} of ${quiz.maxAttempts} attempts left',
                   ),
                   _metaPill(
                     Icons.stars_rounded,
@@ -1267,6 +1490,7 @@ class _QuizScreenState extends State<QuizScreen>
                     ? 'Secure mode records focus and app-switch events.'
                     : 'Standard quiz mode is enabled.',
               ),
+              _rule(Icons.insights_outlined, quiz.resultsAvailabilityLabel),
               if (quiz.instructions.isNotEmpty) ...<Widget>[
                 const SizedBox(height: 14),
                 const Text(
@@ -1299,8 +1523,8 @@ class _QuizScreenState extends State<QuizScreen>
                   quiz.isUpcoming
                       ? 'Opens ${_countdown(quiz.availableAt)}'
                       : quiz.isClosed
-                          ? 'This quiz is closed'
-                          : 'Closes ${_countdown(quiz.closesAt)}',
+                      ? 'This quiz is closed'
+                      : 'Closes ${_countdown(quiz.closesAt)}',
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     color: quiz.isUpcoming
@@ -1392,6 +1616,12 @@ class _QuizScreenState extends State<QuizScreen>
   }
 
   void _openResult(QuizItem quiz, QuizAttempt attempt) {
+    if (!quiz.resultsAvailable) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(quiz.resultsAvailabilityLabel)));
+      return;
+    }
     Navigator.of(context).push(
       MaterialPageRoute<void>(
         builder: (_) => QuizResultScreen(
@@ -1415,7 +1645,7 @@ class _QuizScreenState extends State<QuizScreen>
       context: context,
       isScrollControlled: true,
       showDragHandle: true,
-      backgroundColor: const Color(0xFFF8FAFF),
+      backgroundColor: AppColors.surfaceSoft,
       builder: (context) => StatefulBuilder(
         builder: (context, setSheetState) => SafeArea(
           child: Padding(
@@ -1434,8 +1664,8 @@ class _QuizScreenState extends State<QuizScreen>
                 ),
                 const SizedBox(height: 16),
                 DropdownButtonFormField<String>(
-                  initialValue: _moduleOptions
-                          .any((option) => option.value == module)
+                  initialValue:
+                      _moduleOptions.any((option) => option.value == module)
                       ? module
                       : 'All',
                   isExpanded: true,
@@ -1474,8 +1704,9 @@ class _QuizScreenState extends State<QuizScreen>
                     Expanded(
                       child: DropdownButtonFormField<String>(
                         initialValue: difficulty,
-                        decoration:
-                            const InputDecoration(labelText: 'Difficulty'),
+                        decoration: const InputDecoration(
+                          labelText: 'Difficulty',
+                        ),
                         items: _difficultyOptions
                             .map(
                               (value) => DropdownMenuItem<String>(
@@ -1484,31 +1715,30 @@ class _QuizScreenState extends State<QuizScreen>
                               ),
                             )
                             .toList(),
-                        onChanged: (value) => setSheetState(
-                          () => difficulty = value ?? 'All',
-                        ),
+                        onChanged: (value) =>
+                            setSheetState(() => difficulty = value ?? 'All'),
                       ),
                     ),
                     const SizedBox(width: 10),
                     Expanded(
                       child: DropdownButtonFormField<String>(
                         initialValue: status,
-                        decoration:
-                            const InputDecoration(labelText: 'Status'),
-                        items: const <String>[
-                          'All',
-                          'Available',
-                          'Upcoming',
-                          'Completed',
-                          'Closed',
-                        ]
-                            .map(
-                              (value) => DropdownMenuItem<String>(
-                                value: value,
-                                child: Text(value),
-                              ),
-                            )
-                            .toList(),
+                        decoration: const InputDecoration(labelText: 'Status'),
+                        items:
+                            const <String>[
+                                  'All',
+                                  'Available',
+                                  'Upcoming',
+                                  'Completed',
+                                  'Closed',
+                                ]
+                                .map(
+                                  (value) => DropdownMenuItem<String>(
+                                    value: value,
+                                    child: Text(value),
+                                  ),
+                                )
+                                .toList(),
                         onChanged: (value) =>
                             setSheetState(() => status = value ?? 'All'),
                       ),
@@ -1570,8 +1800,8 @@ class _QuizScreenState extends State<QuizScreen>
   List<DropdownMenuItem<String>> get _moduleOptions {
     final modules = _myModulesOnly && _hasRegistrationMatch
         ? _modules
-            .where((module) => _registeredModuleIds.contains(module.id))
-            .toList()
+              .where((module) => _registeredModuleIds.contains(module.id))
+              .toList()
         : List<ModuleRef>.from(_modules);
     modules.sort((a, b) => a.displayName.compareTo(b.displayName));
     return <DropdownMenuItem<String>>[
@@ -1586,12 +1816,13 @@ class _QuizScreenState extends State<QuizScreen>
   }
 
   List<String> get _lecturerOptions {
-    final values = _quizzes
-        .map((quiz) => quiz.lecturer.name)
-        .where((name) => name.isNotEmpty)
-        .toSet()
-        .toList()
-      ..sort();
+    final values =
+        _quizzes
+            .map((quiz) => quiz.lecturer.name)
+            .where((name) => name.isNotEmpty)
+            .toSet()
+            .toList()
+          ..sort();
     return <String>['All', ...values];
   }
 
@@ -1720,21 +1951,15 @@ class _QuizScreenState extends State<QuizScreen>
     required Widget child,
     EdgeInsetsGeometry padding = EdgeInsets.zero,
   }) {
-    return ClipRRect(
-      borderRadius: AppStyles.controlRadius,
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
-        child: Container(
-          padding: padding,
-          decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: .80),
-            borderRadius: AppStyles.controlRadius,
-            border: Border.all(color: Colors.white.withValues(alpha: .90)),
-            boxShadow: AppStyles.softShadow,
-          ),
-          child: child,
-        ),
+    return Container(
+      padding: padding,
+      decoration: BoxDecoration(
+        color: AppColors.surfaceElevated,
+        borderRadius: AppStyles.controlRadius,
+        border: Border.all(color: AppColors.outline),
+        boxShadow: AppStyles.softShadow,
       ),
+      child: child,
     );
   }
 
@@ -1749,6 +1974,27 @@ class _QuizScreenState extends State<QuizScreen>
       return 'In ${difference.inHours}h ${difference.inMinutes % 60}m';
     }
     return 'In ${difference.inMinutes}m ${difference.inSeconds % 60}s';
+  }
+
+  String _dateTimeLabel(DateTime value) {
+    final local = value.toLocal();
+    const months = <String>[
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
+    ];
+    return '${local.day} ${months[local.month - 1]} ${local.year}, '
+        '${local.hour.toString().padLeft(2, '0')}:'
+        '${local.minute.toString().padLeft(2, '0')}';
   }
 
   static bool isSameDate(DateTime a, DateTime b) =>
@@ -1781,6 +2027,7 @@ class QuizItem {
     required this.rewardPoints,
     required this.instructions,
     required this.resultsRelease,
+    required this.createdAt,
     required this.questions,
     required this.attempts,
   });
@@ -1804,6 +2051,7 @@ class QuizItem {
   final int rewardPoints;
   final String instructions;
   final String resultsRelease;
+  final DateTime? createdAt;
   final List<QuizQuestion> questions;
   final List<QuizAttempt> attempts;
 
@@ -1817,13 +2065,43 @@ class QuizItem {
       !isClosed &&
       (inProgressAttempt != null || attempts.length < maxAttempts);
   bool get canAttempt => isAvailable && questions.isNotEmpty;
+  int get remainingAttempts => max(0, maxAttempts - attempts.length);
+  bool get isNew {
+    final created = createdAt;
+    if (created == null) return false;
+    final age = DateTime.now().difference(created.toLocal());
+    return !age.isNegative && age <= const Duration(hours: 48);
+  }
+
+  bool get resultsAvailable {
+    switch (resultsRelease.trim().toLowerCase()) {
+      case 'after_close':
+        return isClosed;
+      case 'manual':
+        return false;
+      default:
+        return true;
+    }
+  }
+
+  String get resultsAvailabilityLabel {
+    switch (resultsRelease.trim().toLowerCase()) {
+      case 'after_close':
+        return isClosed ? 'Results available' : 'Results after closing time';
+      case 'manual':
+        return 'Waiting for lecturer release';
+      default:
+        return 'Results available now';
+    }
+  }
+
   String get statusLabel => hasCompletedAttempt
       ? 'Completed'
       : isUpcoming
-          ? 'Upcoming'
-          : isClosed
-              ? 'Closed'
-              : 'Available';
+      ? 'Upcoming'
+      : isClosed
+      ? 'Closed'
+      : 'Available';
 
   QuizAttempt? get inProgressAttempt {
     for (final attempt in attempts) {
@@ -1860,6 +2138,7 @@ class QuizItem {
       'reward_points': rewardPoints,
       'instructions': instructions,
       'results_release': resultsRelease,
+      'created_at': createdAt?.toIso8601String(),
       'questions': questions.map((question) => question.toMap()).toList(),
     };
   }
@@ -1871,13 +2150,15 @@ class QuizItem {
     required List<QuizAttempt> attempts,
   }) {
     final lecturerName = _QuizScreenState._text(row['lecturer_name']);
-    final date = DateTime.tryParse(_QuizScreenState._text(row['available_from'])) ??
+    final date =
+        DateTime.tryParse(_QuizScreenState._text(row['available_from'])) ??
         DateTime.tryParse(_QuizScreenState._text(row['quiz_date'])) ??
         DateTime.now();
-    final questions = List<Map<String, dynamic>>.from(
-      row['questions'] as List<dynamic>? ?? <dynamic>[],
-    ).map(QuizQuestion.fromSupabaseRow).toList()
-      ..sort((a, b) => a.position.compareTo(b.position));
+    final questions =
+        List<Map<String, dynamic>>.from(
+            row['questions'] as List<dynamic>? ?? <dynamic>[],
+          ).map(QuizQuestion.fromSupabaseRow).toList()
+          ..sort((a, b) => a.position.compareTo(b.position));
     return QuizItem(
       id: _QuizScreenState._text(row['id']),
       moduleId: _QuizScreenState._text(row['module_id']),
@@ -1888,18 +2169,17 @@ class QuizItem {
       description: _QuizScreenState._text(row['description']).isEmpty
           ? 'No description provided'
           : _QuizScreenState._text(row['description']),
-      lecturer: lecturer ??
+      lecturer:
+          lecturer ??
           LecturerProfile(
             name: lecturerName.isEmpty ? 'Academic staff' : lecturerName,
           ),
       reward: _QuizScreenState._text(row['reward']),
       durationMinutes:
           int.tryParse(row['duration_minutes']?.toString() ?? '') ?? 30,
-      passingScore:
-          int.tryParse(row['passing_score']?.toString() ?? '') ?? 50,
+      passingScore: int.tryParse(row['passing_score']?.toString() ?? '') ?? 50,
       availableAt: date,
-      closesAt:
-          DateTime.tryParse(_QuizScreenState._text(row['closes_at'])),
+      closesAt: DateTime.tryParse(_QuizScreenState._text(row['closes_at'])),
       difficulty: _QuizScreenState._text(row['difficulty']).isEmpty
           ? 'Standard'
           : _QuizScreenState._text(row['difficulty']),
@@ -1907,12 +2187,12 @@ class QuizItem {
       randomizeQuestions: row['randomize_questions'] != false,
       randomizeOptions: row['randomize_options'] != false,
       secureMode: row['secure_mode'] != false,
-      rewardPoints:
-          int.tryParse(row['reward_points']?.toString() ?? '') ?? 0,
+      rewardPoints: int.tryParse(row['reward_points']?.toString() ?? '') ?? 0,
       instructions: _QuizScreenState._text(row['instructions']),
       resultsRelease: _QuizScreenState._text(row['results_release']).isEmpty
           ? 'immediate'
           : _QuizScreenState._text(row['results_release']),
+      createdAt: DateTime.tryParse(_QuizScreenState._text(row['created_at'])),
       questions: questions,
       attempts: attempts,
     );
@@ -1937,13 +2217,13 @@ class QuizQuestion {
   final int position;
 
   Map<String, dynamic> toMap() => <String, dynamic>{
-        'id': id,
-        'quiz_id': quizId,
-        'text': text,
-        'options': options,
-        'points': points,
-        'position': position,
-      };
+    'id': id,
+    'quiz_id': quizId,
+    'text': text,
+    'options': options,
+    'points': points,
+    'position': position,
+  };
 
   factory QuizQuestion.fromSupabaseRow(Map<String, dynamic> row) {
     return QuizQuestion(
@@ -1966,7 +2246,9 @@ class QuizQuestion {
       id: _QuizScreenState._text(row['id']),
       quizId: _QuizScreenState._text(row['quiz_id']),
       text: _QuizScreenState._text(row['text']),
-      options: List<String>.from(row['options'] as List<dynamic>? ?? <dynamic>[]),
+      options: List<String>.from(
+        row['options'] as List<dynamic>? ?? <dynamic>[],
+      ),
       points: int.tryParse(row['points']?.toString() ?? '') ?? 1,
       position: int.tryParse(row['position']?.toString() ?? '') ?? 0,
     );
@@ -2015,17 +2297,17 @@ class QuizAttempt {
       id: _QuizScreenState._text(row['id']),
       quizId: _QuizScreenState._text(row['quiz_id']),
       userId: _QuizScreenState._text(row['user_id']),
-      attemptNumber:
-          int.tryParse(row['attempt_number']?.toString() ?? '') ?? 1,
+      attemptNumber: int.tryParse(row['attempt_number']?.toString() ?? '') ?? 1,
       status: _QuizScreenState._text(row['status']),
       startedAt:
           DateTime.tryParse(_QuizScreenState._text(row['started_at'])) ??
-              DateTime.now(),
+          DateTime.now(),
       expiresAt:
           DateTime.tryParse(_QuizScreenState._text(row['expires_at'])) ??
-              DateTime.now(),
-      completedAt:
-          DateTime.tryParse(_QuizScreenState._text(row['completed_at'])),
+          DateTime.now(),
+      completedAt: DateTime.tryParse(
+        _QuizScreenState._text(row['completed_at']),
+      ),
       questionOrder: List<String>.from(
         row['question_order'] as List<dynamic>? ?? <dynamic>[],
       ),
@@ -2033,14 +2315,11 @@ class QuizAttempt {
           int.tryParse(row['current_question']?.toString() ?? '') ?? 0,
       focusViolations:
           int.tryParse(row['focus_violations']?.toString() ?? '') ?? 0,
-      scorePoints:
-          double.tryParse(row['score_points']?.toString() ?? ''),
-      totalPoints:
-          double.tryParse(row['total_points']?.toString() ?? ''),
+      scorePoints: double.tryParse(row['score_points']?.toString() ?? ''),
+      totalPoints: double.tryParse(row['total_points']?.toString() ?? ''),
       percentage: double.tryParse(row['percentage']?.toString() ?? ''),
       passed: row['passed'] as bool?,
-      rewardPoints:
-          int.tryParse(row['reward_points']?.toString() ?? '') ?? 0,
+      rewardPoints: int.tryParse(row['reward_points']?.toString() ?? '') ?? 0,
     );
   }
 }
@@ -2077,11 +2356,28 @@ class _QuizRunnerScreenState extends State<QuizRunnerScreen>
   String get _quizId => _QuizScreenState._text(widget.quiz['id']);
   String get _quizTitle => _QuizScreenState._text(widget.quiz['title']);
   bool get _secureMode => widget.quiz['secure_mode'] != false;
-  bool get _randomizeQuestions =>
-      widget.quiz['randomize_questions'] != false;
+  bool get _randomizeQuestions => widget.quiz['randomize_questions'] != false;
   bool get _randomizeOptions => widget.quiz['randomize_options'] != false;
   int get _passingScore =>
       int.tryParse(widget.quiz['passing_score']?.toString() ?? '') ?? 50;
+  String get _resultsRelease =>
+      _QuizScreenState._text(widget.quiz['results_release']).toLowerCase();
+  DateTime? get _quizClosesAt =>
+      DateTime.tryParse(_QuizScreenState._text(widget.quiz['closes_at']));
+  bool get _resultsAvailable {
+    if (_resultsRelease == 'after_close') {
+      final closesAt = _quizClosesAt;
+      return closesAt == null || closesAt.toLocal().isBefore(DateTime.now());
+    }
+    return _resultsRelease != 'manual';
+  }
+
+  bool get _reduceMotion =>
+      MediaQuery.maybeOf(context)?.disableAnimations ?? false;
+
+  String get _pendingResultsMessage => _resultsRelease == 'manual'
+      ? 'Your answers were submitted. Your lecturer will release the results.'
+      : 'Your answers were submitted. Results will be available after the quiz closes.';
 
   @override
   void initState() {
@@ -2108,9 +2404,11 @@ class _QuizRunnerScreenState extends State<QuizRunnerScreen>
     if (state == AppLifecycleState.paused ||
         state == AppLifecycleState.inactive ||
         state == AppLifecycleState.hidden) {
-      unawaited(_recordSecurityEvent(
-        state == AppLifecycleState.paused ? 'app_paused' : 'focus_lost',
-      ));
+      unawaited(
+        _recordSecurityEvent(
+          state == AppLifecycleState.paused ? 'app_paused' : 'focus_lost',
+        ),
+      );
     }
   }
 
@@ -2151,10 +2449,7 @@ class _QuizRunnerScreenState extends State<QuizRunnerScreen>
 
       if (rows.isNotEmpty) {
         _attempt = QuizAttempt.fromRow(rows.first);
-        _questions = _orderQuestions(
-          sourceQuestions,
-          _attempt!.questionOrder,
-        );
+        _questions = _orderQuestions(sourceQuestions, _attempt!.questionOrder);
         _index = _attempt!.currentQuestion.clamp(0, _questions.length - 1);
         _focusViolations = _attempt!.focusViolations;
       } else {
@@ -2169,7 +2464,8 @@ class _QuizRunnerScreenState extends State<QuizRunnerScreen>
               'expires_at': DateTime.now()
                   .add(
                     Duration(
-                      minutes: int.tryParse(
+                      minutes:
+                          int.tryParse(
                             widget.quiz['duration_minutes']?.toString() ?? '',
                           ) ??
                           30,
@@ -2177,8 +2473,7 @@ class _QuizRunnerScreenState extends State<QuizRunnerScreen>
                   )
                   .toUtc()
                   .toIso8601String(),
-              'question_order':
-                  ordered.map((question) => question.id).toList(),
+              'question_order': ordered.map((question) => question.id).toList(),
             })
             .select(
               'id, quiz_id, user_id, attempt_number, status, started_at, '
@@ -2275,8 +2570,9 @@ class _QuizRunnerScreenState extends State<QuizRunnerScreen>
           () => List<int>.from(entry.value as List<dynamic>),
         );
       }
-      _offlineRecoveryActive =
-          _answers.keys.any((key) => !_savedAnswers.contains(key));
+      _offlineRecoveryActive = _answers.keys.any(
+        (key) => !_savedAnswers.contains(key),
+      );
     } catch (_) {}
   }
 
@@ -2305,7 +2601,10 @@ class _QuizRunnerScreenState extends State<QuizRunnerScreen>
 
   List<int> _orderFor(QuizQuestion question) {
     return _optionOrders.putIfAbsent(question.id, () {
-      final order = List<int>.generate(question.options.length, (index) => index);
+      final order = List<int>.generate(
+        question.options.length,
+        (index) => index,
+      );
       if (_randomizeOptions) order.shuffle(_random);
       return order;
     });
@@ -2321,16 +2620,15 @@ class _QuizRunnerScreenState extends State<QuizRunnerScreen>
     HapticFeedback.selectionClick();
     await _cacheAnswers();
     try {
-      await Supabase.instance.client.from('quiz_attempt_answers').upsert(
-        <String, dynamic>{
-          'attempt_id': _attempt!.id,
-          'question_id': question.id,
-          'selected_option': originalOption,
-          'question_position': _index,
-          'option_order': _orderFor(question),
-        },
-        onConflict: 'attempt_id,question_id',
-      );
+      await Supabase.instance.client
+          .from('quiz_attempt_answers')
+          .upsert(<String, dynamic>{
+            'attempt_id': _attempt!.id,
+            'question_id': question.id,
+            'selected_option': originalOption,
+            'question_position': _index,
+            'option_order': _orderFor(question),
+          }, onConflict: 'attempt_id,question_id');
       await Supabase.instance.client
           .from('quiz_attempts')
           .update(<String, dynamic>{'current_question': _index})
@@ -2367,27 +2665,28 @@ class _QuizRunnerScreenState extends State<QuizRunnerScreen>
         .where((questionId) => !_savedAnswers.contains(questionId))
         .toList();
     for (final questionId in unsaved) {
-      final position =
-          _questions.indexWhere((question) => question.id == questionId);
+      final position = _questions.indexWhere(
+        (question) => question.id == questionId,
+      );
       if (position < 0) continue;
       try {
-        await Supabase.instance.client.from('quiz_attempt_answers').upsert(
-          <String, dynamic>{
-            'attempt_id': _attempt!.id,
-            'question_id': questionId,
-            'selected_option': _answers[questionId],
-            'question_position': position,
-            'option_order': _orderFor(_questions[position]),
-          },
-          onConflict: 'attempt_id,question_id',
-        );
+        await Supabase.instance.client
+            .from('quiz_attempt_answers')
+            .upsert(<String, dynamic>{
+              'attempt_id': _attempt!.id,
+              'question_id': questionId,
+              'selected_option': _answers[questionId],
+              'question_position': position,
+              'option_order': _orderFor(_questions[position]),
+            }, onConflict: 'attempt_id,question_id');
         _savedAnswers.add(questionId);
       } catch (_) {}
     }
     if (mounted) {
       setState(() {
-        _offlineRecoveryActive =
-            _answers.keys.any((key) => !_savedAnswers.contains(key));
+        _offlineRecoveryActive = _answers.keys.any(
+          (key) => !_savedAnswers.contains(key),
+        );
       });
     }
   }
@@ -2457,7 +2756,7 @@ class _QuizRunnerScreenState extends State<QuizRunnerScreen>
           unanswered == 0
               ? 'All answers are saved. Your score will be calculated securely.'
               : '$unanswered question${unanswered == 1 ? '' : 's'} remain '
-                  'unanswered. You can still submit.',
+                    'unanswered. You can still submit.',
         ),
         actions: <Widget>[
           TextButton(
@@ -2506,6 +2805,29 @@ class _QuizRunnerScreenState extends State<QuizRunnerScreen>
       await preferences.remove(_cacheKey);
       HapticFeedback.heavyImpact();
       if (!mounted) return;
+      if (!_resultsAvailable) {
+        await showDialog<void>(
+          context: context,
+          barrierDismissible: false,
+          builder: (context) => AlertDialog(
+            icon: const Icon(
+              Icons.task_alt_rounded,
+              color: AppColors.success,
+              size: 44,
+            ),
+            title: const Text('Quiz submitted'),
+            content: Text(_pendingResultsMessage, textAlign: TextAlign.center),
+            actions: <Widget>[
+              FilledButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Return to quizzes'),
+              ),
+            ],
+          ),
+        );
+        if (mounted) Navigator.of(context).pop(true);
+        return;
+      }
       await Navigator.of(context).pushReplacement<bool, void>(
         MaterialPageRoute<bool>(
           builder: (_) => QuizResultScreen(
@@ -2523,9 +2845,9 @@ class _QuizRunnerScreenState extends State<QuizRunnerScreen>
         _errorMessage = _friendlyError(error);
       });
       _startTimer();
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(_errorMessage!)),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(_errorMessage!)));
     }
   }
 
@@ -2581,18 +2903,18 @@ class _QuizRunnerScreenState extends State<QuizRunnerScreen>
       },
       child: CallbackShortcuts(
         bindings: <ShortcutActivator, VoidCallback>{
-          const SingleActivator(LogicalKeyboardKey.arrowLeft):
-              () => _goToQuestion(_index - 1),
-          const SingleActivator(LogicalKeyboardKey.arrowRight):
-              () => _goToQuestion(_index + 1),
-          const SingleActivator(LogicalKeyboardKey.digit1):
-              () => _selectVisibleOption(0),
-          const SingleActivator(LogicalKeyboardKey.digit2):
-              () => _selectVisibleOption(1),
-          const SingleActivator(LogicalKeyboardKey.digit3):
-              () => _selectVisibleOption(2),
-          const SingleActivator(LogicalKeyboardKey.digit4):
-              () => _selectVisibleOption(3),
+          const SingleActivator(LogicalKeyboardKey.arrowLeft): () =>
+              _goToQuestion(_index - 1),
+          const SingleActivator(LogicalKeyboardKey.arrowRight): () =>
+              _goToQuestion(_index + 1),
+          const SingleActivator(LogicalKeyboardKey.digit1): () =>
+              _selectVisibleOption(0),
+          const SingleActivator(LogicalKeyboardKey.digit2): () =>
+              _selectVisibleOption(1),
+          const SingleActivator(LogicalKeyboardKey.digit3): () =>
+              _selectVisibleOption(2),
+          const SingleActivator(LogicalKeyboardKey.digit4): () =>
+              _selectVisibleOption(3),
         },
         child: Focus(
           autofocus: true,
@@ -2632,8 +2954,8 @@ class _QuizRunnerScreenState extends State<QuizRunnerScreen>
     final warning = _secondsRemaining <= 60
         ? AppColors.danger
         : _secondsRemaining <= 300
-            ? AppColors.warning
-            : AppColors.electricCyan;
+        ? AppColors.warning
+        : AppColors.electricCyan;
     return Container(
       padding: const EdgeInsets.fromLTRB(14, 10, 14, 12),
       decoration: const BoxDecoration(gradient: AppStyles.brandGradient),
@@ -2675,8 +2997,7 @@ class _QuizRunnerScreenState extends State<QuizRunnerScreen>
               ),
               IconButton(
                 onPressed: () => setState(
-                  () => _questionScale =
-                      max(.85, _questionScale - .1),
+                  () => _questionScale = max(.85, _questionScale - .1),
                 ),
                 color: Colors.white,
                 icon: const Icon(Icons.text_decrease_rounded),
@@ -2684,16 +3005,17 @@ class _QuizRunnerScreenState extends State<QuizRunnerScreen>
               ),
               IconButton(
                 onPressed: () => setState(
-                  () => _questionScale =
-                      min(1.4, _questionScale + .1),
+                  () => _questionScale = min(1.4, _questionScale + .1),
                 ),
                 color: Colors.white,
                 icon: const Icon(Icons.text_increase_rounded),
                 tooltip: 'Increase text size',
               ),
               Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 8,
+                ),
                 decoration: BoxDecoration(
                   color: warning.withValues(alpha: .16),
                   borderRadius: AppStyles.pillRadius,
@@ -2717,13 +3039,17 @@ class _QuizRunnerScreenState extends State<QuizRunnerScreen>
             ],
           ),
           const SizedBox(height: 9),
-          ClipRRect(
-            borderRadius: BorderRadius.circular(999),
-            child: LinearProgressIndicator(
-              value: (_index + 1) / _questions.length,
-              minHeight: 6,
-              backgroundColor: Colors.white12,
-              color: AppColors.electricCyan,
+          Semantics(
+            label: 'Quiz progress',
+            value: 'Question ${_index + 1} of ${_questions.length}',
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(999),
+              child: LinearProgressIndicator(
+                value: (_index + 1) / _questions.length,
+                minHeight: 6,
+                backgroundColor: Colors.white12,
+                color: AppColors.electricCyan,
+              ),
             ),
           ),
         ],
@@ -2779,7 +3105,9 @@ class _QuizRunnerScreenState extends State<QuizRunnerScreen>
               ),
               const Spacer(),
               AnimatedSwitcher(
-                duration: const Duration(milliseconds: 180),
+                duration: _reduceMotion
+                    ? Duration.zero
+                    : const Duration(milliseconds: 180),
                 child: _isSaving
                     ? const Row(
                         key: ValueKey<String>('saving'),
@@ -2845,7 +3173,9 @@ class _QuizRunnerScreenState extends State<QuizRunnerScreen>
           Expanded(
             child: SingleChildScrollView(
               child: AnimatedSwitcher(
-                duration: const Duration(milliseconds: 260),
+                duration: _reduceMotion
+                    ? Duration.zero
+                    : const Duration(milliseconds: 260),
                 transitionBuilder: (child, animation) => FadeTransition(
                   opacity: animation,
                   child: SlideTransition(
@@ -2868,9 +3198,9 @@ class _QuizRunnerScreenState extends State<QuizRunnerScreen>
                     boxShadow: AppStyles.glassShadow,
                   ),
                   child: MediaQuery(
-                    data: MediaQuery.of(context).copyWith(
-                      textScaler: TextScaler.linear(_questionScale),
-                    ),
+                    data: MediaQuery.of(
+                      context,
+                    ).copyWith(textScaler: TextScaler.linear(_questionScale)),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: <Widget>[
@@ -2884,6 +3214,7 @@ class _QuizRunnerScreenState extends State<QuizRunnerScreen>
                           ),
                         ),
                         const SizedBox(height: 20),
+                        AcademicAttachmentActions(table: 'quiz_questions', recordId: question.id),
                         ...List<Widget>.generate(order.length, (visibleIndex) {
                           final originalIndex = order[visibleIndex];
                           return Padding(
@@ -2908,8 +3239,9 @@ class _QuizRunnerScreenState extends State<QuizRunnerScreen>
             children: <Widget>[
               Expanded(
                 child: OutlinedButton.icon(
-                  onPressed:
-                      _index == 0 ? null : () => _goToQuestion(_index - 1),
+                  onPressed: _index == 0
+                      ? null
+                      : () => _goToQuestion(_index - 1),
                   icon: const Icon(Icons.arrow_back_rounded),
                   label: const Text('Previous'),
                 ),
@@ -2921,8 +3253,8 @@ class _QuizRunnerScreenState extends State<QuizRunnerScreen>
                   onPressed: _isSubmitting
                       ? null
                       : _index == _questions.length - 1
-                          ? _confirmSubmit
-                          : () => _goToQuestion(_index + 1),
+                      ? _confirmSubmit
+                      : () => _goToQuestion(_index + 1),
                   style: FilledButton.styleFrom(
                     backgroundColor: _index == _questions.length - 1
                         ? AppColors.success
@@ -2971,10 +3303,7 @@ class _QuizRunnerScreenState extends State<QuizRunnerScreen>
         children: <Widget>[
           const Text(
             'Question navigator',
-            style: TextStyle(
-              color: Colors.white,
-              fontWeight: FontWeight.w900,
-            ),
+            style: TextStyle(color: Colors.white, fontWeight: FontWeight.w900),
           ),
           const SizedBox(height: 5),
           Text(
@@ -3011,30 +3340,34 @@ class _QuizRunnerScreenState extends State<QuizRunnerScreen>
   Widget _paletteButton(int index, {bool closeSheet = false}) {
     final current = index == _index;
     final answered = _answers.containsKey(_questions[index].id);
-    return InkWell(
-      onTap: () {
-        if (closeSheet) Navigator.of(context).pop();
-        _goToQuestion(index);
-      },
-      borderRadius: BorderRadius.circular(10),
-      child: Container(
-        alignment: Alignment.center,
-        decoration: BoxDecoration(
-          color: current
-              ? AppColors.electricCyan
-              : answered
-                  ? AppColors.success
-                  : Colors.white10,
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(
-            color: current ? Colors.white : Colors.white12,
+    return Semantics(
+      button: true,
+      selected: current,
+      label:
+          'Question ${index + 1}, ${answered ? 'answered' : 'unanswered'}${current ? ', current question' : ''}',
+      child: InkWell(
+        onTap: () {
+          if (closeSheet) Navigator.of(context).pop();
+          _goToQuestion(index);
+        },
+        borderRadius: BorderRadius.circular(10),
+        child: Container(
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: current
+                ? AppColors.electricCyan
+                : answered
+                ? AppColors.success
+                : Colors.white10,
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: current ? Colors.white : Colors.white12),
           ),
-        ),
-        child: Text(
-          '${index + 1}',
-          style: TextStyle(
-            color: current ? AppColors.midnightInk : Colors.white,
-            fontWeight: FontWeight.w900,
+          child: Text(
+            '${index + 1}',
+            style: TextStyle(
+              color: current ? AppColors.midnightInk : Colors.white,
+              fontWeight: FontWeight.w900,
+            ),
           ),
         ),
       ),
@@ -3153,14 +3486,11 @@ class QuizResultData {
 
   factory QuizResultData.fromRow(Map<String, dynamic> row) {
     return QuizResultData(
-      scorePoints:
-          double.tryParse(row['score_points']?.toString() ?? '') ?? 0,
-      totalPoints:
-          double.tryParse(row['total_points']?.toString() ?? '') ?? 0,
+      scorePoints: double.tryParse(row['score_points']?.toString() ?? '') ?? 0,
+      totalPoints: double.tryParse(row['total_points']?.toString() ?? '') ?? 0,
       percentage: double.tryParse(row['percentage']?.toString() ?? '') ?? 0,
       passed: row['passed'] == true,
-      rewardPoints:
-          int.tryParse(row['reward_points']?.toString() ?? '') ?? 0,
+      rewardPoints: int.tryParse(row['reward_points']?.toString() ?? '') ?? 0,
       focusViolations:
           int.tryParse(row['focus_violations']?.toString() ?? '') ?? 0,
     );
@@ -3197,9 +3527,16 @@ class QuizResultScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final color = result.passed ? AppColors.success : AppColors.danger;
+    final reduceMotion =
+        MediaQuery.maybeOf(context)?.disableAnimations ?? false;
+    final resultIcon = Icon(
+      result.passed ? Icons.emoji_events_rounded : Icons.auto_graph_rounded,
+      color: color,
+      size: 64,
+    );
     return VibeScaffold(
       appBar: AppBar(
-        title: const Text('Quiz Result'),
+        title: const Text('Quiz results'),
         backgroundColor: Colors.transparent,
         automaticallyImplyLeading: false,
       ),
@@ -3217,15 +3554,14 @@ class QuizResultScreen extends StatelessWidget {
             ),
             child: Column(
               children: <Widget>[
-                Icon(
-                  result.passed
-                      ? Icons.emoji_events_rounded
-                      : Icons.auto_graph_rounded,
-                  color: color,
-                  size: 64,
-                )
-                    .animate(onPlay: (controller) => controller.repeat(reverse: true))
-                    .scaleXY(begin: .94, end: 1.06, duration: 900.ms),
+                reduceMotion
+                    ? resultIcon
+                    : resultIcon
+                          .animate(
+                            onPlay: (controller) =>
+                                controller.repeat(reverse: true),
+                          )
+                          .scaleXY(begin: .94, end: 1.06, duration: 900.ms),
                 const SizedBox(height: 12),
                 Text(
                   result.passed ? 'Quiz passed!' : 'Keep building.',
@@ -3259,7 +3595,9 @@ class QuizResultScreen extends StatelessWidget {
                 const SizedBox(height: 22),
                 TweenAnimationBuilder<double>(
                   tween: Tween<double>(begin: 0, end: result.percentage / 100),
-                  duration: const Duration(milliseconds: 1000),
+                  duration: reduceMotion
+                      ? Duration.zero
+                      : const Duration(milliseconds: 1000),
                   curve: Curves.easeOutCubic,
                   builder: (context, value, _) => SizedBox(
                     width: 150,
@@ -3325,10 +3663,8 @@ class QuizResultScreen extends StatelessWidget {
                 SizedBox(
                   width: double.infinity,
                   child: FilledButton.icon(
-                    onPressed: () => Navigator.pop(
-                      context,
-                      popWithCompletion ? true : null,
-                    ),
+                    onPressed: () =>
+                        Navigator.pop(context, popWithCompletion ? true : null),
                     style: FilledButton.styleFrom(
                       backgroundColor: AppColors.vibeBlue,
                       padding: const EdgeInsets.symmetric(vertical: 15),
@@ -3342,18 +3678,13 @@ class QuizResultScreen extends StatelessWidget {
                 ),
               ],
             ),
-          ).animate().fadeIn(duration: 450.ms).slideY(begin: .05, end: 0),
+          ),
         ),
       ),
     );
   }
 
-  Widget _resultStat(
-    IconData icon,
-    String value,
-    String label,
-    Color color,
-  ) {
+  Widget _resultStat(IconData icon, String value, String label, Color color) {
     return Expanded(
       child: Column(
         children: <Widget>[
@@ -3376,8 +3707,9 @@ class QuizResultScreen extends StatelessWidget {
     );
   }
 
-  static String _score(double value) =>
-      value == value.roundToDouble() ? value.toInt().toString() : value.toStringAsFixed(1);
+  static String _score(double value) => value == value.roundToDouble()
+      ? value.toInt().toString()
+      : value.toStringAsFixed(1);
 }
 
 class _AnswerTile extends StatelessWidget {
@@ -3395,6 +3727,8 @@ class _AnswerTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final reduceMotion =
+        MediaQuery.maybeOf(context)?.disableAnimations ?? false;
     return Semantics(
       button: true,
       selected: selected,
@@ -3403,7 +3737,9 @@ class _AnswerTile extends StatelessWidget {
         onTap: onTap,
         borderRadius: BorderRadius.circular(16),
         child: AnimatedContainer(
-          duration: const Duration(milliseconds: 180),
+          duration: reduceMotion
+              ? Duration.zero
+              : const Duration(milliseconds: 180),
           padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(
             color: selected
@@ -3425,8 +3761,9 @@ class _AnswerTile extends StatelessWidget {
                   color: selected ? AppColors.vibeBlue : Colors.white,
                   borderRadius: BorderRadius.circular(10),
                   border: Border.all(
-                    color:
-                        selected ? AppColors.vibeBlue : AppColors.glassBorder,
+                    color: selected
+                        ? AppColors.vibeBlue
+                        : AppColors.glassBorder,
                   ),
                 ),
                 child: Text(
@@ -3449,7 +3786,9 @@ class _AnswerTile extends StatelessWidget {
                 ),
               ),
               AnimatedSwitcher(
-                duration: const Duration(milliseconds: 160),
+                duration: reduceMotion
+                    ? Duration.zero
+                    : const Duration(milliseconds: 160),
                 child: selected
                     ? const Icon(
                         Icons.check_circle_rounded,

@@ -1,39 +1,43 @@
 // ignore_for_file: unused_element_parameter
 
 import 'dart:async';
+import 'dart:convert';
+import 'dart:ui' show PlatformDispatcher;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_staggered_animations/flutter_staggered_animations.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:og_vibes_student/screens/home/widgets/home_bottom_navigation_bar.dart';
 import 'package:shimmer/shimmer.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import '../services/notification_badge_service.dart';
+import '../utils/theme_constants.dart';
 
 import '../../widgets/app_drawer.dart';
 import '../../widgets/post_card.dart';
 import '../../widgets/vibe_scaffold.dart';
+import '../../widgets/notification_bell_button.dart';
 import 'announcements_screen.dart';
 import 'create_post_screen.dart';
 import 'events_screen.dart';
 import 'lost_and_found_screen.dart';
 import 'messages_screen.dart';
-import 'document_wallet_screen.dart';
+import 'document_wallet_redesign.dart';
 import 'friend_requests_screen.dart';
 import 'assignment_submission_screen.dart';
 import 'assessments_calendar_screen.dart';
-import 'exam_timetable_screen.dart';
 import 'portal_screen.dart';
-import 'quiz_screen.dart';
 import 'timetable_screen.dart';
-
+import 'quiz_screen.dart';
 import 'online_classes_screen.dart';
-import 'group_chats_screen.dart';
 import 'icass_checker_screen.dart';
 import 'past_question_papers_screen.dart';
 import 'slides_screen.dart';
 import 'career_screen.dart';
 import 'market_screen.dart';
-import 'src_voting_screen.dart';
-import 'lift_club_screen.dart';
+import 'accredited_accommodation_screen.dart';
+import 'donation_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -44,92 +48,319 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   int _currentTab = 0;
+  String _nickname = 'OG Vibester';
+  String? _profilePhotoUrl;
 
   // Pagination & Scroll State
   late final ScrollController _scrollController;
-  int _postLimit = 10; // Start with only 10 posts
+  static const int _pageSize = 25;
+  DateTime? _oldestPostCursor;
+  bool _hasMorePosts = true;
   bool _isFetchingMore = false;
   bool _isFabVisible = true;
   bool _showBackToTopPill = false;
+  bool _newPostsWaiting = false;
 
   bool _isLoadingPosts = true;
   List<Map<String, dynamic>> _posts = [];
+  final Set<String> _seenPostIds = <String>{};
   String? _feedError;
-
-  static final List<Map<String, dynamic>> _mockPosts = [
-    {
-      'id': 'post_001',
-      'author_name': 'Anele Sibiya',
-      'content': 'Sharing my notes from today\'s lecture. Hope this helps!',
-      'department': 'Information Systems',
-      'campus': 'Soweto Campus',
-      'photo_url': '',
-      'is_verified': true,
-      'is_online': true,
-      'likes': 28,
-      'comments': [],
-      'created_at': DateTime.now().subtract(const Duration(hours: 2)),
-    },
-    {
-      'id': 'post_002',
-      'author_name': 'Nokuthula Zulu',
-      'content': 'Anyone up for a group study session in the library tonight?',
-      'department': 'Business Management',
-      'campus': 'Johannesburg Campus',
-      'photo_url': '',
-      'is_verified': false,
-      'is_online': false,
-      'likes': 15,
-      'comments': [],
-      'created_at': DateTime.now().subtract(const Duration(hours: 3, minutes: 20)),
-    },
-    {
-      'id': 'post_003',
-      'author_name': 'Mbali Khumalo',
-      'content': 'Does anyone have the timetable for next week\'s practical sessions?',
-      'department': 'Civil Engineering',
-      'campus': 'Durban Campus',
-      'photo_url': '',
-      'is_verified': false,
-      'is_online': true,
-      'likes': 9,
-      'comments': [],
-      'created_at': DateTime.now().subtract(const Duration(hours: 5, minutes: 42)),
-    },
-  ];
+  StreamSubscription<List<Map<String, dynamic>>>? _postSubscription;
+  StreamSubscription<List<Map<String, dynamic>>>? _likesSubscription;
+  StreamSubscription<List<Map<String, dynamic>>>? _commentsSubscription;
 
   @override
   void initState() {
     super.initState();
     _scrollController = ScrollController();
     _scrollController.addListener(_handleScroll);
-    _loadPosts();
+    _initialiseFeed();
+    unawaited(_loadNickname());
+    unawaited(NotificationBadgeService.instance.start());
   }
 
-  Future<void> _loadPosts({bool reset = false}) async {
-    if (reset) {
-      _postLimit = 10;
+  Future<void> _loadNickname() async {
+    final user = Supabase.instance.client.auth.currentUser;
+    if (user == null) return;
+    var nickname = user.userMetadata?['nickname']?.toString().trim() ?? '';
+    var profilePhoto = user.userMetadata?['photo_url']?.toString().trim() ?? '';
+    try {
+      final row = await Supabase.instance.client
+          .from('profiles')
+          .select('nickname, photo_url')
+          .eq('id', user.id)
+          .maybeSingle();
+      final savedNickname = row?['nickname']?.toString().trim() ?? '';
+      final savedPhoto = row?['photo_url']?.toString().trim() ?? '';
+      if (savedNickname.isNotEmpty) nickname = savedNickname;
+      if (savedPhoto.isNotEmpty) profilePhoto = savedPhoto;
+    } catch (_) {
+      // The signed-in nickname remains available when the device is offline.
+    }
+    if (!mounted) return;
+    setState(() {
+      if (nickname.isNotEmpty) _nickname = nickname;
+      if (profilePhoto.isNotEmpty) _profilePhotoUrl = profilePhoto;
+    });
+  }
+
+  Future<void> _initialiseFeed() async {
+    await _loadSeenPosts();
+    await _loadCachedPosts();
+    await _loadPosts(reset: true);
+    _listenForPosts();
+  }
+
+  String? get _feedCacheKey {
+    final userId = Supabase.instance.client.auth.currentUser?.id;
+    return userId == null ? null : 'og_vibes_feed_cache_$userId';
+  }
+
+  String get _seenPostsCacheKey {
+    final userId = Supabase.instance.client.auth.currentUser?.id ?? 'guest';
+    return 'og_vibes_seen_posts_$userId';
+  }
+
+  Future<void> _loadSeenPosts() async {
+    final preferences = await SharedPreferences.getInstance();
+    _seenPostIds.addAll(
+      preferences.getStringList(_seenPostsCacheKey) ?? const <String>[],
+    );
+    final user = Supabase.instance.client.auth.currentUser;
+    if (user == null) return;
+    try {
+      final rows = List<Map<String, dynamic>>.from(
+        await Supabase.instance.client
+                .from('post_views')
+                .select('post_id')
+                .eq('user_id', user.id)
+            as List<dynamic>,
+      );
+      _seenPostIds.addAll(
+        rows.map((row) => row['post_id']?.toString()).whereType<String>(),
+      );
+      await preferences.setStringList(
+        _seenPostsCacheKey,
+        _seenPostIds.toList(),
+      );
+    } catch (error) {
+      debugPrint('Seen posts sync error: $error');
+    }
+  }
+
+  List<Map<String, dynamic>> _personaliseFeed(
+    Iterable<Map<String, dynamic>> posts,
+  ) {
+    final result = posts.map((post) {
+      final id = post['id']?.toString();
+      return <String, dynamic>{
+        ...post,
+        'is_unseen': id != null && !_seenPostIds.contains(id),
+      };
+    }).toList();
+    result.sort((left, right) {
+      final leftUnseen = left['is_unseen'] == true;
+      final rightUnseen = right['is_unseen'] == true;
+      if (leftUnseen != rightUnseen) return leftUnseen ? -1 : 1;
+      final leftDate = DateTime.tryParse('${left['created_at']}');
+      final rightDate = DateTime.tryParse('${right['created_at']}');
+      return (rightDate ?? DateTime.fromMillisecondsSinceEpoch(0)).compareTo(
+        leftDate ?? DateTime.fromMillisecondsSinceEpoch(0),
+      );
+    });
+    return result;
+  }
+
+  Future<void> _markPostSeen(String postId) async {
+    if (postId.isEmpty || !_seenPostIds.add(postId)) return;
+    final preferences = await SharedPreferences.getInstance();
+    await preferences.setStringList(_seenPostsCacheKey, _seenPostIds.toList());
+    final user = Supabase.instance.client.auth.currentUser;
+    if (user == null) return;
+    try {
+      await Supabase.instance.client.from('post_views').upsert({
+        'user_id': user.id,
+        'post_id': postId,
+        'last_seen_at': DateTime.now().toUtc().toIso8601String(),
+      }, onConflict: 'user_id,post_id');
+    } catch (error) {
+      debugPrint('Post view sync error: $error');
+    }
+  }
+
+  Future<void> _loadCachedPosts() async {
+    final key = _feedCacheKey;
+    if (key == null) return;
+    try {
+      final preferences = await SharedPreferences.getInstance();
+      final raw = preferences.getString(key);
+      if (raw == null || raw.isEmpty) return;
+      final decoded = jsonDecode(raw);
+      if (decoded is! List || !mounted) return;
+      final cached = _personaliseFeed(
+        decoded
+            .whereType<Map>()
+            .map(
+              (row) => <String, dynamic>{
+                ...Map<String, dynamic>.from(row),
+                'is_offline_cached': true,
+              },
+            )
+            .toList(),
+      );
+      if (cached.isEmpty) return;
       setState(() {
-        _isLoadingPosts = true;
+        _posts = cached;
+        _isLoadingPosts = false;
         _feedError = null;
       });
+    } catch (error) {
+      debugPrint('Feed cache read error: $error');
+    }
+  }
+
+  Future<void> _cachePosts(List<Map<String, dynamic>> posts) async {
+    final key = _feedCacheKey;
+    if (key == null) return;
+    try {
+      final cleanRows = posts
+          .take(50)
+          .map(
+            (row) =>
+                Map<String, dynamic>.from(row)..remove('is_offline_cached'),
+          )
+          .toList();
+      final preferences = await SharedPreferences.getInstance();
+      await preferences.setString(key, jsonEncode(cleanRows));
+    } catch (error) {
+      debugPrint('Feed cache write error: $error');
+    }
+  }
+
+  Future<void> _loadPosts({bool reset = false, bool showLoading = true}) async {
+    if (reset) {
+      _oldestPostCursor = null;
+      _hasMorePosts = true;
+      if (showLoading) {
+        setState(() {
+          _isLoadingPosts = true;
+          _feedError = null;
+        });
+      } else {
+        setState(() => _feedError = null);
+      }
     } else {
       setState(() {
         _feedError = null;
       });
     }
 
-    await Future.delayed(const Duration(milliseconds: 700));
+    try {
+      var query = Supabase.instance.client
+          .from('posts')
+          .select(
+            '*, profiles!posts_author_id_fkey(name, surname, nickname, photo_url, campus, department)',
+          )
+          .eq('is_deleted', false);
+      final cursor = _oldestPostCursor;
+      if (!reset && cursor != null) {
+        query = query.lt('created_at', cursor.toUtc().toIso8601String());
+      }
+      final response = await query
+          .order('created_at', ascending: false)
+          .limit(_pageSize);
 
-    if (!mounted) return;
-    setState(() {
-      _posts = List<Map<String, dynamic>>.from(_mockPosts.take(_postLimit));
-      _isLoadingPosts = false;
-    });
+      final rows = <Map<String, dynamic>>[];
+      for (final item in response) {
+        rows.add(Map<String, dynamic>.from(item));
+      }
+      final freshRows = await Future.wait(rows.map(_withFreshMediaUrls));
+      final combined = reset
+          ? freshRows
+          : <Map<String, dynamic>>[
+              ..._posts,
+              ...freshRows.where(
+                (candidate) =>
+                    !_posts.any((current) => current['id'] == candidate['id']),
+              ),
+            ];
+      final displayRows = _personaliseFeed(combined);
+      final lastCreatedAt = rows.isEmpty
+          ? null
+          : DateTime.tryParse(rows.last['created_at']?.toString() ?? '');
+
+      if (!mounted) return;
+
+      setState(() {
+        _posts = displayRows;
+        _isLoadingPosts = false;
+        _newPostsWaiting = false;
+        _hasMorePosts = rows.length == _pageSize;
+        if (lastCreatedAt != null) _oldestPostCursor = lastCreatedAt;
+      });
+      unawaited(_cachePosts(displayRows));
+    } catch (e, st) {
+      debugPrint('Feed load error: $e');
+      debugPrint('$st');
+      if (!mounted) return;
+      setState(() {
+        _isLoadingPosts = false;
+        _feedError = _posts.isEmpty ? e.toString() : null;
+      });
+    }
+  }
+
+  Future<Map<String, dynamic>> _withFreshMediaUrls(
+    Map<String, dynamic> post,
+  ) async {
+    final result = Map<String, dynamic>.from(post);
+    for (final field in const ['images', 'videos', 'documents']) {
+      final values = post[field];
+      if (values is! List) continue;
+      result[field] = await Future.wait(
+        values.map((value) => _freshPostMediaUrl(value?.toString() ?? '')),
+      );
+    }
+    return result;
+  }
+
+  Future<String> _freshPostMediaUrl(String storedValue) async {
+    if (storedValue.trim().isEmpty) return storedValue;
+    final objectPath = _postObjectPath(storedValue);
+    if (objectPath == null || objectPath.isEmpty) return storedValue;
+    try {
+      return await Supabase.instance.client.storage
+          .from('posts')
+          .createSignedUrl(objectPath, 60 * 60 * 6);
+    } catch (error) {
+      debugPrint('Unable to sign post media $objectPath: $error');
+      return storedValue;
+    }
+  }
+
+  String? _postObjectPath(String storedValue) {
+    final value = storedValue.trim();
+    final uri = Uri.tryParse(value);
+    if (uri == null || !uri.hasScheme) {
+      return value.replaceFirst(RegExp(r'^/+'), '');
+    }
+
+    final segments = uri.pathSegments;
+    final objectIndex = segments.indexOf('object');
+    if (objectIndex < 0 || objectIndex + 3 >= segments.length) return null;
+    final access = segments[objectIndex + 1];
+    if (!const {'public', 'sign', 'authenticated'}.contains(access) ||
+        segments[objectIndex + 2] != 'posts') {
+      return null;
+    }
+    return segments.sublist(objectIndex + 3).join('/');
   }
 
   @override
   void dispose() {
+    _postSubscription?.cancel();
+    _likesSubscription?.cancel();
+    _commentsSubscription?.cancel();
     _scrollController.removeListener(_handleScroll);
     _scrollController.dispose();
     super.dispose();
@@ -139,6 +370,44 @@ class _HomeScreenState extends State<HomeScreen> {
     await _loadPosts(reset: true);
   }
 
+  void _listenForPosts() {
+    _postSubscription = Supabase.instance.client
+        .from('posts')
+        .stream(primaryKey: ['id'])
+        .listen(
+          (_) {
+            if (!mounted) return;
+            if (_scrollController.hasClients &&
+                _scrollController.offset > 180) {
+              setState(() => _newPostsWaiting = true);
+              return;
+            }
+            unawaited(_loadPosts(reset: true, showLoading: false));
+          },
+          onError: (_) {
+            if (!mounted) return;
+            setState(() {
+              _isLoadingPosts = false;
+            });
+          },
+        );
+
+    _likesSubscription = Supabase.instance.client
+        .from('post_likes')
+        .stream(primaryKey: ['id'])
+        .listen((_) {
+          if (!mounted) return;
+          unawaited(_loadPosts(reset: true, showLoading: false));
+        });
+
+    _commentsSubscription = Supabase.instance.client
+        .from('comments')
+        .stream(primaryKey: ['id'])
+        .listen((_) {
+          if (!mounted) return;
+          unawaited(_loadPosts(reset: true, showLoading: false));
+        });
+  }
 
   Future<void> _handleScroll() async {
     if (!_scrollController.hasClients) return;
@@ -157,9 +426,11 @@ class _HomeScreenState extends State<HomeScreen> {
     }
 
     // 2. Handle Pagination (Load more when reaching the bottom)
-    if (_scrollController.position.pixels >= _scrollController.position.maxScrollExtent - 200 && !_isFetchingMore) {
+    if (_scrollController.position.pixels >=
+            _scrollController.position.maxScrollExtent - 200 &&
+        !_isFetchingMore &&
+        _hasMorePosts) {
       setState(() => _isFetchingMore = true);
-      _postLimit += 10;
       await _loadPosts();
       if (!mounted) return;
       setState(() => _isFetchingMore = false);
@@ -175,12 +446,18 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  Future<void> _showLatestPosts() async {
+    await _loadPosts(reset: true, showLoading: false);
+    if (!mounted || !_scrollController.hasClients) return;
+    await _scrollController.animateTo(
+      0,
+      duration: const Duration(milliseconds: 420),
+      curve: Curves.easeOutCubic,
+    );
+  }
+
   String _getDynamicGreeting() {
-    final hour = DateTime.now().hour;
-    const name = 'Viber';
-    if (hour < 12) return 'Good morning, $name ☀️';
-    if (hour < 17) return 'Good afternoon, $name 🌤️';
-    return 'Good evening, $name 🌙';
+    return 'Sawubona $_nickname';
   }
 
   @override
@@ -206,7 +483,6 @@ class _HomeScreenState extends State<HomeScreen> {
               const MessagesScreen(),
             ],
           ),
-
         ],
       ),
     );
@@ -224,9 +500,12 @@ class _HomeScreenState extends State<HomeScreen> {
           child: AnimationLimiter(
             child: CustomScrollView(
               controller: _scrollController,
-              physics: const BouncingScrollPhysics(parent: AlwaysScrollableScrollPhysics()),
+              physics: const BouncingScrollPhysics(
+                parent: AlwaysScrollableScrollPhysics(),
+              ),
               slivers: [
                 _buildFeedSliverAppBar(),
+                _buildComposerSliver(),
                 if (_isLoadingPosts)
                   _buildLoadingSliver()
                 else if (_feedError != null)
@@ -264,7 +543,9 @@ class _HomeScreenState extends State<HomeScreen> {
                     backgroundColor: Theme.of(context).colorScheme.surface,
                     foregroundColor: Theme.of(context).primaryColor,
                     elevation: 4,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(30),
+                    ),
                   ),
                   onPressed: _scrollToTop,
                 ),
@@ -272,6 +553,19 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ),
         ),
+        if (_newPostsWaiting)
+          Positioned(
+            top: 20,
+            left: 0,
+            right: 0,
+            child: Center(
+              child: FilledButton.icon(
+                onPressed: _showLatestPosts,
+                icon: const Icon(Icons.arrow_upward_rounded, size: 18),
+                label: const Text('See new posts'),
+              ),
+            ),
+          ),
       ],
     );
   }
@@ -279,42 +573,104 @@ class _HomeScreenState extends State<HomeScreen> {
   SliverToBoxAdapter _buildFeedSliverAppBar() {
     return SliverToBoxAdapter(
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(20, 36, 20, 16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+        padding: const EdgeInsets.fromLTRB(10, 12, 12, 8),
+        child: Row(
           children: [
-            Row(
-              children: [
-                Builder(
-                  builder: (context) => IconButton(
-                    icon: Icon(Icons.menu, color: Theme.of(context).colorScheme.onSurface),
-                    onPressed: () => Scaffold.of(context).openDrawer(),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Center(child: Image.asset('assets/images/logo.jpeg', height: 40)),
-                ),
-                const SizedBox(width: 48),
-              ],
-            ),
-            const SizedBox(height: 16),
-            Text(
-              _getDynamicGreeting(),
-              style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w800),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              'See what is happening on campus right now.',
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                color: Theme.of(context).colorScheme.onSurface.withOpacity(0.7),
+            Builder(
+              builder: (context) => IconButton(
+                tooltip: 'Open menu',
+                icon: const Icon(Icons.menu_rounded),
+                onPressed: () => Scaffold.of(context).openDrawer(),
               ),
             ),
-            const SizedBox(height: 20),
+            const SizedBox(width: 4),
+            Image.asset(
+              'assets/images/logo_transparent.png',
+              height: 40,
+              width: 40,
+              fit: BoxFit.contain,
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                _getDynamicGreeting(),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                  color: Theme.of(context).colorScheme.onSurface,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+            ),
+            const NotificationBellButton(),
           ],
         ),
       ),
     );
+  }
+
+  SliverToBoxAdapter _buildComposerSliver() {
+    return SliverToBoxAdapter(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 4, 16, 10),
+        child: Material(
+          color: Theme.of(context).colorScheme.surface,
+          borderRadius: BorderRadius.circular(20),
+          child: InkWell(
+            borderRadius: BorderRadius.circular(20),
+            onTap: _openCreatePost,
+            child: Container(
+              padding: const EdgeInsets.all(13),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: AppColors.glassBorder),
+              ),
+              child: Row(
+                children: [
+                  CircleAvatar(
+                    backgroundColor: AppColors.blueTint,
+                    foregroundColor: AppColors.vibeBlue,
+                    backgroundImage: _profilePhotoUrl == null
+                        ? null
+                        : NetworkImage(_profilePhotoUrl!),
+                    child: _profilePhotoUrl == null
+                        ? Text(
+                            _nickname.trim().isEmpty
+                                ? 'O'
+                                : _nickname.trim()[0].toUpperCase(),
+                            style: const TextStyle(fontWeight: FontWeight.w900),
+                          )
+                        : null,
+                  ),
+                  const SizedBox(width: 11),
+                  const Expanded(
+                    child: Text(
+                      'Share something with campus…',
+                      style: TextStyle(
+                        color: AppColors.textMuted,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                  IconButton.filledTonal(
+                    tooltip: 'Create a post',
+                    onPressed: _openCreatePost,
+                    icon: const Icon(Icons.add_photo_alternate_rounded),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _openCreatePost() async {
+    final result = await Navigator.of(
+      context,
+    ).push<bool>(MaterialPageRoute(builder: (_) => const CreatePostScreen()));
+    if (result == true) await _refreshFeed();
   }
 
   // ================= STUDY HUB TAB =================
@@ -326,10 +682,11 @@ class _HomeScreenState extends State<HomeScreen> {
           pinned: true,
           expandedHeight: 100.0,
           backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+          actions: const [NotificationBellButton(), SizedBox(width: 12)],
           flexibleSpace: FlexibleSpaceBar(
             titlePadding: const EdgeInsets.only(left: 20, bottom: 16),
             title: Text(
-              'Study Hub',
+              'Academics',
               style: TextStyle(
                 fontWeight: FontWeight.w800,
                 color: Theme.of(context).colorScheme.onSurface,
@@ -343,17 +700,7 @@ class _HomeScreenState extends State<HomeScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  'Core study tools for your MVP experience',
-                  style: TextStyle(
-                    color: Theme.of(context).primaryColor,
-                    fontWeight: FontWeight.w600,
-                    letterSpacing: 0.5,
-                  ),
-                ),
-                const SizedBox(height: 24),
-
-                _buildSectionHeader('Study Hub'),
+                _buildSectionHeader('Your study tools'),
                 _buildHubGrid(_getStudyHubCards()),
               ],
             ),
@@ -371,10 +718,11 @@ class _HomeScreenState extends State<HomeScreen> {
           pinned: true,
           expandedHeight: 100.0,
           backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+          actions: const [NotificationBellButton(), SizedBox(width: 12)],
           flexibleSpace: FlexibleSpaceBar(
             titlePadding: const EdgeInsets.only(left: 20, bottom: 16),
             title: Text(
-              'Campus Life',
+              'Campus',
               style: TextStyle(
                 fontWeight: FontWeight.w800,
                 color: Theme.of(context).colorScheme.onSurface,
@@ -388,16 +736,7 @@ class _HomeScreenState extends State<HomeScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  'Campus Life features for student services and campus essentials.',
-                  style: TextStyle(
-                    color: Theme.of(context).primaryColor,
-                    fontWeight: FontWeight.w600,
-                    letterSpacing: 0.5,
-                  ),
-                ),
-                const SizedBox(height: 24),
-                _buildSectionHeader('Campus Services'),
+                _buildSectionHeader('Campus life'),
                 _buildHubGrid(_getStudyTabCards()),
               ],
             ),
@@ -418,62 +757,112 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildHubGrid(List<_HubCardInfo> cards) {
-    return GridView.builder(
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      itemCount: cards.length,
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 2,
-        crossAxisSpacing: 12,
-        mainAxisSpacing: 12,
-        childAspectRatio: 2.3,
-      ),
-      itemBuilder: (context, index) {
-        final card = cards[index];
-        final gradientColors = card.gradientColors?.map((color) => color.withOpacity(0.9)).toList();
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final columns = constraints.maxWidth >= 760 ? 3 : 2;
+        final tileWidth =
+            (constraints.maxWidth - ((columns - 1) * 12)) / columns;
+        final textScale = MediaQuery.textScalerOf(
+          context,
+        ).scale(1).clamp(1.0, 1.6);
+        final tileHeight = 146.0 + ((textScale - 1) * 42);
+        return GridView.builder(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          itemCount: cards.length,
+          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: columns,
+            crossAxisSpacing: 12,
+            mainAxisSpacing: 12,
+            childAspectRatio: tileWidth / tileHeight,
+          ),
+          itemBuilder: (context, index) {
+            final card = cards[index];
+            final rainbowGradient =
+                AppStyles.academicRainbowGradients[index %
+                    AppStyles.academicRainbowGradients.length];
 
-        return Card(
-          elevation: 4,
-          shadowColor: card.color.withOpacity(0.3),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          child: InkWell(
-            borderRadius: BorderRadius.circular(16),
-            onTap: () => card.onTap(context),
-            child: Container(
-              decoration: BoxDecoration(
-                gradient: gradientColors != null
-                    ? LinearGradient(colors: gradientColors, begin: Alignment.topLeft, end: Alignment.bottomRight)
-                    : null,
-                color: gradientColors == null ? Colors.white : null,
-                borderRadius: BorderRadius.circular(16),
-              ),
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              child: Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: gradientColors != null ? Colors.white.withOpacity(0.2) : card.color.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(10),
+            return Semantics(
+              button: true,
+              label: 'Open ${card.title}',
+              child: Material(
+                color: Colors.transparent,
+                borderRadius: BorderRadius.circular(18),
+                clipBehavior: Clip.antiAlias,
+                child: Ink(
+                  decoration: BoxDecoration(
+                    gradient: rainbowGradient,
+                    borderRadius: BorderRadius.circular(18),
+                    border: Border.all(
+                      color: Colors.white.withValues(alpha: .24),
                     ),
-                    child: Icon(card.icon, color: gradientColors != null ? Colors.white : card.color, size: 20),
+                    boxShadow: <BoxShadow>[
+                      BoxShadow(
+                        color: rainbowGradient.colors.first.withValues(
+                          alpha: .20,
+                        ),
+                        blurRadius: 12,
+                        offset: const Offset(0, 5),
+                      ),
+                    ],
                   ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Text(
-                      card.title,
-                      maxLines: 2,
-                      style: TextStyle(
-                        fontWeight: FontWeight.w700,
-                        fontSize: 13,
-                        color: gradientColors != null ? Colors.white : Colors.black87,
+                  child: InkWell(
+                    onTap: () => card.onTap(context),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 13,
+                        vertical: 12,
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Container(
+                            width: 42,
+                            height: 42,
+                            decoration: BoxDecoration(
+                              color: Colors.white.withValues(alpha: .18),
+                              borderRadius: BorderRadius.circular(13),
+                            ),
+                            child: Icon(
+                              card.icon,
+                              color: Colors.white,
+                              size: 22,
+                            ),
+                          ),
+                          const Spacer(),
+                          const SizedBox(height: 10),
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.end,
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  card.title,
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.w900,
+                                    fontSize: 14,
+                                    height: 1.18,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              const Icon(
+                                Icons.arrow_outward_rounded,
+                                color: Colors.white,
+                                size: 20,
+                              ),
+                            ],
+                          ),
+                        ],
                       ),
                     ),
                   ),
-                ],
+                ),
               ),
-            ),
-          ),
+            );
+          },
         );
       },
     );
@@ -482,81 +871,67 @@ class _HomeScreenState extends State<HomeScreen> {
   List<_HubCardInfo> _getStudyHubCards() {
     return [
       _HubCardInfo(
-        title: 'Past Question Papers',
-        icon: Icons.picture_as_pdf,
-        color: Colors.indigo,
-        gradientColors: const [Color(0xFF3F51B5), Color(0xFF5C6BC0)],
-        onTap: (context) => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const PastQuestionPapersScreen())),
+        title: 'Past question papers',
+        icon: Icons.history_edu_rounded,
+        onTap: (context) => Navigator.of(context).push(
+          MaterialPageRoute(builder: (_) => const PastQuestionPapersScreen()),
+        ),
       ),
       _HubCardInfo(
-        title: 'Lecture Slides',
-        icon: Icons.slideshow,
-        color: Colors.deepPurple,
-        gradientColors: const [Color(0xFF4527A0), Color(0xFF7E57C2)],
-        onTap: (context) => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const SlidesScreen())),
+        title: 'Lecture slides',
+        icon: Icons.co_present_rounded,
+        onTap: (context) => Navigator.of(
+          context,
+        ).push(MaterialPageRoute(builder: (_) => const SlidesScreen())),
       ),
       _HubCardInfo(
-        title: 'Timetable',
+        title: 'Class timetable',
         icon: Icons.event_note_rounded,
-        color: Colors.deepPurpleAccent,
-        gradientColors: const [Color(0xFF3949AB), Color(0xFF5C6BC0)],
-        onTap: (context) => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const TimetableScreen())),
+        onTap: (context) => Navigator.of(
+          context,
+        ).push(MaterialPageRoute(builder: (_) => const TimetableScreen())),
       ),
       _HubCardInfo(
-        title: 'Online Classes',
+        title: 'Online classes',
         icon: Icons.cast_for_education_rounded,
-        color: Colors.blueAccent,
-        gradientColors: const [Color(0xFF039BE5), Color(0xFF29B6F6)],
-        onTap: (context) => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const OnlineClassesScreen())),
+        onTap: (context) => Navigator.of(
+          context,
+        ).push(MaterialPageRoute(builder: (_) => const OnlineClassesScreen())),
       ),
       _HubCardInfo(
-        title: 'Portal',
+        title: 'Student portal',
         icon: Icons.language_rounded,
-        color: Colors.green,
-        gradientColors: const [Color(0xFF2E7D32), Color(0xFF43A047)],
-        onTap: (context) => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const PortalScreen())),
+        onTap: (context) => Navigator.of(
+          context,
+        ).push(MaterialPageRoute(builder: (_) => const PortalScreen())),
       ),
       _HubCardInfo(
-        title: 'Assignment Submission',
-        icon: Icons.upload_file,
-        color: Colors.orange,
-        gradientColors: const [Color(0xFFF57C00), Color(0xFFFFB300)],
-        onTap: (context) => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const AssignmentSubmissionScreen())),
+        title: 'Assessment submissions',
+        icon: Icons.cloud_upload_rounded,
+        onTap: (context) => Navigator.of(context).push(
+          MaterialPageRoute(builder: (_) => const AssignmentSubmissionScreen()),
+        ),
       ),
       _HubCardInfo(
-        title: 'Exam Timetable',
-        icon: Icons.schedule,
-        color: Colors.teal,
-        gradientColors: const [Color(0xFF00796B), Color(0xFF26A69A)],
-        onTap: (context) => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const ExamTimetableSeatPlanScreen())),
-      ),
-      _HubCardInfo(
-        title: 'Quiz',
-        icon: Icons.quiz_rounded,
-        color: Colors.redAccent,
-        gradientColors: const [Color(0xFFC62828), Color(0xFFD32F2F)],
-        onTap: (context) => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const QuizScreen())),
-      ),
-      _HubCardInfo(
-        title: 'Assessment Schedule',
+        title: 'Assessment schedule',
         icon: Icons.calendar_month_rounded,
-        color: Colors.pink,
-        gradientColors: const [Color(0xFFD81B60), Color(0xFFE91E63)],
-        onTap: (context) => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const AssessmentsCalendarScreen())),
+        onTap: (context) => Navigator.of(context).push(
+          MaterialPageRoute(builder: (_) => const AssessmentsCalendarScreen()),
+        ),
       ),
       _HubCardInfo(
-        title: 'Group Chats',
-        icon: Icons.chat,
-        color: Colors.cyan,
-        gradientColors: const [Color(0xFF00838F), Color(0xFF26C6DA)],
-        onTap: (context) => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const GroupChatsScreen())),
+        title: 'Quizzes',
+        icon: Icons.quiz_rounded,
+        onTap: (context) => Navigator.of(
+          context,
+        ).push(MaterialPageRoute(builder: (_) => const QuizScreen())),
       ),
       _HubCardInfo(
-        title: 'ICASS Marks',
+        title: 'ICASS results',
         icon: Icons.bar_chart_rounded,
-        color: Colors.amber,
-        gradientColors: const [Color(0xFFF57F17), Color(0xFFFBC02D)],
-        onTap: (context) => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const IcassCheckerScreen())),
+        onTap: (context) => Navigator.of(
+          context,
+        ).push(MaterialPageRoute(builder: (_) => const IcassCheckerScreen())),
       ),
     ];
   }
@@ -564,60 +939,62 @@ class _HomeScreenState extends State<HomeScreen> {
   List<_HubCardInfo> _getStudyTabCards() {
     return [
       _HubCardInfo(
-        title: 'Events',
+        title: 'Campus events',
         icon: Icons.event,
-        color: Colors.pinkAccent,
-        gradientColors: const [Color(0xFFE91E63), Color(0xFFF06292)],
-        onTap: (context) => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const EventsScreen())),
+        onTap: (context) => Navigator.of(
+          context,
+        ).push(MaterialPageRoute(builder: (_) => const EventsScreen())),
       ),
       _HubCardInfo(
-        title: 'Lost & Found',
+        title: 'Lost and found',
         icon: Icons.search_rounded,
-        color: Colors.brown,
-        gradientColors: const [Color(0xFF6D4C41), Color(0xFF8D6E63)],
-        onTap: (context) => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const LostAndFoundScreen())),
+        onTap: (context) => Navigator.of(
+          context,
+        ).push(MaterialPageRoute(builder: (_) => const LostAndFoundScreen())),
       ),
       _HubCardInfo(
-        title: 'Find Friends',
+        title: 'Find friends',
         icon: Icons.person_search_rounded,
-        color: Colors.deepPurpleAccent,
-        gradientColors: const [Color(0xFF6A1B9A), Color(0xFF8E24AA)],
-        onTap: (context) => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const FriendRequestsScreen())),
+        onTap: (context) => Navigator.of(
+          context,
+        ).push(MaterialPageRoute(builder: (_) => const FriendRequestsScreen())),
       ),
       _HubCardInfo(
-        title: 'Marketplace',
+        title: 'Student marketplace',
         icon: Icons.storefront_rounded,
-        color: Colors.indigo,
-        gradientColors: const [Color(0xFF3949AB), Color(0xFF5C6BC0)],
-        onTap: (context) => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const MarketScreen())),
+        onTap: (context) => Navigator.of(
+          context,
+        ).push(MaterialPageRoute(builder: (_) => const MarketScreen())),
       ),
       _HubCardInfo(
-        title: 'SRC Voting Booth',
-        icon: Icons.how_to_vote,
-        color: Colors.deepOrange,
-        gradientColors: const [Color(0xFFE64A19), Color(0xFFF57C00)],
-        onTap: (context) => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const SrcVotingScreen())),
+        title: 'Student accommodation',
+        icon: Icons.home_work_outlined,
+        onTap: (context) => Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (_) => const AccreditedAccommodationScreen(),
+          ),
+        ),
       ),
       _HubCardInfo(
-        title: 'Lift Club',
-        icon: Icons.directions_car,
-        color: Colors.green,
-        gradientColors: const [Color(0xFF2E7D32), Color(0xFF66BB6A)],
-        onTap: (context) => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const LiftClubScreen())),
+        title: 'Donations',
+        icon: Icons.volunteer_activism_outlined,
+        onTap: (context) => Navigator.of(
+          context,
+        ).push(MaterialPageRoute(builder: (_) => const DonationScreen())),
       ),
       _HubCardInfo(
-        title: 'Document Wallet',
-        icon: Icons.badge,
-        color: Colors.blueGrey,
-        gradientColors: const [Color(0xFF37474F), Color(0xFF546E7A)],
-        onTap: (context) => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const DocumentWalletScreen())),
+        title: 'Document wallet',
+        icon: Icons.folder_special_rounded,
+        onTap: (context) => Navigator.of(
+          context,
+        ).push(MaterialPageRoute(builder: (_) => const DocumentWalletScreen())),
       ),
       _HubCardInfo(
-        title: 'Career & Funding',
+        title: 'Careers and funding',
         icon: Icons.trending_up_rounded,
-        color: Colors.teal,
-        gradientColors: const [Color(0xFF00695C), Color(0xFF00897B)],
-        onTap: (context) => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const CareerScreen())),
+        onTap: (context) => Navigator.of(
+          context,
+        ).push(MaterialPageRoute(builder: (_) => const CareerScreen())),
       ),
     ];
   }
@@ -633,8 +1010,16 @@ class _HomeScreenState extends State<HomeScreen> {
             verticalOffset: 50,
             child: FadeInAnimation(
               child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                child: PostCard(data: posts[index]),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 8,
+                ),
+                child: _PostSeenImpression(
+                  onSeen: () => unawaited(
+                    _markPostSeen(posts[index]['id']?.toString() ?? ''),
+                  ),
+                  child: PostCard(data: posts[index]),
+                ),
               ),
             ),
           ),
@@ -656,12 +1041,26 @@ class _HomeScreenState extends State<HomeScreen> {
                 color: Theme.of(context).primaryColor.withOpacity(0.1),
                 shape: BoxShape.circle,
               ),
-              child: Icon(Icons.campaign_outlined, size: 64, color: Theme.of(context).primaryColor),
+              child: Icon(
+                Icons.campaign_outlined,
+                size: 64,
+                color: Theme.of(context).primaryColor,
+              ),
             ),
             const SizedBox(height: 24),
-            Text('Campus is quiet...', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 22, color: Theme.of(context).colorScheme.onSurface)),
+            Text(
+              'Campus is quiet...',
+              style: TextStyle(
+                fontWeight: FontWeight.w700,
+                fontSize: 22,
+                color: Theme.of(context).colorScheme.onSurface,
+              ),
+            ),
             const SizedBox(height: 8),
-            const Text('Be the first to post a vibe today!', style: TextStyle(color: Colors.black54, fontSize: 16)),
+            const Text(
+              'Be the first to post a vibe today!',
+              style: TextStyle(color: AppColors.onSurfaceMuted, fontSize: 16),
+            ),
             const SizedBox(height: 32),
             ElevatedButton.icon(
               icon: const Icon(Icons.add),
@@ -669,8 +1068,13 @@ class _HomeScreenState extends State<HomeScreen> {
               style: ElevatedButton.styleFrom(
                 backgroundColor: Theme.of(context).primaryColor,
                 foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 14),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 32,
+                  vertical: 14,
+                ),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(24),
+                ),
               ),
               onPressed: () async {
                 final result = await Navigator.of(context).push<bool>(
@@ -689,7 +1093,10 @@ class _HomeScreenState extends State<HomeScreen> {
 
   SliverList _buildLoadingSliver() {
     return SliverList(
-      delegate: SliverChildBuilderDelegate((context, index) => _buildShimmerFeedCard(), childCount: 3),
+      delegate: SliverChildBuilderDelegate(
+        (context, index) => _buildShimmerFeedCard(),
+        childCount: 3,
+      ),
     );
   }
 
@@ -700,7 +1107,10 @@ class _HomeScreenState extends State<HomeScreen> {
       child: Container(
         margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         height: 250,
-        decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(18)),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(18),
+        ),
       ),
     );
   }
@@ -712,9 +1122,16 @@ class _HomeScreenState extends State<HomeScreen> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.wifi_off, size: 64, color: Colors.redAccent),
+            const Icon(Icons.wifi_off, size: 64, color: AppColors.danger),
             const SizedBox(height: 16),
-            const Text('Could not connect to server', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 18, color: Colors.redAccent)),
+            const Text(
+              'Could not connect to server',
+              style: TextStyle(
+                fontWeight: FontWeight.w600,
+                fontSize: 18,
+                color: AppColors.danger,
+              ),
+            ),
             const SizedBox(height: 24),
             ElevatedButton.icon(
               icon: const Icon(Icons.refresh),
@@ -734,34 +1151,81 @@ class _HomeScreenState extends State<HomeScreen> {
       child: FloatingActionButton.extended(
         elevation: 6,
         backgroundColor: Theme.of(context).primaryColor,
-        onPressed: () async {
-          final result = await Navigator.of(context).push<bool>(
-            MaterialPageRoute(builder: (_) => const CreatePostScreen()),
-          );
-          if (result == true) {
-            await _refreshFeed();
-          }
-        },
+        onPressed: _openCreatePost,
         icon: const Icon(Icons.add, color: Colors.white),
-        label: const Text('Post Vibe', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+        label: const Text(
+          'Create post',
+          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+        ),
       ),
     );
   }
-
 }
 
 class _HubCardInfo {
   const _HubCardInfo({
     required this.title,
     required this.icon,
-    required this.color,
-    this.gradientColors,
     required this.onTap,
   });
 
   final String title;
   final IconData icon;
-  final Color color;
-  final List<Color>? gradientColors;
   final void Function(BuildContext context) onTap;
-}    
+}
+
+class _PostSeenImpression extends SingleChildRenderObjectWidget {
+  const _PostSeenImpression({required this.onSeen, required super.child});
+
+  final VoidCallback onSeen;
+
+  @override
+  RenderObject createRenderObject(BuildContext context) =>
+      _PostSeenRenderObject(onSeen);
+
+  @override
+  void updateRenderObject(
+    BuildContext context,
+    covariant _PostSeenRenderObject renderObject,
+  ) {
+    renderObject.onSeen = onSeen;
+  }
+}
+
+class _PostSeenRenderObject extends RenderProxyBox {
+  _PostSeenRenderObject(this._onSeen);
+
+  VoidCallback _onSeen;
+  Timer? _timer;
+  bool _reported = false;
+
+  set onSeen(VoidCallback value) => _onSeen = value;
+
+  @override
+  void paint(PaintingContext context, Offset offset) {
+    super.paint(context, offset);
+    if (_reported || _timer != null || !attached) return;
+    _timer = Timer(const Duration(milliseconds: 700), () {
+      _timer = null;
+      if (_reported || !attached || !hasSize) return;
+      final view = PlatformDispatcher.instance.views.first;
+      final viewport =
+          Offset.zero &
+          Size(
+            view.physicalSize.width / view.devicePixelRatio,
+            view.physicalSize.height / view.devicePixelRatio,
+          );
+      final bounds = localToGlobal(Offset.zero) & size;
+      if (!bounds.overlaps(viewport)) return;
+      _reported = true;
+      _onSeen();
+    });
+  }
+
+  @override
+  void detach() {
+    _timer?.cancel();
+    _timer = null;
+    super.detach();
+  }
+}

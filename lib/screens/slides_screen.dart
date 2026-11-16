@@ -8,6 +8,9 @@ import 'package:og_vibes_student/utils/theme_constants.dart';
 import 'package:og_vibes_student/widgets/vibe_scaffold.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
+import '../services/download_history_service.dart';
+import '../services/offline_cache_service.dart';
+import '../widgets/standard_ui.dart';
 
 import 'pdf_viewer_screen.dart';
 
@@ -35,12 +38,16 @@ class _SlidesScreenState extends State<SlidesScreen> {
   String _globalQuery = '';
   _SlideSort _sort = _SlideSort.newest;
   bool _isLoading = true;
+  bool _loadingMore = false;
+  bool _hasMore = true;
+  DateTime? _oldestCursor;
   String? _errorMessage;
+  static const int _pageSize = 30;
 
   @override
   void initState() {
     super.initState();
-    _loadSlides();
+    _loadSlides(reset: true);
     _listenForSlides();
   }
 
@@ -51,35 +58,71 @@ class _SlidesScreenState extends State<SlidesScreen> {
     super.dispose();
   }
 
-  Future<void> _loadSlides() async {
+  Future<void> _loadSlides({bool reset = false}) async {
     if (!mounted) return;
-    setState(() {
-      _isLoading = true;
-      _errorMessage = null;
-    });
+    if (reset) {
+      _oldestCursor = null;
+      _hasMore = true;
+      final cached = await OfflineCacheService.readList('lecture_slides');
+      if (cached.isNotEmpty && mounted) {
+        setState(() {
+          _allSlides
+            ..clear()
+            ..addAll(_flattenRows(cached));
+          _library
+            ..clear()
+            ..addAll(_buildLibraryFromRows(cached));
+          _isLoading = false;
+        });
+      } else {
+        setState(() => _isLoading = true);
+      }
+      setState(() => _errorMessage = null);
+    }
 
     try {
-      final raw = await Supabase.instance.client
+      var query = Supabase.instance.client
           .from('lecture_slides')
           .select(
-            'id, level, subject, title, url, created_at, updated_at, module_id',
-          )
-          .order('level', ascending: true)
-          .order('subject', ascending: true)
-          .order('title', ascending: true) as List<dynamic>?;
+            'id, level, subject, title, url, storage_path, created_at, updated_at, module_id',
+          );
+      if (!reset && _oldestCursor != null) {
+        query = query.lt(
+          'created_at',
+          _oldestCursor!.toUtc().toIso8601String(),
+        );
+      }
+      final raw =
+          await query.order('created_at', ascending: false).limit(_pageSize)
+              as List<dynamic>?;
 
       await _loadLecturers();
       if (!mounted) return;
       final rows = List<Map<String, dynamic>>.from(raw ?? []);
+      final combined = <Map<String, dynamic>>[
+        if (!reset) ..._allSlides.map((row) => Map<String, dynamic>.from(row)),
+        ...rows,
+      ];
+      final byId = <String, Map<String, dynamic>>{
+        for (final row in combined) row['id']?.toString() ?? '': row,
+      }..remove('');
+      final allRows = byId.values.toList();
       setState(() {
         _allSlides
           ..clear()
-          ..addAll(_flattenRows(rows));
+          ..addAll(_flattenRows(allRows));
         _library
           ..clear()
-          ..addAll(_buildLibraryFromRows(rows));
+          ..addAll(_buildLibraryFromRows(allRows));
         _isLoading = false;
+        _hasMore = rows.length == _pageSize;
+        if (rows.isNotEmpty) {
+          _oldestCursor = DateTime.tryParse(
+            rows.last['created_at']?.toString() ?? '',
+          );
+        }
       });
+      unawaited(OfflineCacheService.writeList('lecture_slides', allRows));
     } catch (error) {
       if (!mounted) return;
       setState(() {
@@ -93,37 +136,42 @@ class _SlidesScreenState extends State<SlidesScreen> {
     _slidesSubscription = Supabase.instance.client
         .from('lecture_slides')
         .stream(primaryKey: ['id'])
-        .listen((rows) {
-          if (!mounted) return;
-          setState(() {
-            _allSlides
-              ..clear()
-              ..addAll(_flattenRows(rows));
-            _library
-              ..clear()
-              ..addAll(_buildLibraryFromRows(List<Map<String, dynamic>>.from(rows)));
-            _isLoading = false;
-            _errorMessage = null;
-          });
-        }, onError: (error) {
-          if (!mounted) return;
-          setState(() {
-            _isLoading = false;
-            _errorMessage = error.toString();
-          });
-        });
+        .listen(
+          (_) {
+            if (!mounted) return;
+            unawaited(_loadSlides(reset: true));
+          },
+          onError: (error) {
+            if (!mounted) return;
+            setState(() {
+              _isLoading = false;
+              _errorMessage = error.toString();
+            });
+          },
+        );
   }
 
   Future<void> _refreshSlides() async {
+    await _loadSlides(reset: true);
+  }
+
+  Future<void> _loadMoreSlides() async {
+    if (_loadingMore || !_hasMore) return;
+    setState(() => _loadingMore = true);
     await _loadSlides();
+    if (mounted) setState(() => _loadingMore = false);
   }
 
   Future<void> _loadLecturers() async {
     try {
-      final raw = await Supabase.instance.client.from('module_lecturers').select(
-            'module_id, profiles!module_lecturers_lecturer_id_fkey('
-            'name, surname, photo_url)',
-          ) as List<dynamic>;
+      final raw =
+          await Supabase.instance.client
+                  .from('module_lecturers')
+                  .select(
+                    'module_id, profiles!module_lecturers_lecturer_id_fkey('
+                    'name, surname, photo_url)',
+                  )
+              as List<dynamic>;
       _lecturersByModule.clear();
       for (final value in raw) {
         final row = Map<String, dynamic>.from(value as Map);
@@ -178,6 +226,7 @@ class _SlidesScreenState extends State<SlidesScreen> {
       'subject': _text(row['subject'], 'General'),
       'title': _text(row['title'], 'Slide'),
       'url': _text(row['url'], ''),
+      'storage_path': _text(row['storage_path'], ''),
       'created_at': _text(row['created_at'], ''),
       'updated_at': _text(row['updated_at'], ''),
       'module_id': moduleId,
@@ -219,23 +268,24 @@ class _SlidesScreenState extends State<SlidesScreen> {
     final sorted = List<Map<String, String>>.from(slides);
     int compare(Map<String, String> a, Map<String, String> b) {
       return switch (_sort) {
-        _SlideSort.newest =>
-          (b['created_at'] ?? '').compareTo(a['created_at'] ?? ''),
-        _SlideSort.oldest =>
-          (a['created_at'] ?? '').compareTo(b['created_at'] ?? ''),
-        _SlideSort.title => (a['title'] ?? '')
-            .toLowerCase()
-            .compareTo((b['title'] ?? '').toLowerCase()),
-        _SlideSort.subject => (a['subject'] ?? '')
-            .toLowerCase()
-            .compareTo((b['subject'] ?? '').toLowerCase()),
+        _SlideSort.newest => (b['created_at'] ?? '').compareTo(
+          a['created_at'] ?? '',
+        ),
+        _SlideSort.oldest => (a['created_at'] ?? '').compareTo(
+          b['created_at'] ?? '',
+        ),
+        _SlideSort.title => (a['title'] ?? '').toLowerCase().compareTo(
+          (b['title'] ?? '').toLowerCase(),
+        ),
+        _SlideSort.subject => (a['subject'] ?? '').toLowerCase().compareTo(
+          (b['subject'] ?? '').toLowerCase(),
+        ),
         _SlideSort.recentlyOpened =>
-          (_recentlyOpened[b['id']] ??
-                  DateTime.fromMillisecondsSinceEpoch(0))
+          (_recentlyOpened[b['id']] ?? DateTime.fromMillisecondsSinceEpoch(0))
               .compareTo(
-            _recentlyOpened[a['id']] ??
-                DateTime.fromMillisecondsSinceEpoch(0),
-          ),
+                _recentlyOpened[a['id']] ??
+                    DateTime.fromMillisecondsSinceEpoch(0),
+              ),
       };
     }
 
@@ -248,7 +298,7 @@ class _SlidesScreenState extends State<SlidesScreen> {
       _SlideSort.newest => 'Newest first',
       _SlideSort.oldest => 'Oldest first',
       _SlideSort.title => 'Title A–Z',
-      _SlideSort.subject => 'Subject A–Z',
+      _SlideSort.subject => 'Module A–Z',
       _SlideSort.recentlyOpened => 'Recently opened',
     };
   }
@@ -271,30 +321,31 @@ class _SlidesScreenState extends State<SlidesScreen> {
   }
 
   Future<void> _openSlide(Map<String, String> slide) async {
-    final url = slide['url'] ?? '';
+    final url = await _resolveSlideUrl(slide);
+    if (url == null) return;
     if (url.isEmpty) {
-      _showMessage('No URL is available for this slide yet.');
+      _showMessage('These slides have no file attached. Please contact your lecturer.');
       return;
     }
     HapticFeedback.lightImpact();
     final id = slide['id'] ?? url;
     setState(() => _recentlyOpened[id] = DateTime.now());
+    if (!mounted) return;
     await Navigator.of(context).push(
       MaterialPageRoute<void>(
-        builder: (_) => PdfViewerScreen(
-          url: url,
-          title: slide['title'] ?? 'Lecture slide',
-        ),
+        builder: (_) =>
+            PdfViewerScreen(url: url, title: slide['title'] ?? 'Lecture slide'),
       ),
     );
   }
 
   Future<void> _downloadSlide(Map<String, String> slide) async {
-    final url = slide['url'] ?? '';
+    final url = await _resolveSlideUrl(slide);
+    if (url == null) return;
     final id = slide['id'] ?? url;
     if (_preparingDownloads.contains(id)) return;
     if (url.isEmpty) {
-      _showMessage('No download link is available for this slide yet.');
+      _showMessage('These slides have no file attached. Please contact your lecturer.');
       return;
     }
     final uri = Uri.tryParse(url);
@@ -308,9 +359,20 @@ class _SlidesScreenState extends State<SlidesScreen> {
     _showMessage('Preparing ${slide['title'] ?? 'your slides'}…');
     try {
       final launched = await launchUrl(
-        uri,
+        (slide['storage_path'] ?? '').isNotEmpty
+            ? uri.replace(queryParameters: {...uri.queryParameters, 'download': ''})
+            : uri,
         mode: LaunchMode.externalApplication,
       );
+      if (launched) {
+        await DownloadHistoryService.record(
+          sourceType: 'lecture_slide',
+          sourceId: slide['id'],
+          title: slide['title'] ?? 'Lecture slide',
+          url: slide['url'],
+          storagePath: slide['storage_path'],
+        );
+      }
       if (!mounted) return;
       _showMessage(
         launched
@@ -323,6 +385,21 @@ class _SlidesScreenState extends State<SlidesScreen> {
       }
     } finally {
       if (mounted) setState(() => _preparingDownloads.remove(id));
+    }
+  }
+
+  Future<String?> _resolveSlideUrl(Map<String, String> slide) async {
+    try {
+    final path = slide['storage_path'] ?? '';
+    if (path.isNotEmpty) {
+      return Supabase.instance.client.storage
+          .from('academic-content')
+          .createSignedUrl(path, 600);
+    }
+    return slide['url'] ?? '';
+    } catch (_) {
+      _showMessage('Could not open this file. Check your connection and try again.');
+      return null;
     }
   }
 
@@ -346,11 +423,18 @@ class _SlidesScreenState extends State<SlidesScreen> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const Icon(Icons.error_outline, size: 48, color: Colors.redAccent),
+              const Icon(
+                Icons.error_outline,
+                size: 48,
+                color: Colors.redAccent,
+              ),
               const SizedBox(height: 12),
               const Text('Unable to load slides right now.'),
               const SizedBox(height: 8),
-              Text(_errorMessage ?? 'Please try again.', textAlign: TextAlign.center),
+              Text(
+                _errorMessage ?? 'Please try again.',
+                textAlign: TextAlign.center,
+              ),
               const SizedBox(height: 16),
               ElevatedButton.icon(
                 onPressed: _refreshSlides,
@@ -366,26 +450,22 @@ class _SlidesScreenState extends State<SlidesScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text('Choose your level', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
+        const Text(
+          'Choose your level',
+          style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+        ),
         const SizedBox(height: 12),
         Wrap(
           spacing: 8,
           runSpacing: 8,
           children: levels.map((level) {
-            return ChoiceChip(
-              label: Text(level),
-              selected: _selectedLevel == level,
-              onSelected: (_) {
+            return FilledButton.tonal(
+              style: FilledButton.styleFrom(minimumSize: const Size(130, 52)),
+              child: Text(level),
+              onPressed: () {
                 HapticFeedback.selectionClick();
                 setState(() => _selectedLevel = level);
               },
-              selectedColor: AppColors.vibeBlue,
-              labelStyle: TextStyle(
-                color: _selectedLevel == level
-                    ? Colors.white
-                    : AppColors.midnightInk,
-                fontWeight: FontWeight.w700,
-              ),
             );
           }).toList(),
         ),
@@ -394,16 +474,25 @@ class _SlidesScreenState extends State<SlidesScreen> {
   }
 
   Widget _buildSubjectList(BuildContext context) {
-    final subjects = (_selectedLevel != null ? _library[_selectedLevel!]!.keys.toList() : <String>[])
-        .where((s) => s.toLowerCase().contains(_subjectQuery.toLowerCase()))
-        .toList();
+    final subjects =
+        (_selectedLevel != null
+                ? _library[_selectedLevel!]!.keys.toList()
+                : <String>[])
+            .where((s) => s.toLowerCase().contains(_subjectQuery.toLowerCase()))
+            .toList();
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Text('Level: $_selectedLevel', style: const TextStyle(fontWeight: FontWeight.w600)),
+        Text(
+          'Level: $_selectedLevel',
+          style: const TextStyle(fontWeight: FontWeight.w600),
+        ),
         const SizedBox(height: 12),
         TextField(
-          decoration: const InputDecoration(prefixIcon: Icon(Icons.search), hintText: 'Search subject...'),
+          decoration: const InputDecoration(
+            prefixIcon: Icon(Icons.search),
+            hintText: 'Search modules...',
+          ),
           onChanged: (v) => setState(() => _subjectQuery = v),
         ),
         const SizedBox(height: 12),
@@ -414,31 +503,34 @@ class _SlidesScreenState extends State<SlidesScreen> {
             itemBuilder: (context, index) {
               final subj = subjects[index];
               return _glassPanel(
-                child: ListTile(
-                  contentPadding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 5,
-                  ),
-                  leading: Container(
-                    width: 42,
-                    height: 42,
-                    decoration: BoxDecoration(
-                      color: AppColors.vibeBlue.withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(14),
+                    child: ListTile(
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 5,
+                      ),
+                      leading: Container(
+                        width: 42,
+                        height: 42,
+                        decoration: BoxDecoration(
+                          color: AppColors.vibeBlue.withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                        child: const Icon(
+                          Icons.menu_book_rounded,
+                          color: AppColors.vibeBlue,
+                        ),
+                      ),
+                      title: Text(
+                        subj,
+                        style: const TextStyle(fontWeight: FontWeight.w700),
+                      ),
+                      trailing: const Icon(Icons.chevron_right),
+                      onTap: () {
+                        HapticFeedback.selectionClick();
+                        setState(() => _selectedSubject = subj);
+                      },
                     ),
-                    child: const Icon(
-                      Icons.menu_book_rounded,
-                      color: AppColors.vibeBlue,
-                    ),
-                  ),
-                  title: Text(subj, style: const TextStyle(fontWeight: FontWeight.w700)),
-                  trailing: const Icon(Icons.chevron_right),
-                  onTap: () {
-                    HapticFeedback.selectionClick();
-                    setState(() => _selectedSubject = subj);
-                  },
-                ),
-              )
+                  )
                   .animate(delay: (45 * index).ms)
                   .fadeIn(duration: 300.ms)
                   .slideX(begin: 0.03, end: 0);
@@ -497,7 +589,7 @@ class _SlidesScreenState extends State<SlidesScreen> {
               ),
               SizedBox(height: 6),
               Text(
-                'Try another search or choose a different subject.',
+                'Try another search or choose a different module.',
                 textAlign: TextAlign.center,
                 style: TextStyle(color: AppColors.textMuted),
               ),
@@ -533,154 +625,163 @@ class _SlidesScreenState extends State<SlidesScreen> {
         const SizedBox(height: 12),
         Expanded(
           child: ListView.separated(
-            itemCount: slides.length,
+            itemCount: slides.length + (_hasMore || _loadingMore ? 1 : 0),
             separatorBuilder: (_, _) => const SizedBox(height: 10),
             itemBuilder: (context, index) {
+              if ((_hasMore || _loadingMore) && index == slides.length) {
+                return OgLoadOlderButton(
+                  onPressed: _loadMoreSlides,
+                  loading: _loadingMore,
+                  label: 'Load more slides',
+                );
+              }
               final slide = slides[index];
               final id = slide['id'] ?? slide['url'] ?? '';
               final preparing = _preparingDownloads.contains(id);
               final freshness = _freshnessLabel(slide);
               final lecturerPhoto = slide['lecturer_photo'] ?? '';
               return _glassPanel(
-                child: ListTile(
-                  contentPadding: const EdgeInsets.all(14),
-                  leading: Stack(
-                    clipBehavior: Clip.none,
-                    children: [
-                      Container(
-                        width: 50,
-                        height: 50,
-                        decoration: BoxDecoration(
-                          gradient: const LinearGradient(
-                            colors: [
-                              AppColors.vibeBlue,
-                              Color(0xFF7A5AF8),
-                            ],
+                    child: ListTile(
+                      contentPadding: const EdgeInsets.all(14),
+                      leading: Stack(
+                        clipBehavior: Clip.none,
+                        children: [
+                          Container(
+                            width: 50,
+                            height: 50,
+                            decoration: BoxDecoration(
+                              gradient: const LinearGradient(
+                                colors: [AppColors.vibeBlue, Color(0xFF7A5AF8)],
+                              ),
+                              borderRadius: BorderRadius.circular(16),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: AppColors.vibeBlue.withValues(
+                                    alpha: 0.22,
+                                  ),
+                                  blurRadius: 16,
+                                  offset: const Offset(0, 7),
+                                ),
+                              ],
+                            ),
+                            child: const Icon(
+                              Icons.slideshow_rounded,
+                              color: Colors.white,
+                            ),
                           ),
-                          borderRadius: BorderRadius.circular(16),
-                          boxShadow: [
-                            BoxShadow(
-                              color:
-                                  AppColors.vibeBlue.withValues(alpha: 0.22),
-                              blurRadius: 16,
-                              offset: const Offset(0, 7),
+                          if (freshness != null)
+                            Positioned(
+                              left: -5,
+                              bottom: -7,
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 6,
+                                  vertical: 3,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: freshness == 'NEW'
+                                      ? AppColors.success
+                                      : AppColors.warning,
+                                  borderRadius: AppStyles.pillRadius,
+                                  border: Border.all(
+                                    color: Colors.white,
+                                    width: 2,
+                                  ),
+                                ),
+                                child: Text(
+                                  freshness,
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 8,
+                                    fontWeight: FontWeight.w900,
+                                  ),
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
+                      title: Text(
+                        slide['title'] ?? 'Lecture slide',
+                        style: const TextStyle(
+                          color: AppColors.midnightInk,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                      subtitle: Padding(
+                        padding: const EdgeInsets.only(top: 7),
+                        child: Row(
+                          children: [
+                            CircleAvatar(
+                              radius: 12,
+                              backgroundColor: AppColors.vibeBlue.withValues(
+                                alpha: 0.12,
+                              ),
+                              backgroundImage: lecturerPhoto.isNotEmpty
+                                  ? NetworkImage(lecturerPhoto)
+                                  : null,
+                              child: lecturerPhoto.isEmpty
+                                  ? const Icon(
+                                      Icons.person_outline_rounded,
+                                      size: 14,
+                                      color: AppColors.vibeBlue,
+                                    )
+                                  : null,
+                            ),
+                            const SizedBox(width: 7),
+                            Expanded(
+                              child: Text(
+                                '${slide['lecturer'] ?? 'Course team'}  •  '
+                                '${slide['subject'] ?? _selectedSubject ?? ''}',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  color: AppColors.textMuted,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
                             ),
                           ],
                         ),
-                        child: const Icon(
-                          Icons.slideshow_rounded,
-                          color: Colors.white,
-                        ),
                       ),
-                      if (freshness != null)
-                        Positioned(
-                          left: -5,
-                          bottom: -7,
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 6,
-                              vertical: 3,
+                      trailing: PopupMenuButton<String>(
+                        tooltip: 'Slide actions',
+                        onSelected: (value) {
+                          if (value == 'view') _openSlide(slide);
+                          if (value == 'download') _downloadSlide(slide);
+                        },
+                        itemBuilder: (_) => [
+                          const PopupMenuItem(
+                            value: 'view',
+                            child: ListTile(
+                              leading: Icon(Icons.visibility_outlined),
+                              title: Text('View slides'),
+                              contentPadding: EdgeInsets.zero,
                             ),
-                            decoration: BoxDecoration(
-                              color: freshness == 'NEW'
-                                  ? AppColors.success
-                                  : AppColors.warning,
-                              borderRadius: AppStyles.pillRadius,
-                              border: Border.all(color: Colors.white, width: 2),
-                            ),
-                            child: Text(
-                              freshness,
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 8,
-                                fontWeight: FontWeight.w900,
+                          ),
+                          PopupMenuItem(
+                            value: 'download',
+                            enabled: !preparing,
+                            child: ListTile(
+                              leading: preparing
+                                  ? const SizedBox(
+                                      width: 20,
+                                      height: 20,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                      ),
+                                    )
+                                  : const Icon(Icons.download_rounded),
+                              title: Text(
+                                preparing ? 'Preparing…' : 'Download',
                               ),
+                              contentPadding: EdgeInsets.zero,
                             ),
                           ),
-                        ),
-                    ],
-                  ),
-                  title: Text(
-                    slide['title'] ?? 'Lecture slide',
-                    style: const TextStyle(
-                      color: AppColors.midnightInk,
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-                  subtitle: Padding(
-                    padding: const EdgeInsets.only(top: 7),
-                    child: Row(
-                      children: [
-                        CircleAvatar(
-                          radius: 12,
-                          backgroundColor:
-                              AppColors.vibeBlue.withValues(alpha: 0.12),
-                          backgroundImage: lecturerPhoto.isNotEmpty
-                              ? NetworkImage(lecturerPhoto)
-                              : null,
-                          child: lecturerPhoto.isEmpty
-                              ? const Icon(
-                                  Icons.person_outline_rounded,
-                                  size: 14,
-                                  color: AppColors.vibeBlue,
-                                )
-                              : null,
-                        ),
-                        const SizedBox(width: 7),
-                        Expanded(
-                          child: Text(
-                            '${slide['lecturer'] ?? 'Course team'}  •  '
-                            '${slide['subject'] ?? _selectedSubject ?? ''}',
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              color: AppColors.textMuted,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  trailing: PopupMenuButton<String>(
-                    tooltip: 'Slide actions',
-                    onSelected: (value) {
-                      if (value == 'view') _openSlide(slide);
-                      if (value == 'download') _downloadSlide(slide);
-                    },
-                    itemBuilder: (_) => [
-                      const PopupMenuItem(
-                        value: 'view',
-                        child: ListTile(
-                          leading: Icon(Icons.visibility_outlined),
-                          title: Text('View slides'),
-                          contentPadding: EdgeInsets.zero,
-                        ),
+                        ],
                       ),
-                      PopupMenuItem(
-                        value: 'download',
-                        enabled: !preparing,
-                        child: ListTile(
-                          leading: preparing
-                              ? const SizedBox(
-                                  width: 20,
-                                  height: 20,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                  ),
-                                )
-                              : const Icon(Icons.download_rounded),
-                          title: Text(
-                            preparing ? 'Preparing…' : 'Download',
-                          ),
-                          contentPadding: EdgeInsets.zero,
-                        ),
-                      ),
-                    ],
-                  ),
-                  onTap: () => _openSlide(slide),
-                ),
-              )
+                      onTap: () => _openSlide(slide),
+                    ),
+                  )
                   .animate(delay: (45 * index).ms)
                   .fadeIn(duration: 320.ms)
                   .slideX(begin: 0.035, end: 0);
@@ -769,9 +870,9 @@ class _SlidesScreenState extends State<SlidesScreen> {
                   const SizedBox(height: 7),
                   Text(
                     [
-                      _selectedLevel,
-                      _selectedSubject,
-                    ].whereType<String>().join('  •  ').isEmpty
+                          _selectedLevel,
+                          _selectedSubject,
+                        ].whereType<String>().join('  •  ').isEmpty
                         ? 'Slides, summaries and lecturer resources'
                         : [
                             _selectedLevel,
@@ -845,7 +946,7 @@ class _SlidesScreenState extends State<SlidesScreen> {
             controller: _globalSearchController,
             onChanged: (value) => setState(() => _globalQuery = value),
             decoration: InputDecoration(
-              hintText: 'Search slides, subjects or lecturers',
+              hintText: 'Search slides or modules',
               prefixIcon: const Icon(Icons.search_rounded),
               suffixIcon: _globalQuery.isEmpty
                   ? null
@@ -889,39 +990,22 @@ class _SlidesScreenState extends State<SlidesScreen> {
               ],
             );
           }
-          return Column(
-            children: [
-              search,
-              const SizedBox(height: 8),
-              sort,
-            ],
-          );
+          return Column(children: [search, const SizedBox(height: 8), sort]);
         },
       ),
     );
   }
 
-  Widget _glassPanel({
-    required Widget child,
-    EdgeInsetsGeometry? padding,
-  }) {
-    return ClipRRect(
-      borderRadius: AppStyles.bentoRadius,
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15),
-        child: Container(
-          padding: padding,
-          decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: 0.78),
-            borderRadius: AppStyles.bentoRadius,
-            border: Border.all(
-              color: Colors.white.withValues(alpha: 0.86),
-            ),
-            boxShadow: AppStyles.glassShadow,
-          ),
-          child: child,
-        ),
+  Widget _glassPanel({required Widget child, EdgeInsetsGeometry? padding}) {
+    return Container(
+      padding: padding,
+      decoration: BoxDecoration(
+        color: AppColors.surfaceElevated,
+        borderRadius: AppStyles.bentoRadius,
+        border: Border.all(color: AppColors.outline),
+        boxShadow: AppStyles.softShadow,
       ),
+      child: child,
     );
   }
 
@@ -929,7 +1013,7 @@ class _SlidesScreenState extends State<SlidesScreen> {
   Widget build(BuildContext context) {
     return VibeScaffold(
       appBar: AppBar(
-        title: const Text('Lecture Slides & Summaries'),
+        title: const Text('Lecture slides'),
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
@@ -992,10 +1076,10 @@ class _SlidesScreenState extends State<SlidesScreen> {
                     child: _globalQuery.trim().isNotEmpty
                         ? _buildGlobalSearchResults()
                         : _selectedLevel == null
-                            ? _buildLevelSelector(context)
-                            : (_selectedSubject == null
-                                ? _buildSubjectList(context)
-                                : _buildSlidesList(context)),
+                        ? _buildLevelSelector(context)
+                        : (_selectedSubject == null
+                              ? _buildSubjectList(context)
+                              : _buildSlidesList(context)),
                   ),
                 ),
               ),

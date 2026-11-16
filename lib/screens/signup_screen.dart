@@ -1,4 +1,4 @@
-﻿import 'dart:async';
+import 'dart:async';
 
 import 'package:confetti/confetti.dart';
 import 'package:flutter/material.dart';
@@ -7,7 +7,9 @@ import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../services/auth_service.dart';
-import 'login_screen.dart';
+import 'email_verification_screen.dart';
+import 'home_screen.dart';
+import 'legal_document_screen.dart';
 
 class SignupScreen extends StatefulWidget {
   const SignupScreen({super.key});
@@ -31,7 +33,8 @@ class _SignupScreenState extends State<SignupScreen>
   final TextEditingController _nameController = TextEditingController();
   final TextEditingController _surnameController = TextEditingController();
   final TextEditingController _emailController = TextEditingController();
-  final TextEditingController _studentNumberController = TextEditingController();
+  final TextEditingController _studentNumberController =
+      TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
   final TextEditingController _confirmPasswordController =
       TextEditingController();
@@ -49,9 +52,8 @@ class _SignupScreenState extends State<SignupScreen>
   bool _isStepLoading = false;
   String _selectedCampus = '';
   String _selectedDepartment = _departmentOptions.first;
-  String _selectedLevel = _natedLevels.first;
+  String _selectedLevel = _ncvLevels.first;
   String _selectedGender = _genderOptions.first;
-  bool _isNated = true;
   bool _agreedToCode = false;
   String? _campusError;
   String? _nicknameError;
@@ -85,7 +87,6 @@ class _SignupScreenState extends State<SignupScreen>
     'Civil Engineering',
     'Electrical Engineering',
   ];
-  static const _natedLevels = ['Introduction', 'N4', 'N5', 'N6'];
   static const _ncvLevels = ['Level 2', 'Level 3', 'Level 4'];
 
   String? _timeZoneName;
@@ -113,8 +114,6 @@ class _SignupScreenState extends State<SignupScreen>
   final ShakeController _campusShakeController = ShakeController(); // New
 
   // Removed duplicate/unused fields
-
-  List<String> get _levelOptions => _isNated ? _natedLevels : _ncvLevels;
 
   @override
   void initState() {
@@ -177,14 +176,14 @@ class _SignupScreenState extends State<SignupScreen>
       final name = _nameController.text.trim();
       final surname = _surnameController.text.trim();
       final dobValid = _dateOfBirth != null;
-      bool nicknameValid = nickname.isNotEmpty && nickname.length >= 3;
+      final nicknameValid = nickname.isNotEmpty;
       bool nameValid = name.isNotEmpty;
       bool surnameValid = surname.isNotEmpty;
 
       setState(() {
         _nicknameError = nicknameValid
             ? null
-            : 'Nickname is required (3+ characters).';
+            : 'Choose a nickname to display in OG Vibes.';
         _nameError = nameValid ? null : 'First name is required.';
         _surnameError = surnameValid ? null : 'Surname is required.';
         _dobError = dobValid ? null : 'Date of birth is required.';
@@ -422,7 +421,9 @@ class _SignupScreenState extends State<SignupScreen>
             'Start with your personal details before setting up your login.',
             style: TextStyle(fontSize: 16, color: Colors.black54),
           ),
-          const SizedBox(height: 32),
+          const SizedBox(height: 24),
+          _buildProfilePicker(),
+          const SizedBox(height: 28),
           _buildNicknameField(),
           const SizedBox(height: 24),
           _buildNameField(),
@@ -497,9 +498,10 @@ class _SignupScreenState extends State<SignupScreen>
                       children: [
                         WidgetSpan(
                           child: GestureDetector(
-                            onTap: () => _showTermsPrivacyDialog('Terms'),
+                            onTap: () =>
+                                _openLegalDocument(LegalDocumentType.terms),
                             child: const Text(
-                              'Terms',
+                              'Terms of Use',
                               style: TextStyle(
                                 color: Color(0xFF2962FF),
                                 fontWeight: FontWeight.bold,
@@ -511,7 +513,8 @@ class _SignupScreenState extends State<SignupScreen>
                         const TextSpan(text: ' and '),
                         WidgetSpan(
                           child: GestureDetector(
-                            onTap: () => _showTermsPrivacyDialog('Privacy'),
+                            onTap: () =>
+                                _openLegalDocument(LegalDocumentType.privacy),
                             child: const Text(
                               'Privacy Policy',
                               style: TextStyle(
@@ -596,28 +599,35 @@ class _SignupScreenState extends State<SignupScreen>
           ],
           const SizedBox(height: 24),
           Container(
-            padding: const EdgeInsets.all(4),
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
             decoration: BoxDecoration(
-              color: Colors.grey[200],
-              borderRadius: BorderRadius.circular(12),
+              color: const Color(0xFFEAF2FF),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: const Color(0xFFBBD2FF)),
             ),
-            child: Row(
+            child: const Row(
               children: [
-                _buildTypeToggle(
-                  'Nated Report 191',
-                  _isNated,
-                  () => setState(() {
-                    _isNated = true;
-                    _selectedLevel = _natedLevels.first;
-                  }),
-                ),
-                _buildTypeToggle(
-                  'NC(V)',
-                  !_isNated,
-                  () => setState(() {
-                    _isNated = false;
-                    _selectedLevel = _ncvLevels.first;
-                  }),
+                Icon(Icons.school_outlined, color: Color(0xFF2962FF)),
+                SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'NCV programme',
+                        style: TextStyle(
+                          fontWeight: FontWeight.w700,
+                          color: Color(0xFF0D2B59),
+                        ),
+                      ),
+                      SizedBox(height: 2),
+                      Text(
+                        'Choose your course and current level below.',
+                        style: TextStyle(color: Color(0xFF526581)),
+                      ),
+                    ],
+                  ),
                 ),
               ],
             ),
@@ -631,7 +641,8 @@ class _SignupScreenState extends State<SignupScreen>
                   value: _selectedDepartment,
                   label: 'Course / Department',
                   items: _departmentOptions,
-                  onChanged: (val) => setState(() => _selectedDepartment = val!),
+                  onChanged: (val) =>
+                      setState(() => _selectedDepartment = val!),
                 ),
               ),
               const SizedBox(width: 12),
@@ -640,7 +651,7 @@ class _SignupScreenState extends State<SignupScreen>
                 child: _buildDropdown(
                   value: _selectedLevel,
                   label: 'Level',
-                  items: _levelOptions,
+                  items: _ncvLevels,
                   onChanged: (val) => setState(() => _selectedLevel = val!),
                 ),
               ),
@@ -658,39 +669,6 @@ class _SignupScreenState extends State<SignupScreen>
   }
 
   // --- CUSTOM WIDGETS ---
-
-  Widget _buildTypeToggle(String title, bool isSelected, VoidCallback onTap) {
-    return Expanded(
-      child: GestureDetector(
-        onTap: onTap,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 200),
-          padding: const EdgeInsets.symmetric(vertical: 12),
-          decoration: BoxDecoration(
-            color: isSelected ? Colors.white : Colors.transparent,
-            borderRadius: BorderRadius.circular(10),
-            boxShadow: isSelected
-                ? [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.1),
-                      blurRadius: 4,
-                      offset: const Offset(0, 2),
-                    ),
-                  ]
-                : [],
-          ),
-          child: Text(
-            title,
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              fontWeight: FontWeight.w600,
-              color: isSelected ? const Color(0xFF2962FF) : Colors.grey,
-            ),
-          ),
-        ),
-      ),
-    );
-  }
 
   Widget _buildSegmentedGender() {
     return Row(
@@ -817,9 +795,12 @@ class _SignupScreenState extends State<SignupScreen>
           controller: _nameShakeController,
           child: TextField(
             controller: _nicknameController,
-            textCapitalization: TextCapitalization.words,
-            inputFormatters: [_CapitalizeWordsFormatter()],
-            decoration: _modernDecoration('Nickname', Icons.emoji_people_outlined),
+            textCapitalization: TextCapitalization.none,
+            autocorrect: false,
+            decoration: _modernDecoration(
+              'Nickname',
+              Icons.emoji_people_outlined,
+            ),
           ),
         ),
         if (_nicknameError != null) ...[
@@ -845,7 +826,9 @@ class _SignupScreenState extends State<SignupScreen>
           onTap: () async {
             final date = await showDatePicker(
               context: context,
-              initialDate: _dateOfBirth ?? DateTime.now().subtract(const Duration(days: 3650)),
+              initialDate:
+                  _dateOfBirth ??
+                  DateTime.now().subtract(const Duration(days: 3650)),
               firstDate: DateTime(1900),
               lastDate: DateTime.now(),
             );
@@ -883,7 +866,10 @@ class _SignupScreenState extends State<SignupScreen>
     return TextField(
       controller: _studentNumberController,
       keyboardType: TextInputType.text,
-      decoration: _modernDecoration('Student Number (optional)', Icons.badge_outlined),
+      decoration: _modernDecoration(
+        'Student Number (optional)',
+        Icons.badge_outlined,
+      ),
     );
   }
 
@@ -1108,45 +1094,78 @@ class _SignupScreenState extends State<SignupScreen>
   }
 
   Widget _buildProfilePicker() {
-    return Semantics(
-      label: 'Upload profile photo',
-      button: true,
-      child: GestureDetector(
-        onTap: _pickProfileImage,
-        child: SizedBox(
-          width: 120,
-          height: 120,
-          child: Stack(
-            children: [
-              CircleAvatar(
-                radius: 60,
-                backgroundColor: Colors.grey[100],
-                backgroundImage: _selectedImageBytes != null
-                    ? MemoryImage(_selectedImageBytes!)
-                    : null,
-                child: _selectedImageBytes == null
-                    ? const Icon(Icons.person, size: 40, color: Colors.grey)
-                    : null,
-              ),
-              Positioned(
-                bottom: 2,
-                right: 2,
-                child: Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: const BoxDecoration(
-                    color: Color(0xFF2962FF),
-                    shape: BoxShape.circle,
-                  ),
-                  child: const Icon(
-                    Icons.camera_alt,
-                    color: Colors.white,
-                    size: 16,
+    final hasPhoto = _selectedImageBytes != null;
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF7F9FC),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: const Color(0xFFDCE5F2)),
+      ),
+      child: Row(
+        children: [
+          Semantics(
+            label: hasPhoto
+                ? 'Selected profile picture'
+                : 'No profile picture selected',
+            image: hasPhoto,
+            child: CircleAvatar(
+              radius: 36,
+              backgroundColor: const Color(0xFFE7EEFF),
+              backgroundImage: hasPhoto
+                  ? MemoryImage(_selectedImageBytes!)
+                  : null,
+              child: hasPhoto
+                  ? null
+                  : const Icon(
+                      Icons.person_outline_rounded,
+                      size: 34,
+                      color: Color(0xFF2962FF),
+                    ),
+            ),
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Profile picture (optional)',
+                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  hasPhoto
+                      ? 'Your selected picture is ready.'
+                      : 'Add a picture now or choose one later in your profile.',
+                  style: const TextStyle(
+                    fontSize: 13,
+                    height: 1.3,
+                    color: Colors.black54,
                   ),
                 ),
-              ),
-            ],
+                const SizedBox(height: 10),
+                Wrap(
+                  spacing: 8,
+                  children: [
+                    OutlinedButton.icon(
+                      onPressed: _pickProfileImage,
+                      icon: const Icon(Icons.add_a_photo_outlined, size: 18),
+                      label: Text(hasPhoto ? 'Change' : 'Choose photo'),
+                    ),
+                    if (hasPhoto)
+                      TextButton(
+                        onPressed: () =>
+                            setState(() => _selectedImageBytes = null),
+                        child: const Text('Remove'),
+                      ),
+                  ],
+                ),
+              ],
+            ),
           ),
-        ),
+        ],
       ),
     );
   }
@@ -1193,7 +1212,7 @@ class _SignupScreenState extends State<SignupScreen>
         campus: _selectedCampus,
         department: _selectedDepartment,
         level: _selectedLevel,
-        studentType: _isNated ? 'Nated' : 'NCV',
+        studentType: 'NCV',
         gender: _selectedGender,
         studentNumber: _studentNumberController.text.trim(),
         timeZoneName: _timeZoneName,
@@ -1206,44 +1225,25 @@ class _SignupScreenState extends State<SignupScreen>
 
       _closeMintingDialog();
       if (!mounted) return;
-      await showDialog(
-        context: context,
-        barrierDismissible: false,
-        builder: (context) => AlertDialog(
-          backgroundColor: Colors.white,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(20),
+      if (user != null && !result.needsVerification) {
+        await _maybeUploadProfileImage(user);
+      }
+      if (!mounted) return;
+      if (!result.needsVerification) {
+        Navigator.of(context).pushAndRemoveUntil(
+          MaterialPageRoute(builder: (_) => const HomeScreen()),
+          (_) => false,
+        );
+        return;
+      }
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(
+          builder: (_) => EmailVerificationScreen(
+            email: _emailController.text.trim(),
+            profileImageBytes: _selectedImageBytes,
           ),
-          title: const Text(
-            'Verify your email',
-            style: TextStyle(
-              color: Color(0xFF0D47A1),
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-          content: const Text(
-            'A verification link has been sent to your email. Please verify your email address before logging in.',
-            style: TextStyle(color: Colors.black87),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text(
-                'OK',
-                style: TextStyle(color: Color(0xFF2962FF)),
-              ),
-            ),
-          ],
         ),
       );
-      Navigator.of(
-        // ignore: use_build_context_synchronously
-        context,
-      ).pushReplacement(MaterialPageRoute(builder: (_) => const LoginScreen()));
-
-      if (user != null) {
-        Future.microtask(() => _maybeUploadProfileImage(user));
-      }
     } catch (e, st) {
       _closeMintingDialog();
       // Print full stack to browser console for debugging
@@ -1253,7 +1253,9 @@ class _SignupScreenState extends State<SignupScreen>
       print(st);
       final message = '$e\nSee console for stack trace.';
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(message)));
       }
     } finally {
       if (mounted) setState(() => _isLoading = false);
@@ -1266,12 +1268,17 @@ class _SignupScreenState extends State<SignupScreen>
     final confirmPassword = _confirmPasswordController.text.trim();
     final emailValid = email.isNotEmpty && _emailRegex.hasMatch(email);
     final passValid = password.isNotEmpty && password.length >= 6;
-    final confirmValid = confirmPassword.isNotEmpty && confirmPassword == password;
+    final confirmValid =
+        confirmPassword.isNotEmpty && confirmPassword == password;
     final termsValid = _agreedToCode;
 
     setState(() {
-      _passwordError = passValid ? null : 'Use at least 6 characters for your password.';
-      _confirmPasswordError = confirmValid ? null : 'Passwords do not match. Please re-type.';
+      _passwordError = passValid
+          ? null
+          : 'Use at least 6 characters for your password.';
+      _confirmPasswordError = confirmValid
+          ? null
+          : 'Passwords do not match. Please re-type.';
       _stepError = null;
     });
 
@@ -1360,17 +1367,26 @@ class _SignupScreenState extends State<SignupScreen>
     if (_selectedImageBytes == null || user == null) return;
     try {
       setState(() {});
+      final path = '${user.id}/avatar.jpg';
       await Supabase.instance.client.storage
           .from('profile_images')
-          .uploadBinary('${user.id}.jpg', _selectedImageBytes!);
+          .uploadBinary(
+            path,
+            _selectedImageBytes!,
+            fileOptions: const FileOptions(
+              upsert: true,
+              contentType: 'image/jpeg',
+            ),
+          );
 
-      final signedUrl = await Supabase.instance.client.storage
+      final publicUrl = Supabase.instance.client.storage
           .from('profile_images')
-          .createSignedUrl('${user.id}.jpg', 60 * 60 * 24 * 365);
+          .getPublicUrl(path);
 
       await Supabase.instance.client
-          .from('public.profiles')
-          .update({'photoUrl': signedUrl}).eq('id', user.id);
+          .from('profiles')
+          .update({'photo_url': publicUrl})
+          .eq('id', user.id);
 
       if (mounted) {
         setState(() {});
@@ -1400,90 +1416,10 @@ class _SignupScreenState extends State<SignupScreen>
     );
   }
 
-  void _showTermsPrivacyDialog(String type) {
-    showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (sheetContext) {
-        return Padding(
-          padding: EdgeInsets.only(
-            bottom: MediaQuery.of(context).viewInsets.bottom,
-          ),
-          child: Container(
-            padding: EdgeInsets.fromLTRB(
-              24,
-              24,
-              24,
-              24 + MediaQuery.of(context).padding.bottom,
-            ),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: const BorderRadius.vertical(
-                top: Radius.circular(28),
-              ),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.08),
-                  blurRadius: 16,
-                  offset: const Offset(0, -4),
-                ),
-              ],
-            ),
-            child: SingleChildScrollView(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Center(
-                    child: Container(
-                      width: 48,
-                      height: 4,
-                      margin: const EdgeInsets.only(bottom: 16),
-                      decoration: BoxDecoration(
-                        color: Colors.grey[300],
-                        borderRadius: BorderRadius.circular(2),
-                      ),
-                    ),
-                  ),
-                  Text(
-                    type,
-                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                      color: const Color(0xFF0D47A1),
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  Text(
-                    type == 'Terms'
-                        ? 'These terms explain how OG Vibes works and what we expect from students.'
-                        : 'We only use your data to provide campus services and keep your account secure.',
-                    style: Theme.of(
-                      context,
-                    ).textTheme.bodyMedium?.copyWith(color: Colors.black54),
-                  ),
-                  const SizedBox(height: 16),
-                  Text(
-                    'Full policy text goes here. We can replace this with the official document when ready.',
-                    style: Theme.of(
-                      context,
-                    ).textTheme.bodySmall?.copyWith(color: Colors.black45),
-                  ),
-                  const SizedBox(height: 24),
-                  SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton(
-                      onPressed: () => Navigator.of(context).pop(),
-                      child: const Text('Close'),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        );
-      },
-    );
+  void _openLegalDocument(LegalDocumentType type) {
+    Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (_) => LegalDocumentScreen(type: type)));
   }
 
   Future<void> _showSuccessConfirmation() async {
@@ -1556,7 +1492,7 @@ class _SignupScreenState extends State<SignupScreen>
           _buildReviewTile('Level', _selectedLevel, stepIndex: 2),
           _buildReviewTile(
             'Student Type',
-            _isNated ? 'Nated' : 'NCV',
+            'NCV',
             stepIndex: 2,
           ),
           _buildReviewTile('Gender', _selectedGender, stepIndex: 1),

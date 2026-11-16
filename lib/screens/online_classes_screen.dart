@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -10,9 +9,11 @@ import 'package:url_launcher/url_launcher.dart';
 
 import 'package:og_vibes_student/models/live_session.dart';
 import 'package:og_vibes_student/utils/theme_constants.dart';
+import 'package:og_vibes_student/utils/youtube_url.dart';
 import 'package:og_vibes_student/widgets/vibe_scaffold.dart';
 
 import 'live_classroom_screen.dart';
+import '../services/offline_cache_service.dart';
 
 class OnlineClassesScreen extends StatefulWidget {
   const OnlineClassesScreen({super.key});
@@ -25,8 +26,7 @@ class _OnlineClassesScreenState extends State<OnlineClassesScreen>
     with SingleTickerProviderStateMixin {
   late final TabController _tabController;
   final List<_OnlineClassSession> _sessions = <_OnlineClassSession>[];
-  final Map<String, _LecturerProfile> _lecturers =
-      <String, _LecturerProfile>{};
+  final Map<String, _LecturerProfile> _lecturers = <String, _LecturerProfile>{};
   final Map<String, int> _reminders = <String, int>{};
   final Set<String> _registeredModules = <String>{};
   final Set<String> _reviewedResources = <String>{};
@@ -89,15 +89,24 @@ class _OnlineClassesScreenState extends State<OnlineClassesScreen>
   }
 
   Future<void> _loadSessions() async {
-    final raw = await Supabase.instance.client
-        .from('online_classes')
-        .select(
-          'id, module, subject, topic, scheduled_at, status, lecturer, url, '
-          'resource_title, resource_url, recording_url, duration_minutes, '
-          'created_at',
-        )
-        .order('scheduled_at', ascending: true);
-    final rows = List<Map<String, dynamic>>.from(raw as List<dynamic>? ?? []);
+    List<Map<String, dynamic>> rows;
+    try {
+      final raw = await Supabase.instance.client
+          .from('online_classes')
+          .select(
+            'id, module, subject, topic, scheduled_at, status, lecturer, url, '
+            'resource_title, resource_url, resource_storage_path, '
+            'resource_file_name, recording_url, duration_minutes, '
+            'created_at',
+          )
+          .order('scheduled_at', ascending: true)
+          .limit(30);
+      rows = List<Map<String, dynamic>>.from(raw as List<dynamic>? ?? []);
+      unawaited(OfflineCacheService.writeList('online_classes', rows));
+    } catch (_) {
+      rows = await OfflineCacheService.readList('online_classes');
+      if (rows.isEmpty) rethrow;
+    }
     if (!mounted) return;
     setState(() {
       _sessions
@@ -112,39 +121,63 @@ class _OnlineClassesScreenState extends State<OnlineClassesScreen>
     final user = Supabase.instance.client.auth.currentUser;
     if (user == null) return;
 
-    final results = await Future.wait<dynamic>(<Future<dynamic>>[
-      Supabase.instance.client
-          .from('profiles')
-          .select('department, level')
-          .eq('id', user.id)
-          .maybeSingle(),
-      Supabase.instance.client.from('programmes').select('id, name'),
-      Supabase.instance.client
-          .from('modules')
-          .select('id, programme_id, level, name, code'),
-      Supabase.instance.client.from('module_lecturers').select(
-            'module_id, profiles!module_lecturers_lecturer_id_fkey('
-            'name, surname, photo_url, is_verified)',
-          ),
-    ]);
+    List<dynamic> results;
+    try {
+      results = await Future.wait<dynamic>(<Future<dynamic>>[
+        Supabase.instance.client
+            .from('profiles')
+            .select('department, level')
+            .eq('id', user.id)
+            .maybeSingle(),
+        Supabase.instance.client.from('programmes').select('id, name'),
+        Supabase.instance.client
+            .from('modules')
+            .select('id, programme_id, level, name, code'),
+        Supabase.instance.client
+            .from('module_lecturers')
+            .select(
+              'module_id, profiles!module_lecturers_lecturer_id_fkey('
+              'name, surname, photo_url, is_verified)',
+            ),
+      ]);
+      unawaited(
+        OfflineCacheService.writeList(
+          'online_class_context',
+          <Map<String, dynamic>>[
+            {'results': results},
+          ],
+          maxRecords: 1,
+        ),
+      );
+    } catch (_) {
+      final cached = await OfflineCacheService.readList('online_class_context');
+      if (cached.isEmpty || cached.first['results'] is! List) rethrow;
+      results = List<dynamic>.from(cached.first['results'] as List);
+    }
 
     final profile = results[0] is Map
         ? Map<String, dynamic>.from(results[0] as Map)
         : <String, dynamic>{};
-    final programmes =
-        List<Map<String, dynamic>>.from(results[1] as List<dynamic>? ?? []);
-    final modules =
-        List<Map<String, dynamic>>.from(results[2] as List<dynamic>? ?? []);
-    final lecturerRows =
-        List<Map<String, dynamic>>.from(results[3] as List<dynamic>? ?? []);
+    final programmes = List<Map<String, dynamic>>.from(
+      results[1] as List<dynamic>? ?? [],
+    );
+    final modules = List<Map<String, dynamic>>.from(
+      results[2] as List<dynamic>? ?? [],
+    );
+    final lecturerRows = List<Map<String, dynamic>>.from(
+      results[3] as List<dynamic>? ?? [],
+    );
 
     final department = _normalized(profile['department']);
     final level = _normalized(profile['level']);
-    final matchingProgrammeIds = programmes.where((programme) {
-      final name = _normalized(programme['name']);
-      return department.isNotEmpty &&
-          (name.contains(department) || department.contains(name));
-    }).map((programme) => programme['id']?.toString() ?? '').toSet();
+    final matchingProgrammeIds = programmes
+        .where((programme) {
+          final name = _normalized(programme['name']);
+          return department.isNotEmpty &&
+              (name.contains(department) || department.contains(name));
+        })
+        .map((programme) => programme['id']?.toString() ?? '')
+        .toSet();
 
     final lecturerByModuleId = <String, _LecturerProfile>{};
     for (final row in lecturerRows) {
@@ -156,8 +189,7 @@ class _OnlineClassesScreenState extends State<OnlineClassesScreen>
         _clean(profileRow['surname']),
       ].where((part) => part.isNotEmpty).join(' ');
       if (fullName.isEmpty) continue;
-      lecturerByModuleId[row['module_id']?.toString() ?? ''] =
-          _LecturerProfile(
+      lecturerByModuleId[row['module_id']?.toString() ?? ''] = _LecturerProfile(
         name: fullName,
         photoUrl: _clean(profileRow['photo_url']),
         verified: profileRow['is_verified'] == true,
@@ -173,10 +205,10 @@ class _OnlineClassesScreenState extends State<OnlineClassesScreen>
       final moduleLevel = _normalized(module['level']);
       final belongsToStudent =
           matchingProgrammeIds.contains(module['programme_id']?.toString()) &&
-              (level.isEmpty ||
-                  moduleLevel == level ||
-                  moduleLevel.contains(level) ||
-                  level.contains(moduleLevel));
+          (level.isEmpty ||
+              moduleLevel == level ||
+              moduleLevel.contains(level) ||
+              level.contains(moduleLevel));
       if (belongsToStudent) {
         if (name.isNotEmpty) _registeredModules.add(_normalized(name));
         if (code.isNotEmpty) _registeredModules.add(_normalized(code));
@@ -194,18 +226,34 @@ class _OnlineClassesScreenState extends State<OnlineClassesScreen>
   Future<void> _loadReminders() async {
     final user = Supabase.instance.client.auth.currentUser;
     if (user == null) return;
-    final raw = await Supabase.instance.client
-        .from('online_class_reminders')
-        .select('class_id, remind_minutes, enabled')
-        .eq('enabled', true);
+    List<Map<String, dynamic>> reminderRows;
+    try {
+      final raw = await Supabase.instance.client
+          .from('online_class_reminders')
+          .select('class_id, remind_minutes, enabled')
+          .eq('enabled', true)
+          .limit(30);
+      reminderRows = List<Map<String, dynamic>>.from(
+        raw as List<dynamic>? ?? [],
+      );
+      unawaited(
+        OfflineCacheService.writeList('online_class_reminders', reminderRows),
+      );
+    } catch (_) {
+      reminderRows = await OfflineCacheService.readList(
+        'online_class_reminders',
+      );
+    }
     _reminders
       ..clear()
       ..addEntries(
-        List<Map<String, dynamic>>.from(raw as List<dynamic>? ?? [])
-            .map((row) => MapEntry<String, int>(
-                  row['class_id']?.toString() ?? '',
-                  int.tryParse(row['remind_minutes'].toString()) ?? 15,
-                ))
+        reminderRows
+            .map(
+              (row) => MapEntry<String, int>(
+                row['class_id']?.toString() ?? '',
+                int.tryParse(row['remind_minutes'].toString()) ?? 15,
+              ),
+            )
             .where((entry) => entry.key.isNotEmpty),
       );
   }
@@ -214,27 +262,19 @@ class _OnlineClassesScreenState extends State<OnlineClassesScreen>
     _sessionSubscription = Supabase.instance.client
         .from('online_classes')
         .stream(primaryKey: <String>['id'])
-        .listen((rows) {
-      if (!mounted) return;
-      setState(() {
-        _sessions
-          ..clear()
-          ..addAll(rows.map(_OnlineClassSession.fromRow))
-          ..sort((a, b) {
-            if (a.scheduledAt == null) return 1;
-            if (b.scheduledAt == null) return -1;
-            return a.scheduledAt!.compareTo(b.scheduledAt!);
-          });
-        _isLoading = false;
-        _errorMessage = null;
-      });
-    }, onError: (Object error) {
-      if (!mounted) return;
-      setState(() {
-        _isLoading = false;
-        _errorMessage = error.toString();
-      });
-    });
+        .listen(
+          (_) {
+            if (!mounted) return;
+            unawaited(_loadSessions());
+          },
+          onError: (Object error) {
+            if (!mounted) return;
+            setState(() {
+              _isLoading = false;
+              _errorMessage = error.toString();
+            });
+          },
+        );
   }
 
   bool _isRegistered(_OnlineClassSession session) {
@@ -302,37 +342,40 @@ class _OnlineClassesScreenState extends State<OnlineClassesScreen>
 
   _OnlineClassSession? get _nextSession {
     final now = DateTime.now();
-    final upcoming = _sessions
-        .where(
-          (session) =>
-              session.scheduledAt != null &&
-              session.scheduledAt!.toLocal().isAfter(now) &&
-              (!_myModulesOnly || _isRegistered(session)),
-        )
-        .toList()
-      ..sort((a, b) => a.scheduledAt!.compareTo(b.scheduledAt!));
+    final upcoming =
+        _sessions
+            .where(
+              (session) =>
+                  session.scheduledAt != null &&
+                  session.scheduledAt!.toLocal().isAfter(now) &&
+                  (!_myModulesOnly || _isRegistered(session)),
+            )
+            .toList()
+          ..sort((a, b) => a.scheduledAt!.compareTo(b.scheduledAt!));
     return upcoming.isEmpty ? null : upcoming.first;
   }
 
   List<String> get _availableModules {
-    final values = _sessions
-        .where((session) => !_myModulesOnly || _isRegistered(session))
-        .map((session) => session.module)
-        .where((value) => value.isNotEmpty)
-        .toSet()
-        .toList()
-      ..sort();
+    final values =
+        _sessions
+            .where((session) => !_myModulesOnly || _isRegistered(session))
+            .map((session) => session.module)
+            .where((value) => value.isNotEmpty)
+            .toSet()
+            .toList()
+          ..sort();
     return <String>['All', ...values];
   }
 
   List<String> get _availableLecturers {
-    final values = _sessions
-        .where((session) => !_myModulesOnly || _isRegistered(session))
-        .map((session) => _lecturerFor(session).name)
-        .where((value) => value.isNotEmpty)
-        .toSet()
-        .toList()
-      ..sort();
+    final values =
+        _sessions
+            .where((session) => !_myModulesOnly || _isRegistered(session))
+            .map((session) => _lecturerFor(session).name)
+            .where((value) => value.isNotEmpty)
+            .toSet()
+            .toList()
+          ..sort();
     return <String>['All', ...values];
   }
 
@@ -353,6 +396,21 @@ class _OnlineClassesScreenState extends State<OnlineClassesScreen>
     }
   }
 
+  Future<void> _openResource(_OnlineClassSession session) async {
+    if (session.resourceStoragePath != null) {
+      try {
+        final signed = await Supabase.instance.client.storage
+            .from('class-resources')
+            .createSignedUrl(session.resourceStoragePath!, 120);
+        await _openLink(signed);
+      } catch (_) {
+        _message('Unable to open this class resource. Please try again.');
+      }
+      return;
+    }
+    await _openLink(session.resourceUrl);
+  }
+
   void _message(String text) {
     if (!mounted) return;
     ScaffoldMessenger.of(context)
@@ -369,6 +427,9 @@ class _OnlineClassesScreenState extends State<OnlineClassesScreen>
       time: session.scheduledAtFormatted,
       isLive: session.isLive,
       lecturer: _lecturerFor(session).name,
+      youtubeUrl: canonicalYoutubeUrl(session.url) ?? session.url,
+      recordingUrl: session.recordingUrl,
+      requiredAttendanceSeconds: (session.durationMinutes ?? 30) * 60,
     );
   }
 
@@ -376,7 +437,7 @@ class _OnlineClassesScreenState extends State<OnlineClassesScreen>
   Widget build(BuildContext context) {
     return VibeScaffold(
       appBar: AppBar(
-        title: const Text('Online Classes'),
+        title: const Text('Online classes'),
         backgroundColor: Colors.transparent,
         actions: <Widget>[
           IconButton(
@@ -440,7 +501,7 @@ class _OnlineClassesScreenState extends State<OnlineClassesScreen>
 
   Widget _buildHero() {
     final next = _nextSession;
-    return Padding(
+    final hero = Padding(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 10),
       child: Container(
         padding: const EdgeInsets.all(22),
@@ -497,7 +558,11 @@ class _OnlineClassesScreenState extends State<OnlineClassesScreen>
                 const SizedBox(height: 18),
                 Row(
                   children: <Widget>[
-                    _heroStat('${_liveSessions.length}', 'Live', Colors.redAccent),
+                    _heroStat(
+                      '${_liveSessions.length}',
+                      'Live',
+                      Colors.redAccent,
+                    ),
                     _heroStat(
                       '${_upcomingSessions.length}',
                       'Upcoming',
@@ -513,8 +578,10 @@ class _OnlineClassesScreenState extends State<OnlineClassesScreen>
                 const SizedBox(height: 18),
                 Container(
                   width: double.infinity,
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 12,
+                  ),
                   decoration: BoxDecoration(
                     color: Colors.white.withValues(alpha: 0.10),
                     borderRadius: BorderRadius.circular(16),
@@ -568,7 +635,9 @@ class _OnlineClassesScreenState extends State<OnlineClassesScreen>
           ],
         ),
       ),
-    ).animate().fadeIn(duration: 420.ms).slideY(begin: 0.06, end: 0);
+    );
+    if (MediaQuery.maybeOf(context)?.disableAnimations ?? false) return hero;
+    return hero.animate().fadeIn(duration: 420.ms).slideY(begin: 0.06, end: 0);
   }
 
   Widget _heroStat(String value, String label, Color color) {
@@ -605,6 +674,16 @@ class _OnlineClassesScreenState extends State<OnlineClassesScreen>
 
   Widget _buildLivePulse() {
     final session = _liveSessions.first;
+    final reduceMotion =
+        MediaQuery.maybeOf(context)?.disableAnimations ?? false;
+    final liveDot = Container(
+      width: 12,
+      height: 12,
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        shape: BoxShape.circle,
+      ),
+    );
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 2, 16, 10),
       child: InkWell(
@@ -614,7 +693,7 @@ class _OnlineClassesScreenState extends State<OnlineClassesScreen>
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
           decoration: BoxDecoration(
             gradient: const LinearGradient(
-              colors: <Color>[Color(0xFFD52B45), Color(0xFFF45B69)],
+              colors: <Color>[AppColors.danger, AppColors.dangerLight],
             ),
             borderRadius: BorderRadius.circular(18),
             boxShadow: <BoxShadow>[
@@ -627,17 +706,12 @@ class _OnlineClassesScreenState extends State<OnlineClassesScreen>
           ),
           child: Row(
             children: <Widget>[
-              Container(
-                width: 12,
-                height: 12,
-                decoration: const BoxDecoration(
-                  color: Colors.white,
-                  shape: BoxShape.circle,
-                ),
-              )
-                  .animate(onPlay: (controller) => controller.repeat())
-                  .fadeOut(duration: 850.ms)
-                  .scaleXY(begin: 0.75, end: 1.35),
+              reduceMotion
+                  ? liveDot
+                  : liveDot
+                        .animate(onPlay: (controller) => controller.repeat())
+                        .fadeOut(duration: 850.ms)
+                        .scaleXY(begin: 0.75, end: 1.35),
               const SizedBox(width: 12),
               Expanded(
                 child: Text(
@@ -690,8 +764,7 @@ class _OnlineClassesScreenState extends State<OnlineClassesScreen>
                       : 'All modules • registration not matched',
                   overflow: TextOverflow.ellipsis,
                 ),
-                selectedColor:
-                    AppColors.vibeBlue.withValues(alpha: 0.14),
+                selectedColor: AppColors.vibeBlue.withValues(alpha: 0.14),
                 side: BorderSide.none,
               ),
             ),
@@ -762,123 +835,123 @@ class _OnlineClassesScreenState extends State<OnlineClassesScreen>
     final isLive = session.isLive;
     final isRecording = session.isRecording;
     return _glass(
-      padding: const EdgeInsets.all(17),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: <Widget>[
-          Row(
+          padding: const EdgeInsets.all(17),
+          child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: <Widget>[
-              Container(
-                width: 48,
-                height: 48,
-                decoration: BoxDecoration(
-                  gradient: isLive
-                      ? const LinearGradient(
-                          colors: <Color>[
-                            AppColors.danger,
-                            Color(0xFFFF7585),
-                          ],
-                        )
-                      : AppStyles.brandGradient,
-                  borderRadius: BorderRadius.circular(15),
-                ),
-                child: Icon(
-                  isLive
-                      ? Icons.podcasts_rounded
-                      : isRecording
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  Container(
+                    width: 48,
+                    height: 48,
+                    decoration: BoxDecoration(
+                      gradient: isLive
+                          ? const LinearGradient(
+                              colors: <Color>[
+                                AppColors.danger,
+                                Color(0xFFFF7585),
+                              ],
+                            )
+                          : AppStyles.brandGradient,
+                      borderRadius: BorderRadius.circular(15),
+                    ),
+                    child: Icon(
+                      isLive
+                          ? Icons.podcasts_rounded
+                          : isRecording
                           ? Icons.play_arrow_rounded
                           : Icons.calendar_month_rounded,
-                  color: Colors.white,
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: <Widget>[
-                    Row(
+                      color: Colors.white,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: <Widget>[
-                        Expanded(
-                          child: Text(
-                            session.subject,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              color: AppColors.midnightInk,
-                              fontSize: 17,
-                              fontWeight: FontWeight.w900,
+                        Row(
+                          children: <Widget>[
+                            Expanded(
+                              child: Text(
+                                session.subject,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  color: AppColors.midnightInk,
+                                  fontSize: 17,
+                                  fontWeight: FontWeight.w900,
+                                ),
+                              ),
                             ),
+                            _statusPill(session),
+                          ],
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          session.topic,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: AppColors.textMuted,
+                            height: 1.35,
+                            fontWeight: FontWeight.w600,
                           ),
                         ),
-                        _statusPill(session),
                       ],
                     ),
-                    const SizedBox(height: 4),
-                    Text(
-                      session.topic,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: AppColors.textMuted,
-                        height: 1.35,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 14),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: <Widget>[
-              _metadataPill(Icons.menu_book_rounded, session.module),
-              _metadataPill(
-                Icons.schedule_rounded,
-                session.scheduledAtFormatted,
-              ),
-              if (session.durationMinutes != null)
-                _metadataPill(
-                  Icons.timelapse_rounded,
-                  '${session.durationMinutes} min',
-                ),
-            ],
-          ),
-          const SizedBox(height: 14),
-          _lecturerRow(lecturer),
-          if (isLive) ...<Widget>[
-            const SizedBox(height: 14),
-            _attendancePreview(),
-          ],
-          if (session.isUpcoming) ...<Widget>[
-            const SizedBox(height: 14),
-            _preClassPanel(session),
-          ],
-          const SizedBox(height: 15),
-          Row(
-            children: <Widget>[
-              if (session.isUpcoming)
-                IconButton.filledTonal(
-                  onPressed: () => _configureReminder(session),
-                  icon: Icon(
-                    _reminders.containsKey(session.id)
-                        ? Icons.notifications_active_rounded
-                        : Icons.notifications_none_rounded,
                   ),
-                  tooltip: _reminders.containsKey(session.id)
-                      ? 'Reminder: ${_reminders[session.id]} minutes'
-                      : 'Set reminder',
-                ),
-              if (session.isUpcoming) const SizedBox(width: 10),
-              Expanded(child: _primaryAction(session)),
+                ],
+              ),
+              const SizedBox(height: 14),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: <Widget>[
+                  _metadataPill(Icons.menu_book_rounded, session.module),
+                  _metadataPill(
+                    Icons.schedule_rounded,
+                    session.scheduledAtFormatted,
+                  ),
+                  if (session.durationMinutes != null)
+                    _metadataPill(
+                      Icons.timelapse_rounded,
+                      '${session.durationMinutes} min',
+                    ),
+                ],
+              ),
+              const SizedBox(height: 14),
+              _lecturerRow(lecturer),
+              if (isLive) ...<Widget>[
+                const SizedBox(height: 14),
+                _attendancePreview(),
+              ],
+              if (session.isUpcoming) ...<Widget>[
+                const SizedBox(height: 14),
+                _preClassPanel(session),
+              ],
+              const SizedBox(height: 15),
+              Row(
+                children: <Widget>[
+                  if (session.isUpcoming)
+                    IconButton.filledTonal(
+                      onPressed: () => _configureReminder(session),
+                      icon: Icon(
+                        _reminders.containsKey(session.id)
+                            ? Icons.notifications_active_rounded
+                            : Icons.notifications_none_rounded,
+                      ),
+                      tooltip: _reminders.containsKey(session.id)
+                          ? 'Reminder: ${_reminders[session.id]} minutes'
+                          : 'Set reminder',
+                    ),
+                  if (session.isUpcoming) const SizedBox(width: 10),
+                  Expanded(child: _primaryAction(session)),
+                ],
+              ),
             ],
           ),
-        ],
-      ),
-    )
+        )
         .animate(delay: (45 * index).ms)
         .fadeIn(duration: 350.ms)
         .slideY(begin: 0.08, end: 0);
@@ -888,13 +961,13 @@ class _OnlineClassesScreenState extends State<OnlineClassesScreen>
     final color = session.isLive
         ? AppColors.danger
         : session.isRecording
-            ? AppColors.success
-            : AppColors.vibeBlue;
+        ? AppColors.success
+        : AppColors.vibeBlue;
     final text = session.isLive
         ? 'LIVE'
         : session.isRecording
-            ? 'RECORDED'
-            : 'UPCOMING';
+        ? 'RECORDED'
+        : 'UPCOMING';
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
       decoration: BoxDecoration(
@@ -944,8 +1017,9 @@ class _OnlineClassesScreenState extends State<OnlineClassesScreen>
         CircleAvatar(
           radius: 19,
           backgroundColor: AppColors.vibeBlue.withValues(alpha: 0.12),
-          backgroundImage:
-              lecturer.photoUrl.isEmpty ? null : NetworkImage(lecturer.photoUrl),
+          backgroundImage: lecturer.photoUrl.isEmpty
+              ? null
+              : NetworkImage(lecturer.photoUrl),
           child: lecturer.photoUrl.isEmpty
               ? Text(
                   lecturer.initials,
@@ -1000,9 +1074,7 @@ class _OnlineClassesScreenState extends State<OnlineClassesScreen>
       decoration: BoxDecoration(
         color: AppColors.warning.withValues(alpha: 0.10),
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(
-          color: AppColors.warning.withValues(alpha: 0.25),
-        ),
+        border: Border.all(color: AppColors.warning.withValues(alpha: 0.25)),
       ),
       child: const Row(
         children: <Widget>[
@@ -1041,9 +1113,7 @@ class _OnlineClassesScreenState extends State<OnlineClassesScreen>
         decoration: BoxDecoration(
           color: AppColors.success.withValues(alpha: 0.07),
           borderRadius: BorderRadius.circular(14),
-          border: Border.all(
-            color: AppColors.success.withValues(alpha: 0.18),
-          ),
+          border: Border.all(color: AppColors.success.withValues(alpha: 0.18)),
         ),
         child: Row(
           children: <Widget>[
@@ -1056,8 +1126,7 @@ class _OnlineClassesScreenState extends State<OnlineClassesScreen>
                   child: CircularProgressIndicator(
                     value: done / 3,
                     strokeWidth: 4,
-                    backgroundColor:
-                        AppColors.success.withValues(alpha: 0.12),
+                    backgroundColor: AppColors.success.withValues(alpha: 0.12),
                     color: AppColors.success,
                   ),
                 ),
@@ -1142,12 +1211,15 @@ class _OnlineClassesScreenState extends State<OnlineClassesScreen>
   }
 
   void _joinClass(_OnlineClassSession session) {
+    if (youtubeVideoId(session.url) == null) {
+      _message('This class does not have a valid YouTube Live link yet.');
+      return;
+    }
     HapticFeedback.mediumImpact();
     Navigator.of(context).push(
       MaterialPageRoute<Widget>(
-        builder: (_) => LiveClassroomScreen(
-          session: _buildLiveSession(session),
-        ),
+        builder: (_) =>
+            LiveClassroomScreen(session: _buildLiveSession(session)),
       ),
     );
   }
@@ -1157,7 +1229,7 @@ class _OnlineClassesScreenState extends State<OnlineClassesScreen>
     final choice = await showModalBottomSheet<int>(
       context: context,
       showDragHandle: true,
-      backgroundColor: const Color(0xFFF8FAFF),
+      backgroundColor: AppColors.surfaceSoft,
       builder: (context) => SafeArea(
         child: Padding(
           padding: const EdgeInsets.fromLTRB(20, 0, 20, 22),
@@ -1215,16 +1287,15 @@ class _OnlineClassesScreenState extends State<OnlineClassesScreen>
         if (mounted) setState(() => _reminders.remove(session.id));
         _message('Class reminder removed.');
       } else {
-        await Supabase.instance.client.from('online_class_reminders').upsert(
-          <String, dynamic>{
-            'user_id': user.id,
-            'class_id': session.id,
-            'remind_minutes': choice,
-            'enabled': true,
-            'updated_at': DateTime.now().toUtc().toIso8601String(),
-          },
-          onConflict: 'user_id,class_id',
-        );
+        await Supabase.instance.client
+            .from('online_class_reminders')
+            .upsert(<String, dynamic>{
+              'user_id': user.id,
+              'class_id': session.id,
+              'remind_minutes': choice,
+              'enabled': true,
+              'updated_at': DateTime.now().toUtc().toIso8601String(),
+            }, onConflict: 'user_id,class_id');
         if (mounted) setState(() => _reminders[session.id] = choice);
         _message('Reminder set for $choice minutes before class.');
       }
@@ -1240,7 +1311,7 @@ class _OnlineClassesScreenState extends State<OnlineClassesScreen>
       context: context,
       showDragHandle: true,
       isScrollControlled: true,
-      backgroundColor: const Color(0xFFF8FAFF),
+      backgroundColor: AppColors.surfaceSoft,
       builder: (context) => StatefulBuilder(
         builder: (context, setSheetState) {
           void update(VoidCallback change) {
@@ -1285,26 +1356,29 @@ class _OnlineClassesScreenState extends State<OnlineClassesScreen>
                     ),
                   ),
                   CheckboxListTile(
-                    value: session.resourceTitle == null ||
+                    value:
+                        session.resourceTitle == null ||
                         _reviewedResources.contains(session.id),
                     onChanged: session.resourceTitle == null
                         ? null
                         : (checked) => update(() {
-                              if (checked == true) {
-                                _reviewedResources.add(session.id);
-                              } else {
-                                _reviewedResources.remove(session.id);
-                              }
-                            }),
+                            if (checked == true) {
+                              _reviewedResources.add(session.id);
+                            } else {
+                              _reviewedResources.remove(session.id);
+                            }
+                          }),
                     title: Text(
                       session.resourceTitle == null
                           ? 'No pre-class material required'
                           : 'Review ${session.resourceTitle}',
                     ),
-                    secondary: session.resourceUrl == null
+                    secondary:
+                        session.resourceUrl == null &&
+                            session.resourceStoragePath == null
                         ? null
                         : IconButton(
-                            onPressed: () => _openLink(session.resourceUrl),
+                            onPressed: () => _openResource(session),
                             icon: const Icon(Icons.open_in_new_rounded),
                           ),
                   ),
@@ -1339,7 +1413,7 @@ class _OnlineClassesScreenState extends State<OnlineClassesScreen>
       context: context,
       isScrollControlled: true,
       showDragHandle: true,
-      backgroundColor: const Color(0xFFF8FAFF),
+      backgroundColor: AppColors.surfaceSoft,
       builder: (context) => StatefulBuilder(
         builder: (context, setSheetState) => SafeArea(
           child: Padding(
@@ -1363,8 +1437,9 @@ class _OnlineClassesScreenState extends State<OnlineClassesScreen>
                 ),
                 const SizedBox(height: 16),
                 DropdownButtonFormField<String>(
-                  initialValue:
-                      _availableModules.contains(module) ? module : 'All',
+                  initialValue: _availableModules.contains(module)
+                      ? module
+                      : 'All',
                   decoration: const InputDecoration(
                     labelText: 'Module',
                     prefixIcon: Icon(Icons.menu_book_rounded),
@@ -1484,21 +1559,15 @@ class _OnlineClassesScreenState extends State<OnlineClassesScreen>
     required Widget child,
     EdgeInsetsGeometry padding = EdgeInsets.zero,
   }) {
-    return ClipRRect(
-      borderRadius: AppStyles.controlRadius,
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
-        child: Container(
-          padding: padding,
-          decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: 0.78),
-            borderRadius: AppStyles.controlRadius,
-            border: Border.all(color: Colors.white.withValues(alpha: 0.88)),
-            boxShadow: AppStyles.softShadow,
-          ),
-          child: child,
-        ),
+    return Container(
+      padding: padding,
+      decoration: BoxDecoration(
+        color: AppColors.surfaceElevated,
+        borderRadius: AppStyles.controlRadius,
+        border: Border.all(color: AppColors.outline),
+        boxShadow: AppStyles.softShadow,
       ),
+      child: child,
     );
   }
 
@@ -1646,6 +1715,7 @@ class _OnlineClassSession {
     required this.url,
     this.resourceTitle,
     this.resourceUrl,
+    this.resourceStoragePath,
     this.recordingUrl,
     this.durationMinutes,
   });
@@ -1660,6 +1730,7 @@ class _OnlineClassSession {
   final String url;
   final String? resourceTitle;
   final String? resourceUrl;
+  final String? resourceStoragePath;
   final String? recordingUrl;
   final int? durationMinutes;
 
@@ -1708,8 +1779,11 @@ class _OnlineClassSession {
       status: (optional(row['status']) ?? 'upcoming').toLowerCase(),
       lecturer: optional(row['lecturer']) ?? 'Course team',
       url: optional(row['url']) ?? '',
-      resourceTitle: optional(row['resource_title']),
+      resourceTitle:
+          optional(row['resource_title']) ??
+          optional(row['resource_file_name']),
       resourceUrl: optional(row['resource_url']),
+      resourceStoragePath: optional(row['resource_storage_path']),
       recordingUrl: optional(row['recording_url']),
       durationMinutes: row['duration_minutes'] is int
           ? row['duration_minutes'] as int

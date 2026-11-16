@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:ui';
 
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
@@ -9,6 +8,7 @@ import 'package:timeago/timeago.dart' as timeago;
 import 'package:url_launcher/url_launcher.dart';
 
 import '../utils/theme_constants.dart';
+import '../screens/student_profile_screen.dart';
 import 'comment_sheet.dart';
 
 class PostCard extends StatefulWidget {
@@ -46,13 +46,10 @@ class _PostCardState extends State<PostCard> {
   List<_CommentPreview> _commentPreviews = const [];
 
   String get _postId =>
-      widget.data['id']?.toString() ??
-      widget.data['post_id']?.toString() ??
-      '';
+      widget.data['id']?.toString() ?? widget.data['post_id']?.toString() ?? '';
   String? get _currentUserId => _db.auth.currentUser?.id;
   String? get _authorId => widget.data['user_id']?.toString();
-  bool get _isOwner =>
-      _currentUserId != null && _currentUserId == _authorId;
+  bool get _isOwner => _currentUserId != null && _currentUserId == _authorId;
 
   @override
   void initState() {
@@ -64,7 +61,8 @@ class _PostCardState extends State<PostCard> {
   @override
   void didUpdateWidget(covariant PostCard oldWidget) {
     super.didUpdateWidget(oldWidget);
-    final oldId = oldWidget.data['id']?.toString() ??
+    final oldId =
+        oldWidget.data['id']?.toString() ??
         oldWidget.data['post_id']?.toString() ??
         '';
     if (oldId != _postId) {
@@ -99,18 +97,16 @@ class _PostCardState extends State<PostCard> {
         .from('post_likes')
         .stream(primaryKey: ['post_id', 'user_id'])
         .eq('post_id', _postId)
-        .listen(
-          (rows) {
-            if (!mounted || _likeBusy) return;
-            final userId = _currentUserId;
-            setState(() {
-              _likeCount = rows.length;
-              _liked = userId != null &&
-                  rows.any((row) => row['user_id']?.toString() == userId);
-            });
-          },
-          onError: (Object error) => debugPrint('Post likes stream: $error'),
-        );
+        .listen((rows) {
+          if (!mounted || _likeBusy) return;
+          final userId = _currentUserId;
+          setState(() {
+            _likeCount = rows.length;
+            _liked =
+                userId != null &&
+                rows.any((row) => row['user_id']?.toString() == userId);
+          });
+        }, onError: (Object error) => debugPrint('Post likes stream: $error'));
 
     _commentsSubscription = _db
         .from('comments')
@@ -178,9 +174,9 @@ class _PostCardState extends State<PostCard> {
             final ownVote = userId == null
                 ? null
                 : rows.cast<Map<String, dynamic>?>().firstWhere(
-                      (row) => row?['user_id']?.toString() == userId,
-                      orElse: () => null,
-                    );
+                    (row) => row?['user_id']?.toString() == userId,
+                    orElse: () => null,
+                  );
             setState(() {
               _pollVotes = rows;
               _selectedOptionId = ownVote?['option_id']?.toString();
@@ -208,9 +204,11 @@ class _PostCardState extends State<PostCard> {
       if (!mounted) return;
       setState(() {
         _commentPreviews = (rows as List)
-            .map((row) => _CommentPreview.fromRow(
-                  Map<String, dynamic>.from(row as Map),
-                ))
+            .map(
+              (row) => _CommentPreview.fromRow(
+                Map<String, dynamic>.from(row as Map),
+              ),
+            )
             .toList()
             .reversed
             .toList();
@@ -228,12 +226,11 @@ class _PostCardState extends State<PostCard> {
     final data = widget.data;
     final content = _string(data['content']);
     final isAnonymous = data['is_anonymous'] == true;
-    final authorName = isAnonymous
-        ? 'Anonymous student'
-        : _authorName(data);
+    final authorName = isAnonymous ? 'Anonymous student' : _authorName(data);
     final authorPhoto = isAnonymous ? null : _authorPhoto(data);
     final media = _extractMedia(data);
-    final reduceMotion = MediaQuery.maybeOf(context)?.disableAnimations ?? false;
+    final reduceMotion =
+        MediaQuery.maybeOf(context)?.disableAnimations ?? false;
     final cached = data['is_offline_cached'] == true;
 
     return Semantics(
@@ -241,7 +238,9 @@ class _PostCardState extends State<PostCard> {
       label: 'Post by $authorName. $content',
       child: TweenAnimationBuilder<double>(
         tween: Tween(begin: 0, end: 1),
-        duration: reduceMotion ? Duration.zero : const Duration(milliseconds: 380),
+        duration: reduceMotion
+            ? Duration.zero
+            : const Duration(milliseconds: 380),
         curve: Curves.easeOutCubic,
         builder: (context, value, child) => Transform.translate(
           offset: Offset(0, 10 * (1 - value)),
@@ -280,7 +279,8 @@ class _PostCardState extends State<PostCard> {
                 if (_pollLoading) ...[
                   const SizedBox(height: 16),
                   const _PollSkeleton(),
-                ] else if (_pollQuestion != null && _pollOptions.isNotEmpty) ...[
+                ] else if (_pollQuestion != null &&
+                    _pollOptions.isNotEmpty) ...[
                   const SizedBox(height: 16),
                   _PollCard(
                     question: _pollQuestion!,
@@ -322,44 +322,57 @@ class _PostCardState extends State<PostCard> {
     required bool anonymous,
     required bool cached,
   }) {
+    final canOpenProfile = !anonymous && _authorId != null;
     return Row(
       children: [
-        _AuthorAvatar(
-          name: authorName,
-          photoUrl: authorPhoto,
-          anonymous: anonymous,
+        InkWell(
+          customBorder: const CircleBorder(),
+          onTap: canOpenProfile
+              ? () => StudentProfileNavigator.open(context, _authorId)
+              : null,
+          child: _AuthorAvatar(
+            name: authorName,
+            photoUrl: authorPhoto,
+            anonymous: anonymous,
+          ),
         ),
         const SizedBox(width: 12),
         Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                authorName,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.w800,
-                    ),
-              ),
-              const SizedBox(height: 3),
-              Wrap(
-                spacing: 7,
-                runSpacing: 4,
-                crossAxisAlignment: WrapCrossAlignment.center,
-                children: [
-                  Text(
-                    _formatTimestamp(widget.data['created_at']),
-                    style: Theme.of(context).textTheme.bodySmall,
+          child: InkWell(
+            borderRadius: BorderRadius.circular(10),
+            onTap: canOpenProfile
+                ? () => StudentProfileNavigator.open(context, _authorId)
+                : null,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  authorName,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w800,
                   ),
-                  if (cached)
-                    const _HeaderPill(
-                      icon: Icons.offline_pin_rounded,
-                      label: 'Offline copy',
+                ),
+                const SizedBox(height: 3),
+                Wrap(
+                  spacing: 7,
+                  runSpacing: 4,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    Text(
+                      _formatTimestamp(widget.data['created_at']),
+                      style: Theme.of(context).textTheme.bodySmall,
                     ),
-                ],
-              ),
-            ],
+                    if (cached)
+                      const _HeaderPill(
+                        icon: Icons.offline_pin_rounded,
+                        label: 'Offline copy',
+                      ),
+                  ],
+                ),
+              ],
+            ),
           ),
         ),
         PopupMenuButton<_PostMenuAction>(
@@ -367,6 +380,14 @@ class _PostCardState extends State<PostCard> {
           icon: const Icon(Icons.more_horiz_rounded),
           onSelected: _handleMenuAction,
           itemBuilder: (context) => [
+            if (_isOwner)
+              const PopupMenuItem(
+                value: _PostMenuAction.edit,
+                child: _MenuLabel(
+                  icon: Icons.edit_outlined,
+                  label: 'Edit post',
+                ),
+              ),
             if (!_isOwner)
               const PopupMenuItem(
                 value: _PostMenuAction.report,
@@ -455,10 +476,11 @@ class _PostCardState extends State<PostCard> {
       ];
     });
     try {
-      await _db.from('post_poll_votes').upsert(
-        {'post_id': _postId, 'option_id': option.id, 'user_id': userId},
-        onConflict: 'post_id,user_id',
-      );
+      await _db.from('post_poll_votes').upsert({
+        'post_id': _postId,
+        'option_id': option.id,
+        'user_id': userId,
+      }, onConflict: 'post_id,user_id');
     } catch (error) {
       if (!mounted) return;
       setState(() {
@@ -488,7 +510,8 @@ class _PostCardState extends State<PostCard> {
     final item = media[index];
     if (item.isVideo) {
       final uri = Uri.tryParse(item.url);
-      if (uri == null || !await launchUrl(uri, mode: LaunchMode.externalApplication)) {
+      if (uri == null ||
+          !await launchUrl(uri, mode: LaunchMode.externalApplication)) {
         _showSnack('This video could not be opened.');
       }
       return;
@@ -497,16 +520,17 @@ class _PostCardState extends State<PostCard> {
       PageRouteBuilder<void>(
         opaque: false,
         transitionDuration: const Duration(milliseconds: 240),
-        pageBuilder: (_, _, _) => _FullScreenGallery(
-          media: media,
-          initialIndex: index,
-        ),
+        pageBuilder: (_, _, _) =>
+            _FullScreenGallery(media: media, initialIndex: index),
       ),
     );
   }
 
   void _handleMenuAction(_PostMenuAction action) {
     switch (action) {
+      case _PostMenuAction.edit:
+        _editPost();
+        return;
       case _PostMenuAction.report:
         _reportPost();
         return;
@@ -516,6 +540,57 @@ class _PostCardState extends State<PostCard> {
       case _PostMenuAction.delete:
         _deletePost();
         return;
+    }
+  }
+
+  Future<void> _editPost() async {
+    final controller = TextEditingController(
+      text: widget.data['content']?.toString() ?? '',
+    );
+    final updated = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        icon: const Icon(Icons.edit_note_rounded),
+        title: const Text('Edit your post'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          minLines: 3,
+          maxLines: 8,
+          maxLength: 2000,
+          decoration: const InputDecoration(
+            labelText: 'Post',
+            hintText: 'What would you like to say?',
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () {
+              final value = controller.text.trim();
+              if (value.isNotEmpty) Navigator.pop(dialogContext, value);
+            },
+            child: const Text('Save changes'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (updated == null || updated == widget.data['content']) return;
+    try {
+      await _db
+          .from('posts')
+          .update({'content': updated})
+          .eq('id', _postId)
+          .eq('user_id', _currentUserId!);
+      if (!mounted) return;
+      setState(() => widget.data['content'] = updated);
+      _showSnack('Post updated.');
+    } catch (_) {
+      _showSnack('Your post could not be updated. Please try again.');
     }
   }
 
@@ -601,10 +676,11 @@ class _PostCardState extends State<PostCard> {
     );
     if (confirmed != true) return;
     try {
-      await _db.from('blocked_users').upsert(
-        {'user_id': userId, 'blocked_user_id': authorId, 'reason': 'post'},
-        onConflict: 'user_id,blocked_user_id',
-      );
+      await _db.from('blocked_users').upsert({
+        'user_id': userId,
+        'blocked_user_id': authorId,
+        'reason': 'post',
+      }, onConflict: 'user_id,blocked_user_id');
       if (mounted) setState(() => _deleted = true);
       _showSnack('Author blocked.');
     } catch (error) {
@@ -646,7 +722,9 @@ class _PostCardState extends State<PostCard> {
 
   void _showSnack(String message) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
   }
 }
 
@@ -657,27 +735,17 @@ class _GlassSurface extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final dark = Theme.of(context).brightness == Brightness.dark;
-    return ClipRRect(
-      borderRadius: AppStyles.bentoRadius,
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
-        child: Container(
-          padding: const EdgeInsets.all(17),
-          decoration: BoxDecoration(
-            color: dark
-                ? const Color(0xD9182B47)
-                : Colors.white.withValues(alpha: 0.82),
-            borderRadius: AppStyles.bentoRadius,
-            border: Border.all(
-              color: dark
-                  ? const Color(0xFF304663)
-                  : Colors.white.withValues(alpha: 0.94),
-            ),
-            boxShadow: AppStyles.glassShadow,
-          ),
-          child: child,
+    return Container(
+      padding: const EdgeInsets.all(17),
+      decoration: BoxDecoration(
+        color: dark ? AppColors.surfaceDark : AppColors.surfaceElevated,
+        borderRadius: AppStyles.bentoRadius,
+        border: Border.all(
+          color: dark ? AppColors.borderDark : AppColors.outline,
         ),
+        boxShadow: AppStyles.softShadow,
       ),
+      child: child,
     );
   }
 }
@@ -694,31 +762,29 @@ class _AuthorAvatar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Container(
-        width: 50,
-        height: 50,
-        padding: const EdgeInsets.all(2),
-        decoration: const BoxDecoration(
-          shape: BoxShape.circle,
-          gradient: LinearGradient(
-            colors: [AppColors.electricCyan, AppColors.vibeBlue],
-          ),
-        ),
-        child: ClipOval(
-          child: Container(
-            color: Theme.of(context).colorScheme.surface,
-            child: photoUrl != null && photoUrl!.isNotEmpty
-                ? CachedNetworkImage(
-                    imageUrl: photoUrl!,
-                    fit: BoxFit.cover,
-                    errorWidget: (_, _, _) => _AvatarFallback(
-                      name: name,
-                      anonymous: anonymous,
-                    ),
-                  )
-                : _AvatarFallback(name: name, anonymous: anonymous),
-          ),
-        ),
-      );
+    width: 50,
+    height: 50,
+    padding: const EdgeInsets.all(2),
+    decoration: const BoxDecoration(
+      shape: BoxShape.circle,
+      gradient: LinearGradient(
+        colors: [AppColors.electricCyan, AppColors.vibeBlue],
+      ),
+    ),
+    child: ClipOval(
+      child: Container(
+        color: Theme.of(context).colorScheme.surface,
+        child: photoUrl != null && photoUrl!.isNotEmpty
+            ? CachedNetworkImage(
+                imageUrl: photoUrl!,
+                fit: BoxFit.cover,
+                errorWidget: (_, _, _) =>
+                    _AvatarFallback(name: name, anonymous: anonymous),
+              )
+            : _AvatarFallback(name: name, anonymous: anonymous),
+      ),
+    ),
+  );
 }
 
 class _AvatarFallback extends StatelessWidget {
@@ -728,17 +794,10 @@ class _AvatarFallback extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Center(
-        child: anonymous
-            ? const Icon(Icons.person_outline_rounded, color: AppColors.vibeBlue)
-            : Text(
-                name.isEmpty ? 'O' : name[0].toUpperCase(),
-                style: const TextStyle(
-                  color: AppColors.vibeBlue,
-                  fontWeight: FontWeight.w900,
-                  fontSize: 17,
-                ),
-              ),
-      );
+    child: anonymous
+        ? const Icon(Icons.person_outline_rounded, color: AppColors.vibeBlue)
+        : const Icon(Icons.person_rounded, color: AppColors.vibeBlue),
+  );
 }
 
 class _ExpandablePostText extends StatelessWidget {
@@ -766,7 +825,9 @@ class _ExpandablePostText extends StatelessWidget {
             text,
             maxLines: long && !expanded ? 4 : null,
             overflow: long && !expanded ? TextOverflow.ellipsis : null,
-            style: Theme.of(context).textTheme.bodyLarge?.copyWith(height: 1.52),
+            style: Theme.of(
+              context,
+            ).textTheme.bodyLarge?.copyWith(height: 1.52),
           ),
         ),
         if (long) ...[
@@ -802,7 +863,8 @@ class _MediaCarousel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final reduceMotion = MediaQuery.maybeOf(context)?.disableAnimations ?? false;
+    final reduceMotion =
+        MediaQuery.maybeOf(context)?.disableAnimations ?? false;
     return Column(
       children: [
         AspectRatio(
@@ -871,33 +933,41 @@ class _VideoPreview extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Container(
-        decoration: const BoxDecoration(gradient: AppStyles.brandGradient),
-        child: Stack(
-          fit: StackFit.expand,
-          children: [
-            const Center(
-              child: Icon(Icons.movie_creation_outlined, color: Colors.white24, size: 110),
-            ),
-            Center(
-              child: Container(
-                width: 68,
-                height: 68,
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.18),
-                  shape: BoxShape.circle,
-                  border: Border.all(color: Colors.white38),
-                ),
-                child: const Icon(Icons.play_arrow_rounded, color: Colors.white, size: 40),
-              ),
-            ),
-            const Positioned(
-              left: 14,
-              bottom: 12,
-              child: _HeaderPill(icon: Icons.play_circle_outline, label: 'VIDEO'),
-            ),
-          ],
+    decoration: const BoxDecoration(gradient: AppStyles.brandGradient),
+    child: Stack(
+      fit: StackFit.expand,
+      children: [
+        const Center(
+          child: Icon(
+            Icons.movie_creation_outlined,
+            color: Colors.white24,
+            size: 110,
+          ),
         ),
-      );
+        Center(
+          child: Container(
+            width: 68,
+            height: 68,
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.18),
+              shape: BoxShape.circle,
+              border: Border.all(color: Colors.white38),
+            ),
+            child: const Icon(
+              Icons.play_arrow_rounded,
+              color: Colors.white,
+              size: 40,
+            ),
+          ),
+        ),
+        const Positioned(
+          left: 14,
+          bottom: 12,
+          child: _HeaderPill(icon: Icons.play_circle_outline, label: 'VIDEO'),
+        ),
+      ],
+    ),
+  );
 }
 
 class _MediaLoading extends StatelessWidget {
@@ -906,8 +976,8 @@ class _MediaLoading extends StatelessWidget {
   Widget build(BuildContext context) {
     final dark = Theme.of(context).brightness == Brightness.dark;
     return Shimmer.fromColors(
-      baseColor: dark ? const Color(0xFF172944) : Colors.grey.shade300,
-      highlightColor: dark ? const Color(0xFF29415F) : Colors.grey.shade100,
+      baseColor: dark ? AppColors.surfaceDark : Colors.grey.shade300,
+      highlightColor: dark ? AppColors.surfaceDarkAlt : Colors.grey.shade100,
       child: Container(color: Colors.white),
     );
   }
@@ -917,16 +987,16 @@ class _MediaError extends StatelessWidget {
   const _MediaError();
   @override
   Widget build(BuildContext context) => Container(
-        color: AppColors.vibeBlue.withValues(alpha: 0.08),
-        child: const Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.broken_image_outlined, color: AppColors.textMuted, size: 38),
-            SizedBox(height: 8),
-            Text('Media unavailable offline'),
-          ],
-        ),
-      );
+    color: AppColors.vibeBlue.withValues(alpha: 0.08),
+    child: const Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        Icon(Icons.broken_image_outlined, color: AppColors.textMuted, size: 38),
+        SizedBox(height: 8),
+        Text('Media unavailable offline'),
+      ],
+    ),
+  );
 }
 
 class _FullScreenGallery extends StatefulWidget {
@@ -939,7 +1009,9 @@ class _FullScreenGallery extends StatefulWidget {
 }
 
 class _FullScreenGalleryState extends State<_FullScreenGallery> {
-  late final PageController _controller = PageController(initialPage: widget.initialIndex);
+  late final PageController _controller = PageController(
+    initialPage: widget.initialIndex,
+  );
   late int _index = widget.initialIndex;
 
   @override
@@ -950,51 +1022,50 @@ class _FullScreenGalleryState extends State<_FullScreenGallery> {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-        backgroundColor: const Color(0xF2071323),
-        appBar: AppBar(
-          foregroundColor: Colors.white,
-          title: Text('${_index + 1} of ${widget.media.length}'),
-        ),
-        body: PageView.builder(
-          controller: _controller,
-          itemCount: widget.media.length,
-          onPageChanged: (index) => setState(() => _index = index),
-          itemBuilder: (context, index) {
-            final item = widget.media[index];
-            if (item.isVideo) {
-              return Center(
-                child: FilledButton.icon(
-                  onPressed: () async {
-                    final uri = Uri.tryParse(item.url);
-                    if (uri != null) {
-                      await launchUrl(uri, mode: LaunchMode.externalApplication);
-                    }
-                  },
-                  icon: const Icon(Icons.play_arrow_rounded),
-                  label: const Text('Play video'),
-                ),
-              );
-            }
-            return InteractiveViewer(
-              minScale: 0.8,
-              maxScale: 5,
-              child: Center(
-                child: Hero(
-                  tag: 'post-media-${item.url}-$index',
-                  child: CachedNetworkImage(
-                    imageUrl: item.url,
-                    fit: BoxFit.contain,
-                    placeholder: (_, _) => const Center(
-                      child: CircularProgressIndicator(),
-                    ),
-                    errorWidget: (_, _, _) => const _MediaError(),
-                  ),
-                ),
+    backgroundColor: AppColors.overlayDark,
+    appBar: AppBar(
+      foregroundColor: Colors.white,
+      title: Text('${_index + 1} of ${widget.media.length}'),
+    ),
+    body: PageView.builder(
+      controller: _controller,
+      itemCount: widget.media.length,
+      onPageChanged: (index) => setState(() => _index = index),
+      itemBuilder: (context, index) {
+        final item = widget.media[index];
+        if (item.isVideo) {
+          return Center(
+            child: FilledButton.icon(
+              onPressed: () async {
+                final uri = Uri.tryParse(item.url);
+                if (uri != null) {
+                  await launchUrl(uri, mode: LaunchMode.externalApplication);
+                }
+              },
+              icon: const Icon(Icons.play_arrow_rounded),
+              label: const Text('Play video'),
+            ),
+          );
+        }
+        return InteractiveViewer(
+          minScale: 0.8,
+          maxScale: 5,
+          child: Center(
+            child: Hero(
+              tag: 'post-media-${item.url}-$index',
+              child: CachedNetworkImage(
+                imageUrl: item.url,
+                fit: BoxFit.contain,
+                placeholder: (_, _) =>
+                    const Center(child: CircularProgressIndicator()),
+                errorWidget: (_, _, _) => const _MediaError(),
               ),
-            );
-          },
-        ),
-      );
+            ),
+          ),
+        );
+      },
+    ),
+  );
 }
 
 class _InteractionBar extends StatelessWidget {
@@ -1015,36 +1086,38 @@ class _InteractionBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Container(
-        padding: const EdgeInsets.all(5),
-        decoration: BoxDecoration(
-          color: AppColors.vibeBlue.withValues(alpha: 0.055),
-          borderRadius: BorderRadius.circular(18),
-          border: Border.all(color: AppColors.vibeBlue.withValues(alpha: 0.09)),
+    padding: const EdgeInsets.all(5),
+    decoration: BoxDecoration(
+      color: AppColors.vibeBlue.withValues(alpha: 0.055),
+      borderRadius: BorderRadius.circular(18),
+      border: Border.all(color: AppColors.vibeBlue.withValues(alpha: 0.09)),
+    ),
+    child: Row(
+      children: [
+        Expanded(
+          child: _InteractionButton(
+            icon: liked
+                ? Icons.favorite_rounded
+                : Icons.favorite_border_rounded,
+            label: 'Like',
+            count: likeCount,
+            active: liked,
+            busy: busy,
+            onTap: onLike,
+          ),
         ),
-        child: Row(
-          children: [
-            Expanded(
-              child: _InteractionButton(
-                icon: liked ? Icons.favorite_rounded : Icons.favorite_border_rounded,
-                label: 'Like',
-                count: likeCount,
-                active: liked,
-                busy: busy,
-                onTap: onLike,
-              ),
-            ),
-            Container(width: 1, height: 28, color: AppColors.glassBorder),
-            Expanded(
-              child: _InteractionButton(
-                icon: Icons.chat_bubble_outline_rounded,
-                label: 'Comment',
-                count: commentCount,
-                onTap: onComment,
-              ),
-            ),
-          ],
+        Container(width: 1, height: 28, color: AppColors.glassBorder),
+        Expanded(
+          child: _InteractionButton(
+            icon: Icons.chat_bubble_outline_rounded,
+            label: 'Comment',
+            count: commentCount,
+            onTap: onComment,
+          ),
         ),
-      );
+      ],
+    ),
+  );
 }
 
 class _InteractionButton extends StatelessWidget {
@@ -1139,10 +1212,7 @@ class _CommentsPreview extends StatelessWidget {
                         ? null
                         : CachedNetworkImageProvider(comment.photoUrl!),
                     child: comment.photoUrl == null
-                        ? Text(
-                            comment.name[0].toUpperCase(),
-                            style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w800),
-                          )
+                        ? const Icon(Icons.person_rounded, size: 17)
                         : null,
                   ),
                   const SizedBox(width: 9),
@@ -1183,24 +1253,24 @@ class _CommentSkeleton extends StatelessWidget {
   const _CommentSkeleton();
   @override
   Widget build(BuildContext context) => Shimmer.fromColors(
-        baseColor: Colors.grey.shade300,
-        highlightColor: Colors.grey.shade100,
-        child: Row(
-          children: [
-            const CircleAvatar(radius: 14, backgroundColor: Colors.white),
-            const SizedBox(width: 9),
-            Expanded(
-              child: Container(
-                height: 24,
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(8),
-                ),
-              ),
+    baseColor: Colors.grey.shade300,
+    highlightColor: Colors.grey.shade100,
+    child: Row(
+      children: [
+        const CircleAvatar(radius: 14, backgroundColor: Colors.white),
+        const SizedBox(width: 9),
+        Expanded(
+          child: Container(
+            height: 24,
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(8),
             ),
-          ],
+          ),
         ),
-      );
+      ],
+    ),
+  );
 }
 
 class _PollCard extends StatelessWidget {
@@ -1246,7 +1316,9 @@ class _PollCard extends StatelessWidget {
               _PollChoice(
                 option: option,
                 selected: option.id == selectedOptionId,
-                votes: votes.where((row) => row['option_id']?.toString() == option.id).length,
+                votes: votes
+                    .where((row) => row['option_id']?.toString() == option.id)
+                    .length,
                 total: total,
                 onTap: () => onVote(option),
               ),
@@ -1281,7 +1353,8 @@ class _PollChoice extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final progress = total == 0 ? 0.0 : votes / total;
-    final reduceMotion = MediaQuery.maybeOf(context)?.disableAnimations ?? false;
+    final reduceMotion =
+        MediaQuery.maybeOf(context)?.disableAnimations ?? false;
     return Semantics(
       button: true,
       selected: selected,
@@ -1305,13 +1378,18 @@ class _PollChoice extends StatelessWidget {
               Row(
                 children: [
                   Icon(
-                    selected ? Icons.check_circle_rounded : Icons.radio_button_unchecked_rounded,
+                    selected
+                        ? Icons.check_circle_rounded
+                        : Icons.radio_button_unchecked_rounded,
                     color: selected ? AppColors.vibeBlue : AppColors.textMuted,
                     size: 20,
                   ),
                   const SizedBox(width: 9),
                   Expanded(
-                    child: Text(option.label, style: const TextStyle(fontWeight: FontWeight.w700)),
+                    child: Text(
+                      option.label,
+                      style: const TextStyle(fontWeight: FontWeight.w700),
+                    ),
                   ),
                   Text('${(progress * 100).round()}%'),
                 ],
@@ -1319,7 +1397,9 @@ class _PollChoice extends StatelessWidget {
               const SizedBox(height: 8),
               TweenAnimationBuilder<double>(
                 tween: Tween(end: progress),
-                duration: reduceMotion ? Duration.zero : const Duration(milliseconds: 300),
+                duration: reduceMotion
+                    ? Duration.zero
+                    : const Duration(milliseconds: 300),
                 builder: (_, value, _) => LinearProgressIndicator(
                   value: value,
                   minHeight: 5,
@@ -1339,16 +1419,16 @@ class _PollSkeleton extends StatelessWidget {
   const _PollSkeleton();
   @override
   Widget build(BuildContext context) => Shimmer.fromColors(
-        baseColor: Colors.grey.shade300,
-        highlightColor: Colors.grey.shade100,
-        child: Container(
-          height: 130,
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(20),
-          ),
-        ),
-      );
+    baseColor: Colors.grey.shade300,
+    highlightColor: Colors.grey.shade100,
+    child: Container(
+      height: 130,
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+      ),
+    ),
+  );
 }
 
 class _HeaderPill extends StatelessWidget {
@@ -1358,43 +1438,47 @@ class _HeaderPill extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-        decoration: BoxDecoration(
-          color: AppColors.vibeBlue.withValues(alpha: 0.10),
-          borderRadius: AppStyles.pillRadius,
+    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+    decoration: BoxDecoration(
+      color: AppColors.vibeBlue.withValues(alpha: 0.10),
+      borderRadius: AppStyles.pillRadius,
+    ),
+    child: Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, size: 12, color: AppColors.vibeBlue),
+        const SizedBox(width: 4),
+        Text(
+          label,
+          style: const TextStyle(
+            color: AppColors.vibeBlue,
+            fontSize: 9,
+            fontWeight: FontWeight.w900,
+            letterSpacing: 0.4,
+          ),
         ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, size: 12, color: AppColors.vibeBlue),
-            const SizedBox(width: 4),
-            Text(
-              label,
-              style: const TextStyle(
-                color: AppColors.vibeBlue,
-                fontSize: 9,
-                fontWeight: FontWeight.w900,
-                letterSpacing: 0.4,
-              ),
-            ),
-          ],
-        ),
-      );
+      ],
+    ),
+  );
 }
 
 class _MenuLabel extends StatelessWidget {
-  const _MenuLabel({required this.icon, required this.label, this.danger = false});
+  const _MenuLabel({
+    required this.icon,
+    required this.label,
+    this.danger = false,
+  });
   final IconData icon;
   final String label;
   final bool danger;
   @override
   Widget build(BuildContext context) => Row(
-        children: [
-          Icon(icon, size: 20, color: danger ? AppColors.danger : null),
-          const SizedBox(width: 11),
-          Text(label, style: TextStyle(color: danger ? AppColors.danger : null)),
-        ],
-      );
+    children: [
+      Icon(icon, size: 20, color: danger ? AppColors.danger : null),
+      const SizedBox(width: 11),
+      Text(label, style: TextStyle(color: danger ? AppColors.danger : null)),
+    ],
+  );
 }
 
 class _MediaItem {
@@ -1406,30 +1490,26 @@ class _MediaItem {
 class _PollOption {
   const _PollOption({required this.id, required this.label});
   factory _PollOption.fromRow(Map<String, dynamic> row) => _PollOption(
-        id: row['id'].toString(),
-        label: _string(row['label'], fallback: 'Option'),
-      );
+    id: row['id'].toString(),
+    label: _string(row['label'], fallback: 'Option'),
+  );
   final String id;
   final String label;
 }
 
 class _CommentPreview {
-  const _CommentPreview({required this.name, required this.text, this.photoUrl});
+  const _CommentPreview({
+    required this.name,
+    required this.text,
+    this.photoUrl,
+  });
   factory _CommentPreview.fromRow(Map<String, dynamic> row) {
     final profile = row['profiles'] is Map
         ? Map<String, dynamic>.from(row['profiles'] as Map)
         : <String, dynamic>{};
     final nickname = _string(profile['nickname']);
-    final fullName = [
-      _string(profile['name']),
-      _string(profile['surname']),
-    ].where((value) => value.isNotEmpty).join(' ');
     return _CommentPreview(
-      name: nickname.isNotEmpty
-          ? nickname
-          : fullName.isNotEmpty
-              ? fullName
-              : 'Student',
+      name: nickname.isNotEmpty ? nickname : 'OG Vibester',
       text: _string(row['text']),
       photoUrl: _nullableString(profile['photo_url']),
     );
@@ -1439,7 +1519,7 @@ class _CommentPreview {
   final String? photoUrl;
 }
 
-enum _PostMenuAction { report, block, delete }
+enum _PostMenuAction { edit, report, block, delete }
 
 List<_MediaItem> _extractMedia(Map<String, dynamic> data) {
   final items = <_MediaItem>[];
@@ -1480,26 +1560,17 @@ List<_MediaItem> _extractMedia(Map<String, dynamic> data) {
   return items;
 }
 
-bool _looksLikeVideo(String url) => RegExp(
-      r'\.(mp4|webm|mov|m4v)(\?|$)',
-      caseSensitive: false,
-    ).hasMatch(url);
+bool _looksLikeVideo(String url) =>
+    RegExp(r'\.(mp4|webm|mov|m4v)(\?|$)', caseSensitive: false).hasMatch(url);
 
 String _authorName(Map<String, dynamic> data) {
   final profile = data['profiles'];
   if (profile is Map) {
     final nickname = _string(profile['nickname']);
     if (nickname.isNotEmpty) return nickname;
-    final fullName = [
-      _string(profile['name']),
-      _string(profile['surname']),
-    ].where((value) => value.isNotEmpty).join(' ');
-    if (fullName.isNotEmpty) return fullName;
+    return 'OG Vibester';
   }
-  return _string(
-    data['author_name'] ?? data['author'],
-    fallback: 'OG Vibester',
-  );
+  return 'OG Vibester';
 }
 
 String? _authorPhoto(Map<String, dynamic> data) {

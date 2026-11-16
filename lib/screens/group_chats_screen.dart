@@ -1,6 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:ui';
+import 'dart:typed_data';
 
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:file_picker/file_picker.dart';
@@ -8,16 +8,26 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:qr_flutter/qr_flutter.dart';
+import 'package:record/record.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+
+import '../services/diagnostics_service.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../utils/theme_constants.dart';
+import '../services/group_call_service.dart';
+import '../services/offline_cache_service.dart';
 import '../widgets/vibe_scaffold.dart';
+import '../widgets/standard_ui.dart';
+import 'group_call_screen.dart';
+import 'student_profile_screen.dart';
 
 class GroupChatsScreen extends StatefulWidget {
-  const GroupChatsScreen({super.key});
+  const GroupChatsScreen({super.key, this.initialGroupId});
+
+  final String? initialGroupId;
 
   @override
   State<GroupChatsScreen> createState() => _GroupChatsScreenState();
@@ -28,9 +38,12 @@ class _GroupChatsScreenState extends State<GroupChatsScreen>
   late final TabController _tabController;
   final TextEditingController _searchController = TextEditingController();
   final TextEditingController _messageController = TextEditingController();
+  final ScrollController _conversationScrollController = ScrollController();
+  final AudioRecorder _recorder = AudioRecorder();
+  final List<Uint8List> _voiceChunks = <Uint8List>[];
+  final List<double> _voiceLevels = <double>[];
   final List<ChatGroup> _groups = <ChatGroup>[];
-  final Map<String, GroupMembership> _memberships =
-      <String, GroupMembership>{};
+  final Map<String, GroupMembership> _memberships = <String, GroupMembership>{};
   final Map<String, StudentProfile> _profiles = <String, StudentProfile>{};
   final List<GroupMessage> _messages = <GroupMessage>[];
   final Map<String, List<MessageReaction>> _reactions =
@@ -39,19 +52,30 @@ class _GroupChatsScreenState extends State<GroupChatsScreen>
 
   StreamSubscription<List<ConnectivityResult>>? _connectivitySubscription;
   RealtimeChannel? _messageChannel;
+  StreamSubscription<Uint8List>? _voiceStream;
+  StreamSubscription<Amplitude>? _amplitudes;
+  Timer? _recordTimer;
   ChatGroup? _selectedGroup;
   GroupMessage? _replyingTo;
   String _search = '';
   bool _loading = true;
   bool _loadingMessages = false;
+  bool _loadingOlderMessages = false;
+  bool _hasOlderMessages = true;
+  DateTime? _oldestMessageCursor;
   bool _sending = false;
   bool _mobileChatOpen = false;
   bool _offline = false;
+  bool _recording = false;
+  int _recordSeconds = 0;
   String? _error;
+  String? _uploadStatus;
+  _PendingGroupAttachment? _failedAttachment;
 
   SupabaseClient get _supabase => Supabase.instance.client;
   User? get _user => _supabase.auth.currentUser;
   String get _offlineQueueKey => 'group_chat_outbox_${_user?.id ?? 'guest'}';
+  static const int _messagePageSize = 30;
 
   @override
   void initState() {
@@ -64,12 +88,20 @@ class _GroupChatsScreenState extends State<GroupChatsScreen>
       final value = _searchController.text.trim().toLowerCase();
       if (value != _search && mounted) setState(() => _search = value);
     });
+    _messageController.addListener(() {
+      if (mounted) setState(() {});
+    });
     _watchConnectivity();
     unawaited(_initialize());
   }
 
   Future<void> _initialize() async {
     await _loadDashboard();
+    final initialGroupId = widget.initialGroupId?.trim();
+    if (initialGroupId != null && initialGroupId.isNotEmpty && mounted) {
+      final group = _groupById(initialGroupId);
+      if (group != null && _isMember(group)) await _selectGroup(group);
+    }
     final token = Uri.base.queryParameters['group_invite'];
     if (token != null && token.trim().isNotEmpty && mounted) {
       await _acceptInviteToken(token.trim(), showWelcome: true);
@@ -83,14 +115,21 @@ class _GroupChatsScreenState extends State<GroupChatsScreen>
     _tabController.dispose();
     _searchController.dispose();
     _messageController.dispose();
+    _conversationScrollController.dispose();
+    _recordTimer?.cancel();
+    _voiceStream?.cancel();
+    _amplitudes?.cancel();
+    unawaited(_recorder.dispose());
     super.dispose();
   }
 
   void _watchConnectivity() {
-    _connectivitySubscription =
-        Connectivity().onConnectivityChanged.listen((results) {
+    _connectivitySubscription = Connectivity().onConnectivityChanged.listen((
+      results,
+    ) {
       final offline =
-          results.isEmpty || results.every((item) => item == ConnectivityResult.none);
+          results.isEmpty ||
+          results.every((item) => item == ConnectivityResult.none);
       if (mounted) setState(() => _offline = offline);
       if (!offline) unawaited(_flushOfflineQueue());
     });
@@ -117,14 +156,16 @@ class _GroupChatsScreenState extends State<GroupChatsScreen>
             .select(
               'id, name, description, member_count, created_by, created_at, '
               'visibility, category, avatar_url, banner_url, accent_color, '
-              'rules, updated_at',
+              'rules, updated_at, module_id, group_kind',
             )
             .order('updated_at', ascending: false),
       ]);
-      final membershipRows =
-          List<Map<String, dynamic>>.from(responses[0] as List<dynamic>);
-      final groupRows =
-          List<Map<String, dynamic>>.from(responses[1] as List<dynamic>);
+      final membershipRows = List<Map<String, dynamic>>.from(
+        responses[0] as List<dynamic>,
+      );
+      final groupRows = List<Map<String, dynamic>>.from(
+        responses[1] as List<dynamic>,
+      );
 
       final memberships = <String, GroupMembership>{
         for (final row in membershipRows)
@@ -132,6 +173,7 @@ class _GroupChatsScreenState extends State<GroupChatsScreen>
       };
       final groups = groupRows.map(ChatGroup.fromRow).toList();
       await _hydrateGroupAssets(groups);
+      await _hydrateModuleDetails(groups);
       await _loadGroupSummaries(groups, memberships);
 
       if (!mounted) return;
@@ -160,14 +202,37 @@ class _GroupChatsScreenState extends State<GroupChatsScreen>
   }
 
   Future<void> _hydrateGroupAssets(List<ChatGroup> groups) async {
-    await Future.wait(groups.map((group) async {
-      if (group.avatarPath != null) {
-        group.avatarUrl = await _signedMediaUrl(group.avatarPath!);
+    await Future.wait(
+      groups.map((group) async {
+        if (group.avatarPath != null) {
+          group.avatarUrl = await _signedMediaUrl(group.avatarPath!);
+        }
+        if (group.bannerPath != null) {
+          group.bannerUrl = await _signedMediaUrl(group.bannerPath!);
+        }
+      }),
+    );
+  }
+
+  Future<void> _hydrateModuleDetails(List<ChatGroup> groups) async {
+    final ids = groups
+        .map((group) => group.moduleId)
+        .whereType<String>()
+        .toSet()
+        .toList();
+    if (ids.isEmpty) return;
+    final rows = List<Map<String, dynamic>>.from(
+      await _supabase.from('modules').select('id,name,code').inFilter('id', ids)
+          as List<dynamic>,
+    );
+    final byId = {for (final row in rows) row['id'].toString(): row};
+    for (final group in groups) {
+      final module = byId[group.moduleId];
+      if (module != null) {
+        group.moduleName = module['name']?.toString();
+        group.moduleCode = module['code']?.toString();
       }
-      if (group.bannerPath != null) {
-        group.bannerUrl = await _signedMediaUrl(group.bannerPath!);
-      }
-    }));
+    }
   }
 
   Future<void> _loadGroupSummaries(
@@ -178,14 +243,15 @@ class _GroupChatsScreenState extends State<GroupChatsScreen>
     if (joinedIds.isEmpty) return;
     final rows = List<Map<String, dynamic>>.from(
       await _supabase
-          .from('group_messages')
-          .select(
-            'id, group_id, sender_id, text, message_type, attachment_name, '
-            'created_at, is_deleted',
-          )
-          .inFilter('group_id', joinedIds)
-          .order('created_at', ascending: false)
-          .limit(300) as List<dynamic>,
+              .from('group_messages')
+              .select(
+                'id, group_id, sender_id, text, message_type, attachment_name, '
+                'created_at, is_deleted',
+              )
+              .inFilter('group_id', joinedIds)
+              .order('created_at', ascending: false)
+              .limit(300)
+          as List<dynamic>,
     );
     final firstByGroup = <String, Map<String, dynamic>>{};
     final unreadByGroup = <String, int>{};
@@ -198,6 +264,12 @@ class _GroupChatsScreenState extends State<GroupChatsScreen>
         unreadByGroup[groupId] = (unreadByGroup[groupId] ?? 0) + 1;
       }
     }
+    await _loadProfiles(
+      firstByGroup.values
+          .map((row) => row['sender_id']?.toString())
+          .whereType<String>()
+          .toList(),
+    );
     for (final group in groups) {
       final row = firstByGroup[group.id];
       if (row != null) {
@@ -205,6 +277,10 @@ class _GroupChatsScreenState extends State<GroupChatsScreen>
             ? 'Message removed'
             : _messagePreview(row);
         group.lastMessageAt = _date(row['created_at']);
+        final senderId = row['sender_id']?.toString() ?? '';
+        group.lastSenderName = senderId == _user?.id
+            ? 'You'
+            : (_profiles[senderId]?.displayName ?? 'Student');
       }
       group.unreadCount = unreadByGroup[group.id] ?? 0;
     }
@@ -236,13 +312,13 @@ class _GroupChatsScreenState extends State<GroupChatsScreen>
               '$memberNames ${group.category}'
           .toLowerCase()
           .contains(_search);
-    }).toList()
-      ..sort((a, b) {
-        final unread = b.unreadCount.compareTo(a.unreadCount);
-        if (unread != 0) return unread;
-        return (b.lastMessageAt ?? b.createdAt)
-            .compareTo(a.lastMessageAt ?? a.createdAt);
-      });
+    }).toList()..sort((a, b) {
+      final unread = b.unreadCount.compareTo(a.unreadCount);
+      if (unread != 0) return unread;
+      return (b.lastMessageAt ?? b.createdAt).compareTo(
+        a.lastMessageAt ?? a.createdAt,
+      );
+    });
   }
 
   ChatGroup? _groupById(String id) {
@@ -265,8 +341,30 @@ class _GroupChatsScreenState extends State<GroupChatsScreen>
     setState(() {
       _selectedGroup = group;
       _mobileChatOpen = true;
+      _messages.clear();
+      _oldestMessageCursor = null;
+      _hasOlderMessages = true;
     });
-    await _loadConversation(group);
+    await _loadCachedConversation(group);
+    await _loadConversation(group, reset: true);
+  }
+
+  String _conversationCacheNamespace(String groupId) => 'group_chat_$groupId';
+
+  Future<void> _loadCachedConversation(ChatGroup group) async {
+    final rows = await OfflineCacheService.readList(
+      _conversationCacheNamespace(group.id),
+    );
+    if (rows.isEmpty || !mounted || _selectedGroup?.id != group.id) return;
+    final cached = rows.map(GroupMessage.fromRow).toList()
+      ..sort((a, b) => a.createdAt.compareTo(b.createdAt));
+    setState(() {
+      _messages
+        ..clear()
+        ..addAll(cached);
+      _loadingMessages = false;
+      _oldestMessageCursor = cached.isEmpty ? null : cached.first.createdAt;
+    });
   }
 
   Future<void> _joinPublicGroup(ChatGroup group) async {
@@ -347,41 +445,60 @@ class _GroupChatsScreenState extends State<GroupChatsScreen>
     if (joined == true) await _joinPublicGroup(group);
   }
 
-  Future<void> _loadConversation(ChatGroup group) async {
+  Future<void> _loadConversation(
+    ChatGroup group, {
+    bool older = false,
+    bool reset = false,
+  }) async {
     if (!_isMember(group)) return;
-    setState(() => _loadingMessages = true);
+    if (reset && _messages.isEmpty) setState(() => _loadingMessages = true);
     try {
+      var messageQuery = _supabase
+          .from('group_messages')
+          .select(
+            'id, group_id, sender_id, text, message_type, attachment_url, '
+            'attachment_name, attachment_mime, reply_to_id, metadata, '
+            'is_edited, is_deleted, created_at, updated_at',
+          )
+          .eq('group_id', group.id);
+      final cursor = _oldestMessageCursor;
+      if (older && cursor != null) {
+        messageQuery = messageQuery.lt(
+          'created_at',
+          cursor.toUtc().toIso8601String(),
+        );
+      }
       final responses = await Future.wait<dynamic>(<Future<dynamic>>[
-        _supabase
-            .from('group_messages')
-            .select(
-              'id, group_id, sender_id, text, message_type, attachment_url, '
-              'attachment_name, attachment_mime, reply_to_id, metadata, '
-              'is_edited, is_deleted, created_at, updated_at',
-            )
-            .eq('group_id', group.id)
-            .order('created_at')
-            .limit(250),
+        messageQuery
+            .order('created_at', ascending: false)
+            .limit(_messagePageSize),
         _supabase
             .from('group_members')
             .select('group_id, user_id, role, joined_at, last_read_at, muted')
             .eq('group_id', group.id),
       ]);
-      final messageRows =
-          List<Map<String, dynamic>>.from(responses[0] as List<dynamic>);
-      final memberRows =
-          List<Map<String, dynamic>>.from(responses[1] as List<dynamic>);
-      final memberIds =
-          memberRows.map((row) => row['user_id'].toString()).toSet().toList();
+      final messageRows = List<Map<String, dynamic>>.from(
+        responses[0] as List<dynamic>,
+      );
+      final memberRows = List<Map<String, dynamic>>.from(
+        responses[1] as List<dynamic>,
+      );
+      final memberIds = memberRows
+          .map((row) => row['user_id'].toString())
+          .toSet()
+          .toList();
       await _loadProfiles(memberIds);
 
-      final messages = messageRows.map(GroupMessage.fromRow).toList();
-      await Future.wait(messages.map((message) async {
-        if (message.attachmentPath != null) {
-          message.attachmentUrl =
-              await _signedMediaUrl(message.attachmentPath!);
-        }
-      }));
+      final messages = messageRows.reversed.map(GroupMessage.fromRow).toList();
+      await Future.wait(
+        messages.map((message) async {
+          if (message.attachmentPath != null) {
+            message.attachmentUrl = await _signedMediaUrl(
+              message.attachmentPath!,
+            );
+          }
+        }),
+      );
       await _loadMessageExtras(messages);
       await _markRead(group.id);
 
@@ -390,11 +507,31 @@ class _GroupChatsScreenState extends State<GroupChatsScreen>
         ..addAll(memberIds.take(5));
       if (!mounted || _selectedGroup?.id != group.id) return;
       setState(() {
+        final merged = <GroupMessage>[
+          if (!reset || older) ..._messages,
+          ...messages,
+        ];
+        final byId = <String, GroupMessage>{
+          for (final message in merged) message.id: message,
+        };
+        final ordered = byId.values.toList()
+          ..sort((a, b) => a.createdAt.compareTo(b.createdAt));
         _messages
           ..clear()
-          ..addAll(messages);
+          ..addAll(ordered);
         _loadingMessages = false;
+        _hasOlderMessages = messageRows.length == _messagePageSize;
+        if (ordered.isNotEmpty) _oldestMessageCursor = ordered.first.createdAt;
       });
+      unawaited(
+        OfflineCacheService.writeList(
+          _conversationCacheNamespace(group.id),
+          _messages.map((message) => message.toCacheRow()),
+        ),
+      );
+      if (reset) {
+        WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToLatest());
+      }
       _subscribeToMessages(group.id);
     } catch (error) {
       if (!mounted) return;
@@ -403,19 +540,199 @@ class _GroupChatsScreenState extends State<GroupChatsScreen>
     }
   }
 
+  Future<void> _loadOlderMessages() async {
+    final group = _selectedGroup;
+    if (group == null || _loadingOlderMessages || !_hasOlderMessages) return;
+    final before = _conversationScrollController.hasClients
+        ? _conversationScrollController.position.maxScrollExtent
+        : 0.0;
+    setState(() => _loadingOlderMessages = true);
+    await _loadConversation(group, older: true);
+    if (!mounted) return;
+    setState(() => _loadingOlderMessages = false);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!_conversationScrollController.hasClients) return;
+      final delta =
+          _conversationScrollController.position.maxScrollExtent - before;
+      _conversationScrollController.jumpTo(
+        (_conversationScrollController.offset + delta)
+            .clamp(
+              _conversationScrollController.position.minScrollExtent,
+              _conversationScrollController.position.maxScrollExtent,
+            )
+            .toDouble(),
+      );
+    });
+  }
+
   Future<void> _loadProfiles(List<String> ids) async {
     final missing = ids.where((id) => !_profiles.containsKey(id)).toList();
     if (missing.isEmpty) return;
     final rows = List<Map<String, dynamic>>.from(
       await _supabase
-          .from('profiles')
-          .select('id, full_name, avatar_url, role')
-          .inFilter('id', missing) as List<dynamic>,
+              .from('profiles')
+              .select('id, nickname, photo_url, role')
+              .inFilter('id', missing)
+          as List<dynamic>,
     );
     for (final row in rows) {
       final profile = StudentProfile.fromRow(row);
       _profiles[profile.id] = profile;
     }
+  }
+
+  Future<void> _startGroupCall(String type) async {
+    final group = _selectedGroup;
+    final currentUser = _user;
+    if (group == null || currentUser == null || !_isMember(group)) return;
+    try {
+      final rows = List<Map<String, dynamic>>.from(
+        await _supabase
+                .from('group_members')
+                .select('user_id')
+                .eq('group_id', group.id)
+                .neq('user_id', currentUser.id)
+            as List<dynamic>,
+      );
+      final ids = rows.map((row) => row['user_id'].toString()).toList();
+      await _loadProfiles(ids);
+      if (!mounted) return;
+      if (ids.isEmpty) {
+        _showMessage('Invite another student to the group before calling.');
+        return;
+      }
+      final selected = <String>{};
+      final invitees = await showModalBottomSheet<List<String>>(
+        context: context,
+        isScrollControlled: true,
+        showDragHandle: true,
+        builder: (context) => StatefulBuilder(
+          builder: (context, setSheetState) => SafeArea(
+            child: SizedBox(
+              height: MediaQuery.sizeOf(context).height * .72,
+              child: Column(
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 4, 20, 14),
+                    child: Column(
+                      children: [
+                        Text(
+                          type == 'video'
+                              ? 'Start group video call'
+                              : 'Start group voice call',
+                          style: const TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                        const SizedBox(height: 5),
+                        const Text(
+                          'Choose up to four people. You make the fifth participant.',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(color: AppColors.textMuted),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Expanded(
+                    child: ListView.builder(
+                      itemCount: ids.length,
+                      itemBuilder: (_, index) {
+                        final id = ids[index];
+                        final profile =
+                            _profiles[id] ?? StudentProfile.fallback(id);
+                        final checked = selected.contains(id);
+                        return CheckboxListTile(
+                          value: checked,
+                          secondary: CircleAvatar(
+                            backgroundImage: profile.avatarUrl == null
+                                ? null
+                                : NetworkImage(profile.avatarUrl!),
+                            child: profile.avatarUrl == null
+                                ? Text(profile.displayName[0].toUpperCase())
+                                : null,
+                          ),
+                          title: Text(
+                            profile.displayName,
+                            style: const TextStyle(fontWeight: FontWeight.w800),
+                          ),
+                          subtitle: const Text('Group member'),
+                          onChanged: (value) {
+                            if (value == true && selected.length >= 4) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text(
+                                    'A group call supports up to five people.',
+                                  ),
+                                ),
+                              );
+                              return;
+                            }
+                            setSheetState(
+                              () => value == true
+                                  ? selected.add(id)
+                                  : selected.remove(id),
+                            );
+                          },
+                        );
+                      },
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.all(18),
+                    child: FilledButton.icon(
+                      onPressed: selected.isEmpty
+                          ? null
+                          : () => Navigator.pop(context, selected.toList()),
+                      icon: Icon(
+                        type == 'video'
+                            ? Icons.videocam_rounded
+                            : Icons.call_rounded,
+                      ),
+                      label: Text(
+                        'Call ${selected.length} ${selected.length == 1 ? 'person' : 'people'}',
+                      ),
+                      style: FilledButton.styleFrom(
+                        minimumSize: const Size.fromHeight(52),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+      if (invitees == null || invitees.isEmpty || !mounted) return;
+      _showMessage(
+        'Starting secure ${type == 'video' ? 'video' : 'voice'} call…',
+      );
+      final session = await GroupCallService.instance.startCall(
+        groupId: group.id,
+        groupName: group.name,
+        type: type,
+        inviteeIds: invitees,
+      );
+      if (!mounted) {
+        await session.leave(endForEveryone: true);
+        return;
+      }
+      await Navigator.of(context).push(
+        MaterialPageRoute<void>(
+          fullscreenDialog: true,
+          builder: (_) => GroupCallScreen(session: session),
+        ),
+      );
+    } catch (error) {
+      _showError('Unable to start group call', error);
+    }
+  }
+
+  void _scrollToLatest() {
+    if (!_conversationScrollController.hasClients) return;
+    _conversationScrollController.jumpTo(
+      _conversationScrollController.position.maxScrollExtent,
+    );
   }
 
   Future<void> _loadMessageExtras(List<GroupMessage> messages) async {
@@ -432,16 +749,18 @@ class _GroupChatsScreenState extends State<GroupChatsScreen>
           .inFilter('message_id', ids),
     ]);
     _reactions.clear();
-    for (final row
-        in List<Map<String, dynamic>>.from(responses[0] as List<dynamic>)) {
+    for (final row in List<Map<String, dynamic>>.from(
+      responses[0] as List<dynamic>,
+    )) {
       final reaction = MessageReaction.fromRow(row);
       _reactions
           .putIfAbsent(reaction.messageId, () => <MessageReaction>[])
           .add(reaction);
     }
     _pollVotes.clear();
-    for (final row
-        in List<Map<String, dynamic>>.from(responses[1] as List<dynamic>)) {
+    for (final row in List<Map<String, dynamic>>.from(
+      responses[1] as List<dynamic>,
+    )) {
       final vote = PollVote.fromRow(row);
       _pollVotes.putIfAbsent(vote.messageId, () => <PollVote>[]).add(vote);
     }
@@ -462,11 +781,25 @@ class _GroupChatsScreenState extends State<GroupChatsScreen>
           ),
           callback: (_) {
             final group = _selectedGroup;
-            if (group?.id == groupId) unawaited(_loadConversation(group!));
+            if (group?.id == groupId) {
+              unawaited(_refreshConversationForRealtime(group!));
+            }
             unawaited(_loadDashboard(showLoader: false));
           },
         )
         .subscribe();
+  }
+
+  Future<void> _refreshConversationForRealtime(ChatGroup group) async {
+    final wasNearLatest =
+        !_conversationScrollController.hasClients ||
+        _conversationScrollController.position.maxScrollExtent -
+                _conversationScrollController.offset <
+            180;
+    await _loadConversation(group);
+    if (wasNearLatest) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToLatest());
+    }
   }
 
   Future<void> _markRead(String groupId) async {
@@ -474,7 +807,9 @@ class _GroupChatsScreenState extends State<GroupChatsScreen>
     if (user == null) return;
     await _supabase
         .from('group_members')
-        .update(<String, dynamic>{'last_read_at': DateTime.now().toUtc().toIso8601String()})
+        .update(<String, dynamic>{
+          'last_read_at': DateTime.now().toUtc().toIso8601String(),
+        })
         .eq('group_id', groupId)
         .eq('user_id', user.id);
     final membership = _memberships[groupId];
@@ -502,6 +837,7 @@ class _GroupChatsScreenState extends State<GroupChatsScreen>
     String? attachmentMime,
     Map<String, dynamic>? metadata,
     bool queueOffline = false,
+    bool throwOnFailure = false,
   }) async {
     final user = _user;
     final group = _selectedGroup;
@@ -535,6 +871,7 @@ class _GroupChatsScreenState extends State<GroupChatsScreen>
         }
       } else {
         _showError('Unable to send message', error);
+        if (throwOnFailure) rethrow;
       }
     } finally {
       if (mounted) setState(() => _sending = false);
@@ -544,10 +881,12 @@ class _GroupChatsScreenState extends State<GroupChatsScreen>
   Future<void> _queueOfflineMessage(Map<String, dynamic> payload) async {
     final preferences = await SharedPreferences.getInstance();
     final queued = preferences.getStringList(_offlineQueueKey) ?? <String>[];
-    queued.add(jsonEncode(<String, dynamic>{
-      ...payload,
-      'queued_at': DateTime.now().toUtc().toIso8601String(),
-    }));
+    queued.add(
+      jsonEncode(<String, dynamic>{
+        ...payload,
+        'queued_at': DateTime.now().toUtc().toIso8601String(),
+      }),
+    );
     await preferences.setStringList(_offlineQueueKey, queued);
   }
 
@@ -559,9 +898,9 @@ class _GroupChatsScreenState extends State<GroupChatsScreen>
     final remaining = <String>[];
     for (final raw in queued) {
       try {
-        final payload =
-            Map<String, dynamic>.from(jsonDecode(raw) as Map<dynamic, dynamic>)
-              ..remove('queued_at');
+        final payload = Map<String, dynamic>.from(
+          jsonDecode(raw) as Map<dynamic, dynamic>,
+        )..remove('queued_at');
         await _supabase.from('group_messages').insert(payload);
       } catch (_) {
         remaining.add(raw);
@@ -580,9 +919,25 @@ class _GroupChatsScreenState extends State<GroupChatsScreen>
       withData: true,
       type: FileType.custom,
       allowedExtensions: <String>[
-        'jpg', 'jpeg', 'png', 'webp', 'gif',
-        'mp4', 'webm', 'mp3', 'm4a', 'wav', 'ogg',
-        'pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'txt',
+        'jpg',
+        'jpeg',
+        'png',
+        'webp',
+        'gif',
+        'mp4',
+        'webm',
+        'mp3',
+        'm4a',
+        'wav',
+        'ogg',
+        'pdf',
+        'doc',
+        'docx',
+        'xls',
+        'xlsx',
+        'ppt',
+        'pptx',
+        'txt',
       ],
     );
     if (result == null || result.files.isEmpty) return;
@@ -595,32 +950,180 @@ class _GroupChatsScreenState extends State<GroupChatsScreen>
       _showMessage('Files must be 25 MB or smaller.');
       return;
     }
+    final extension = file.extension?.toLowerCase() ?? 'bin';
+    await _uploadGroupAttachment(
+      _PendingGroupAttachment(
+        bytes: bytes,
+        name: file.name,
+        extension: extension,
+        type: _attachmentType(extension),
+        mime: _mimeType(extension),
+      ),
+    );
+  }
+
+  Future<void> _uploadGroupAttachment(
+    _PendingGroupAttachment attachment,
+  ) async {
+    final group = _selectedGroup;
+    final user = _user;
+    if (group == null || user == null) return;
+    setState(() {
+      _sending = true;
+      _failedAttachment = null;
+      _uploadStatus = 'Uploading ${attachment.name}…';
+    });
+    String? uploadedPath;
+    try {
+      final path =
+          '${group.id}/${user.id}/${DateTime.now().microsecondsSinceEpoch}.${attachment.extension}';
+      uploadedPath = path;
+      await _supabase.storage
+          .from('group-media')
+          .uploadBinary(
+            path,
+            attachment.bytes,
+            fileOptions: FileOptions(
+              contentType: attachment.mime,
+              upsert: false,
+            ),
+          );
+      if (mounted) setState(() => _uploadStatus = 'Sending attachment…');
+      await _sendMessage(
+        text: '',
+        messageType: attachment.type,
+        attachmentPath: path,
+        attachmentName: attachment.name,
+        attachmentMime: attachment.mime,
+        throwOnFailure: true,
+      );
+    } catch (error) {
+      unawaited(
+        DiagnosticsService.record(
+          'upload_failed_group_chat',
+          metadata: {'error_type': error.runtimeType.toString()},
+        ),
+      );
+      if (uploadedPath != null) {
+        try {
+          await _supabase.storage.from('group-media').remove(<String>[
+            uploadedPath,
+          ]);
+        } catch (_) {}
+      }
+      if (mounted) setState(() => _failedAttachment = attachment);
+      _showError('Unable to upload attachment', error);
+    } finally {
+      if (mounted) {
+        setState(() {
+          _sending = false;
+          _uploadStatus = null;
+        });
+      }
+    }
+  }
+
+  Future<void> _retryFailedAttachment() async {
+    final attachment = _failedAttachment;
+    if (attachment == null || _sending) return;
+    await _uploadGroupAttachment(attachment);
+  }
+
+  Future<void> _toggleVoiceRecording() async =>
+      _recording ? _finishVoiceRecording() : _startVoiceRecording();
+
+  Future<void> _startVoiceRecording() async {
+    if (_offline || !await _recorder.hasPermission()) {
+      _showMessage('Microphone and internet access are required.');
+      return;
+    }
+    _voiceChunks.clear();
+    _voiceLevels.clear();
+    try {
+      final stream = await _recorder.startStream(
+        const RecordConfig(
+          encoder: AudioEncoder.pcm16bits,
+          sampleRate: 16000,
+          numChannels: 1,
+          echoCancel: true,
+          noiseSuppress: true,
+        ),
+      );
+      _voiceStream = stream.listen(_voiceChunks.add);
+      _amplitudes = _recorder
+          .onAmplitudeChanged(const Duration(milliseconds: 140))
+          .listen((amplitude) {
+            if (!mounted) return;
+            setState(() {
+              _voiceLevels.add(((amplitude.current + 60) / 60).clamp(.08, 1));
+              if (_voiceLevels.length > 28) _voiceLevels.removeAt(0);
+            });
+          });
+      setState(() {
+        _recording = true;
+        _recordSeconds = 0;
+      });
+      _recordTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+        if (mounted) setState(() => _recordSeconds++);
+        if (_recordSeconds >= 120) unawaited(_finishVoiceRecording());
+      });
+    } catch (error) {
+      debugPrint('Group voice recorder failed: $error');
+      _showMessage('Voice recording is unavailable on this device.');
+    }
+  }
+
+  Future<void> _finishVoiceRecording() async {
+    _recordTimer?.cancel();
+    await _recorder.stop();
+    await Future<void>.delayed(const Duration(milliseconds: 120));
+    await _voiceStream?.cancel();
+    await _amplitudes?.cancel();
+    final pcm = Uint8List.fromList(
+      _voiceChunks.expand((chunk) => chunk).toList(),
+    );
+    final seconds = _recordSeconds;
+    if (mounted) setState(() => _recording = false);
+    if (pcm.isEmpty || seconds < 1) {
+      _showMessage('Voice note was too short.');
+      return;
+    }
+    final group = _selectedGroup;
+    final user = _user;
+    if (group == null || user == null) return;
+    final bytes = _groupPcm16ToWave(pcm, sampleRate: 16000, channels: 1);
+    final path =
+        '${group.id}/${user.id}/${DateTime.now().microsecondsSinceEpoch}.wav';
     setState(() => _sending = true);
     try {
-      final extension = file.extension?.toLowerCase() ?? 'bin';
-      final type = _attachmentType(extension);
-      final mime = _mimeType(extension);
-      final path =
-          '${group.id}/${user.id}/${DateTime.now().microsecondsSinceEpoch}.$extension';
       await _supabase.storage
           .from('group-media')
           .uploadBinary(
             path,
             bytes,
-            fileOptions: FileOptions(contentType: mime, upsert: false),
+            fileOptions: const FileOptions(contentType: 'audio/wav'),
           );
       await _sendMessage(
         text: '',
-        messageType: type,
+        messageType: 'audio',
         attachmentPath: path,
-        attachmentName: file.name,
-        attachmentMime: mime,
+        attachmentName: 'Voice note',
+        attachmentMime: 'audio/wav',
+        metadata: <String, dynamic>{'duration_seconds': seconds},
       );
     } catch (error) {
-      _showError('Unable to upload attachment', error);
+      _showError('Unable to send voice note', error);
     } finally {
       if (mounted) setState(() => _sending = false);
     }
+  }
+
+  Future<void> _cancelVoiceRecording() async {
+    _recordTimer?.cancel();
+    await _recorder.cancel();
+    await _voiceStream?.cancel();
+    await _amplitudes?.cancel();
+    if (mounted) setState(() => _recording = false);
   }
 
   String _attachmentType(String extension) {
@@ -696,8 +1199,9 @@ class _GroupChatsScreenState extends State<GroupChatsScreen>
                     padding: const EdgeInsets.only(top: 10),
                     child: TextField(
                       controller: options[index],
-                      decoration:
-                          InputDecoration(labelText: 'Option ${index + 1}'),
+                      decoration: InputDecoration(
+                        labelText: 'Option ${index + 1}',
+                      ),
                     ),
                   );
                 }),
@@ -752,14 +1256,11 @@ class _GroupChatsScreenState extends State<GroupChatsScreen>
     final user = _user;
     if (user == null) return;
     try {
-      await _supabase.from('group_poll_votes').upsert(
-        <String, dynamic>{
-          'message_id': message.id,
-          'user_id': user.id,
-          'option_index': optionIndex,
-        },
-        onConflict: 'message_id,user_id',
-      );
+      await _supabase.from('group_poll_votes').upsert(<String, dynamic>{
+        'message_id': message.id,
+        'user_id': user.id,
+        'option_index': optionIndex,
+      }, onConflict: 'message_id,user_id');
       await _loadMessageExtras(_messages);
       if (mounted) setState(() {});
     } catch (error) {
@@ -770,8 +1271,9 @@ class _GroupChatsScreenState extends State<GroupChatsScreen>
   Future<void> _toggleReaction(GroupMessage message, String emoji) async {
     final user = _user;
     if (user == null) return;
-    final existing = (_reactions[message.id] ?? <MessageReaction>[])
-        .any((item) => item.userId == user.id && item.emoji == emoji);
+    final existing = (_reactions[message.id] ?? <MessageReaction>[]).any(
+      (item) => item.userId == user.id && item.emoji == emoji,
+    );
     try {
       if (existing) {
         await _supabase
@@ -919,22 +1421,23 @@ class _GroupChatsScreenState extends State<GroupChatsScreen>
                 const SizedBox(height: 8),
                 Wrap(
                   spacing: 10,
-                  children: <String>[
-                    '#2457F5',
-                    '#7C3AED',
-                    '#0F9D7A',
-                    '#E45170',
-                    '#E2A500',
-                  ].map((value) {
-                    final color = _hexColor(value);
-                    return ChoiceChip(
-                      label: const SizedBox.shrink(),
-                      selected: accent == value,
-                      avatar: CircleAvatar(backgroundColor: color),
-                      onSelected: (_) =>
-                          setSheetState(() => accent = value),
-                    );
-                  }).toList(),
+                  children:
+                      <String>[
+                        '#2457F5',
+                        '#7C3AED',
+                        '#0F9D7A',
+                        '#E45170',
+                        '#E2A500',
+                      ].map((value) {
+                        final color = _hexColor(value);
+                        return ChoiceChip(
+                          label: const SizedBox.shrink(),
+                          selected: accent == value,
+                          avatar: CircleAvatar(backgroundColor: color),
+                          onSelected: (_) =>
+                              setSheetState(() => accent = value),
+                        );
+                      }).toList(),
                 ),
                 const SizedBox(height: 14),
                 Wrap(
@@ -1019,12 +1522,18 @@ class _GroupChatsScreenState extends State<GroupChatsScreen>
       final groupId = row['id'].toString();
       final assetUpdates = <String, dynamic>{};
       if (avatar?.bytes != null) {
-        assetUpdates['avatar_url'] =
-            await _uploadGroupImage(groupId, 'avatar', avatar!);
+        assetUpdates['avatar_url'] = await _uploadGroupImage(
+          groupId,
+          'avatar',
+          avatar!,
+        );
       }
       if (banner?.bytes != null) {
-        assetUpdates['banner_url'] =
-            await _uploadGroupImage(groupId, 'banner', banner!);
+        assetUpdates['banner_url'] = await _uploadGroupImage(
+          groupId,
+          'banner',
+          banner!,
+        );
       }
       if (assetUpdates.isNotEmpty) {
         await _supabase
@@ -1055,7 +1564,9 @@ class _GroupChatsScreenState extends State<GroupChatsScreen>
     final user = _user!;
     final extension = file.extension?.toLowerCase() ?? 'jpg';
     final path = '$groupId/${user.id}/$label.$extension';
-    await _supabase.storage.from('group-media').uploadBinary(
+    await _supabase.storage
+        .from('group-media')
+        .uploadBinary(
           path,
           file.bytes!,
           fileOptions: FileOptions(
@@ -1144,17 +1655,18 @@ class _GroupChatsScreenState extends State<GroupChatsScreen>
     try {
       final rows = List<Map<String, dynamic>>.from(
         await _supabase.rpc(
-          'create_group_invite',
-          params: <String, dynamic>{
-            'p_group_id': group.id,
-            'p_expires_hours': 168,
-          },
-        ) as List<dynamic>,
+              'create_group_invite',
+              params: <String, dynamic>{
+                'p_group_id': group.id,
+                'p_expires_hours': 168,
+              },
+            )
+            as List<dynamic>,
       );
       if (rows.isEmpty) return;
       final token = rows.first['invite_token'].toString();
       final link =
-          'https://og-vibes.vercel.app/?group_invite=${Uri.encodeQueryComponent(token)}';
+          'https://student.ogvibes.co.za/?group_invite=${Uri.encodeQueryComponent(token)}';
       if (!mounted) return;
       await showDialog<void>(
         context: context,
@@ -1210,9 +1722,8 @@ class _GroupChatsScreenState extends State<GroupChatsScreen>
               label: const Text('Copy'),
             ),
             FilledButton.icon(
-              onPressed: () => Share.share(
-                'Join ${group.name} on OG Vibes: $link',
-              ),
+              onPressed: () =>
+                  Share.share('Join ${group.name} on OG Vibes: $link'),
               icon: const Icon(Icons.share_outlined),
               label: const Text('Share'),
             ),
@@ -1231,10 +1742,13 @@ class _GroupChatsScreenState extends State<GroupChatsScreen>
     try {
       final rows = List<Map<String, dynamic>>.from(
         await _supabase
-            .from('group_members')
-            .select('group_id, user_id, role, joined_at, last_read_at, muted')
-            .eq('group_id', group.id)
-            .order('joined_at') as List<dynamic>,
+                .from('group_members')
+                .select(
+                  'group_id, user_id, role, joined_at, last_read_at, muted',
+                )
+                .eq('group_id', group.id)
+                .order('joined_at')
+            as List<dynamic>,
       );
       members = rows.map(GroupMembership.fromRow).toList();
       await _loadProfiles(members.map((item) => item.userId).toList());
@@ -1300,6 +1814,14 @@ class _GroupChatsScreenState extends State<GroupChatsScreen>
                     label: const Text('Invite'),
                   ),
                 OutlinedButton.icon(
+                  onPressed: () {
+                    Navigator.pop(context);
+                    _showSharedContent(group);
+                  },
+                  icon: const Icon(Icons.perm_media_outlined),
+                  label: const Text('Shared files'),
+                ),
+                OutlinedButton.icon(
                   onPressed: () => _toggleMute(group),
                   icon: Icon(
                     (_memberships[group.id]?.muted ?? false)
@@ -1333,7 +1855,8 @@ class _GroupChatsScreenState extends State<GroupChatsScreen>
             ),
             const SizedBox(height: 8),
             ...members.map((member) {
-              final profile = _profiles[member.userId] ??
+              final profile =
+                  _profiles[member.userId] ??
                   StudentProfile.fallback(member.userId);
               return ListTile(
                 contentPadding: EdgeInsets.zero,
@@ -1343,6 +1866,8 @@ class _GroupChatsScreenState extends State<GroupChatsScreen>
                   style: const TextStyle(fontWeight: FontWeight.w800),
                 ),
                 subtitle: Text(member.roleLabel),
+                onTap: () =>
+                    StudentProfileNavigator.open(context, member.userId),
                 trailing: _isManager(group) && member.role != 'creator'
                     ? PopupMenuButton<String>(
                         onSelected: (role) =>
@@ -1356,15 +1881,85 @@ class _GroupChatsScreenState extends State<GroupChatsScreen>
                             value: 'moderator',
                             child: Text('Moderator'),
                           ),
-                          PopupMenuItem(
-                            value: 'admin',
-                            child: Text('Admin'),
-                          ),
+                          PopupMenuItem(value: 'admin', child: Text('Admin')),
                         ],
                       )
                     : _RoleBadge(role: member.role),
               );
             }),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _showSharedContent(ChatGroup group) async {
+    final items = _messages
+        .where(
+          (message) =>
+              message.attachmentUrl != null || message.messageType == 'link',
+        )
+        .toList();
+    if (!mounted) return;
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (context) => DraggableScrollableSheet(
+        expand: false,
+        initialChildSize: .72,
+        maxChildSize: .92,
+        builder: (context, controller) => Column(
+          children: [
+            ListTile(
+              leading: const Icon(Icons.perm_media_rounded),
+              title: Text('${group.name} files'),
+              subtitle: Text(
+                '${items.length} shared item${items.length == 1 ? '' : 's'}',
+              ),
+            ),
+            const Divider(height: 1),
+            Expanded(
+              child: items.isEmpty
+                  ? const _EmptyState(
+                      icon: Icons.folder_open_rounded,
+                      title: 'Nothing shared yet',
+                      subtitle:
+                          'Photos, videos, voice notes, documents and links will appear here.',
+                    )
+                  : ListView.separated(
+                      controller: controller,
+                      padding: const EdgeInsets.fromLTRB(16, 12, 16, 28),
+                      itemCount: items.length,
+                      separatorBuilder: (_, _) => const Divider(),
+                      itemBuilder: (_, index) {
+                        final message = items[index];
+                        final sender =
+                            _profiles[message.senderId] ??
+                            StudentProfile.fallback(message.senderId);
+                        return ListTile(
+                          leading: Icon(switch (message.messageType) {
+                            'image' => Icons.image_outlined,
+                            'video' => Icons.play_circle_outline_rounded,
+                            'audio' => Icons.graphic_eq_rounded,
+                            'link' => Icons.link_rounded,
+                            _ => Icons.description_outlined,
+                          }),
+                          title: Text(
+                            message.attachmentName ?? message.preview,
+                          ),
+                          subtitle: Text(
+                            '${sender.displayName} • ${_relativeTime(message.createdAt)}',
+                          ),
+                          trailing: const Icon(
+                            Icons.open_in_new_rounded,
+                            size: 18,
+                          ),
+                          onTap: () => _openAttachment(message),
+                        );
+                      },
+                    ),
+            ),
           ],
         ),
       ),
@@ -1454,8 +2049,10 @@ class _GroupChatsScreenState extends State<GroupChatsScreen>
               ),
             if (message.senderId == _user?.id || _isManager(group))
               ListTile(
-                leading:
-                    const Icon(Icons.delete_outline, color: AppColors.danger),
+                leading: const Icon(
+                  Icons.delete_outline,
+                  color: AppColors.danger,
+                ),
                 title: const Text(
                   'Remove message',
                   style: TextStyle(color: AppColors.danger),
@@ -1612,7 +2209,7 @@ class _GroupChatsScreenState extends State<GroupChatsScreen>
         title: Text(
           !desktop && _mobileChatOpen && _selectedGroup != null
               ? _selectedGroup!.name
-              : 'Group Chats',
+              : 'Module & group chats',
           style: const TextStyle(fontWeight: FontWeight.w900),
         ),
         actions: <Widget>[
@@ -1641,12 +2238,12 @@ class _GroupChatsScreenState extends State<GroupChatsScreen>
               child: CircularProgressIndicator(color: AppColors.vibeBlue),
             )
           : _error != null
-              ? _buildError()
-              : desktop
-                  ? _buildDesktop()
-                  : _mobileChatOpen && _selectedGroup != null
-                      ? _buildConversation()
-                      : _buildGroupDirectory(),
+          ? _buildError()
+          : desktop
+          ? _buildDesktop()
+          : _mobileChatOpen && _selectedGroup != null
+          ? _buildConversation()
+          : _buildGroupDirectory(),
     );
   }
 
@@ -1668,35 +2265,72 @@ class _GroupChatsScreenState extends State<GroupChatsScreen>
   }
 
   Widget _buildGroupDirectory({bool compact = false}) {
+    if (!compact) return _buildScrollableGroupDirectory();
     return Column(
       children: <Widget>[
-        if (!compact) _buildHero(),
-        if (!compact) const SizedBox(height: 16),
-        _buildSearchAndTabs(compact: compact),
-        if (_offline)
-          Container(
-            width: double.infinity,
-            margin: const EdgeInsets.fromLTRB(14, 8, 14, 0),
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
-            decoration: BoxDecoration(
-              color: AppColors.warning.withValues(alpha: .12),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: const Row(
-              children: <Widget>[
-                Icon(Icons.cloud_off_outlined, size: 17),
-                SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    'Offline — text messages will be queued.',
-                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800),
-                  ),
-                ),
-              ],
-            ),
-          ),
+        _buildSearchAndTabs(compact: true),
+        if (_offline) _buildOfflineBanner(),
         Expanded(child: _buildGroupList()),
       ],
+    );
+  }
+
+  Widget _buildScrollableGroupDirectory() {
+    final groups = _filteredGroups;
+    return RefreshIndicator(
+      onRefresh: () => _loadDashboard(showLoader: false),
+      child: ListView(
+        physics: const AlwaysScrollableScrollPhysics(
+          parent: BouncingScrollPhysics(),
+        ),
+        padding: const EdgeInsets.only(bottom: 28),
+        children: <Widget>[
+          _buildHero(),
+          const SizedBox(height: 16),
+          _buildSearchAndTabs(compact: false),
+          if (_offline) _buildOfflineBanner(),
+          if (groups.isEmpty)
+            SizedBox(height: 320, child: _buildGroupEmptyState())
+          else
+            Padding(
+              padding: const EdgeInsets.fromLTRB(14, 14, 14, 0),
+              child: Column(
+                children: List<Widget>.generate(groups.length, (index) {
+                  return Padding(
+                    padding: EdgeInsets.only(
+                      bottom: index == groups.length - 1 ? 0 : 10,
+                    ),
+                    child: _buildGroupCard(groups[index], index),
+                  );
+                }),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildOfflineBanner() {
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.fromLTRB(14, 8, 14, 0),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+      decoration: BoxDecoration(
+        color: AppColors.warning.withValues(alpha: .12),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: const Row(
+        children: <Widget>[
+          Icon(Icons.cloud_off_outlined, size: 17),
+          SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              'Offline — text messages will be queued.',
+              style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800),
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -1787,7 +2421,7 @@ class _GroupChatsScreenState extends State<GroupChatsScreen>
                     )
                   : null,
               filled: true,
-              fillColor: const Color(0xFFF3F6FC),
+              fillColor: AppColors.canvas,
               border: OutlineInputBorder(
                 borderRadius: AppStyles.controlRadius,
                 borderSide: BorderSide.none,
@@ -1820,20 +2454,7 @@ class _GroupChatsScreenState extends State<GroupChatsScreen>
   Widget _buildGroupList() {
     final groups = _filteredGroups;
     if (groups.isEmpty) {
-      return _EmptyState(
-        icon: Icons.groups_2_outlined,
-        title: _search.isEmpty ? 'No groups here yet' : 'No matching groups',
-        subtitle: _search.isEmpty
-            ? 'Create a group or join a private group with an invitation.'
-            : 'Try a different group, member, or message search.',
-        action: _search.isEmpty
-            ? FilledButton.icon(
-                onPressed: _showCreateGroup,
-                icon: const Icon(Icons.add),
-                label: const Text('Create group'),
-              )
-            : null,
-      );
+      return _buildGroupEmptyState();
     }
     return RefreshIndicator(
       onRefresh: () => _loadDashboard(showLoader: false),
@@ -1842,18 +2463,38 @@ class _GroupChatsScreenState extends State<GroupChatsScreen>
         itemCount: groups.length,
         separatorBuilder: (_, _) => const SizedBox(height: 10),
         itemBuilder: (_, index) {
-          final group = groups[index];
-          return _GroupCard(
-            group: group,
-            joined: _isMember(group),
-            selected: _selectedGroup?.id == group.id,
-            muted: _memberships[group.id]?.muted ?? false,
-            profiles: _profiles,
-            onTap: () => _selectGroup(group),
-          ).animate(delay: (index * 35).ms).fadeIn().slideX(begin: .04, end: 0);
+          return _buildGroupCard(groups[index], index);
         },
       ),
     );
+  }
+
+  Widget _buildGroupEmptyState() {
+    return _EmptyState(
+      icon: Icons.groups_2_outlined,
+      title: _search.isEmpty ? 'No groups here yet' : 'No matching groups',
+      subtitle: _search.isEmpty
+          ? 'Create a group or join a private group with an invitation.'
+          : 'Try a different group, member, or message search.',
+      action: _search.isEmpty
+          ? FilledButton.icon(
+              onPressed: _showCreateGroup,
+              icon: const Icon(Icons.add),
+              label: const Text('Create group'),
+            )
+          : null,
+    );
+  }
+
+  Widget _buildGroupCard(ChatGroup group, int index) {
+    return _GroupCard(
+      group: group,
+      joined: _isMember(group),
+      selected: _selectedGroup?.id == group.id,
+      muted: _memberships[group.id]?.muted ?? false,
+      profiles: _profiles,
+      onTap: () => _selectGroup(group),
+    ).animate(delay: (index * 35).ms).fadeIn().slideX(begin: .04, end: 0);
   }
 
   Widget _buildConversationPlaceholder() {
@@ -1878,44 +2519,58 @@ class _GroupChatsScreenState extends State<GroupChatsScreen>
             child: _loadingMessages
                 ? const Center(child: CircularProgressIndicator())
                 : _messages.isEmpty
-                    ? const _EmptyState(
-                        icon: Icons.waving_hand_outlined,
-                        title: 'Start the conversation',
-                        subtitle:
-                            'Be the first person to share something useful.',
-                      )
-                    : ListView.builder(
-                        reverse: true,
-                        padding: const EdgeInsets.fromLTRB(14, 18, 14, 12),
-                        itemCount: _messages.length,
-                        itemBuilder: (_, reverseIndex) {
-                          final index = _messages.length - 1 - reverseIndex;
-                          final message = _messages[index];
-                          final reply = message.replyToId == null
-                              ? null
-                              : _messages.cast<GroupMessage?>().firstWhere(
-                                    (item) => item?.id == message.replyToId,
-                                    orElse: () => null,
-                                  );
-                          return _MessageBubble(
-                            message: message,
-                            reply: reply,
-                            profile: _profiles[message.senderId] ??
-                                StudentProfile.fallback(message.senderId),
-                            mine: message.senderId == _user?.id,
-                            reactions:
-                                _reactions[message.id] ?? <MessageReaction>[],
-                            votes: _pollVotes[message.id] ?? <PollVote>[],
-                            currentUserId: _user?.id ?? '',
-                            onLongPress: () => _showMessageActions(message),
-                            onReact: (emoji) =>
-                                _toggleReaction(message, emoji),
-                            onVote: (index) => _vote(message, index),
-                            onOpenAttachment: () =>
-                                _openAttachment(message),
-                          );
-                        },
-                      ),
+                ? const _EmptyState(
+                    icon: Icons.waving_hand_outlined,
+                    title: 'Start the conversation',
+                    subtitle: 'Be the first person to share something useful.',
+                  )
+                : ListView.builder(
+                    controller: _conversationScrollController,
+                    padding: const EdgeInsets.fromLTRB(14, 18, 14, 12),
+                    itemCount:
+                        _messages.length +
+                        (_hasOlderMessages || _loadingOlderMessages ? 1 : 0),
+                    itemBuilder: (_, index) {
+                      if ((_hasOlderMessages || _loadingOlderMessages) &&
+                          index == 0) {
+                        return OgLoadOlderButton(
+                          onPressed: _loadOlderMessages,
+                          loading: _loadingOlderMessages,
+                          label: 'Load older messages',
+                        );
+                      }
+                      final messageIndex =
+                          index -
+                          (_hasOlderMessages || _loadingOlderMessages ? 1 : 0);
+                      final message = _messages[messageIndex];
+                      final reply = message.replyToId == null
+                          ? null
+                          : _messages.cast<GroupMessage?>().firstWhere(
+                              (item) => item?.id == message.replyToId,
+                              orElse: () => null,
+                            );
+                      return _MessageBubble(
+                        message: message,
+                        reply: reply,
+                        profile:
+                            _profiles[message.senderId] ??
+                            StudentProfile.fallback(message.senderId),
+                        mine: message.senderId == _user?.id,
+                        reactions:
+                            _reactions[message.id] ?? <MessageReaction>[],
+                        votes: _pollVotes[message.id] ?? <PollVote>[],
+                        currentUserId: _user?.id ?? '',
+                        onOpenProfile: () => StudentProfileNavigator.open(
+                          context,
+                          message.senderId,
+                        ),
+                        onLongPress: () => _showMessageActions(message),
+                        onReact: (emoji) => _toggleReaction(message, emoji),
+                        onVote: (index) => _vote(message, index),
+                        onOpenAttachment: () => _openAttachment(message),
+                      );
+                    },
+                  ),
           ),
           _buildComposer(group),
         ],
@@ -1962,12 +2617,42 @@ class _GroupChatsScreenState extends State<GroupChatsScreen>
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
-                    color:
-                        group.bannerUrl == null ? AppColors.midnightInk : Colors.white,
+                    color: group.bannerUrl == null
+                        ? AppColors.midnightInk
+                        : Colors.white,
                     fontSize: 17,
                     fontWeight: FontWeight.w900,
                   ),
                 ),
+                if (group.isOfficialModule) ...[
+                  const SizedBox(height: 5),
+                  Row(
+                    children: [
+                      Icon(
+                        Icons.verified_rounded,
+                        size: 15,
+                        color: group.bannerUrl == null
+                            ? AppColors.vibeBlue
+                            : AppColors.electricCyan,
+                      ),
+                      const SizedBox(width: 5),
+                      Flexible(
+                        child: Text(
+                          '${group.moduleCode?.isNotEmpty == true ? '${group.moduleCode} • ' : ''}Official module group',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            color: group.bannerUrl == null
+                                ? AppColors.vibeBlue
+                                : Colors.white,
+                            fontSize: 10,
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
                 const SizedBox(height: 3),
                 Text(
                   '${group.memberCount} members • ${group.visibilityLabel}',
@@ -1981,6 +2666,18 @@ class _GroupChatsScreenState extends State<GroupChatsScreen>
                 ),
               ],
             ),
+          ),
+          IconButton(
+            tooltip: 'Group voice call',
+            onPressed: () => _startGroupCall('audio'),
+            icon: const Icon(Icons.call_rounded),
+            color: group.bannerUrl == null ? AppColors.vibeBlue : Colors.white,
+          ),
+          IconButton(
+            tooltip: 'Group video call',
+            onPressed: () => _startGroupCall('video'),
+            icon: const Icon(Icons.videocam_rounded),
+            color: group.bannerUrl == null ? AppColors.vibeBlue : Colors.white,
           ),
           IconButton.filledTonal(
             onPressed: _showGroupInfo,
@@ -2000,6 +2697,98 @@ class _GroupChatsScreenState extends State<GroupChatsScreen>
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: <Widget>[
+          if (_uploadStatus != null)
+            Semantics(
+              liveRegion: true,
+              label: _uploadStatus,
+              child: Container(
+                margin: const EdgeInsets.only(bottom: 8),
+                padding: const EdgeInsets.fromLTRB(12, 10, 12, 8),
+                decoration: BoxDecoration(
+                  color: AppColors.blueTint,
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    Text(
+                      _uploadStatus!,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: AppColors.vibeBlue,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    const SizedBox(height: 7),
+                    const LinearProgressIndicator(minHeight: 3),
+                  ],
+                ),
+              ),
+            ),
+          if (_failedAttachment != null)
+            Container(
+              margin: const EdgeInsets.only(bottom: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              decoration: BoxDecoration(
+                color: AppColors.dangerSurface,
+                borderRadius: BorderRadius.circular(14),
+              ),
+              child: Row(
+                children: <Widget>[
+                  const Icon(Icons.cloud_off_rounded, color: AppColors.danger),
+                  const SizedBox(width: 9),
+                  Expanded(
+                    child: Text(
+                      '${_failedAttachment!.name} was not sent',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontWeight: FontWeight.w800),
+                    ),
+                  ),
+                  TextButton.icon(
+                    onPressed: _retryFailedAttachment,
+                    icon: const Icon(Icons.refresh_rounded, size: 18),
+                    label: const Text('Retry'),
+                  ),
+                ],
+              ),
+            ),
+          if (_recording)
+            Container(
+              margin: const EdgeInsets.only(bottom: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+              decoration: BoxDecoration(
+                color: AppColors.danger.withValues(alpha: .08),
+                borderRadius: BorderRadius.circular(18),
+              ),
+              child: Row(
+                children: [
+                  IconButton(
+                    tooltip: 'Delete voice note',
+                    onPressed: _cancelVoiceRecording,
+                    icon: const Icon(
+                      Icons.delete_outline_rounded,
+                      color: AppColors.danger,
+                    ),
+                  ),
+                  const Icon(Icons.circle, size: 9, color: AppColors.danger),
+                  const SizedBox(width: 7),
+                  Text(
+                    _groupDuration(_recordSeconds),
+                    style: const TextStyle(fontWeight: FontWeight.w900),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(child: _RecordingWave(values: _voiceLevels)),
+                  IconButton.filled(
+                    tooltip: 'Send voice note',
+                    onPressed: _finishVoiceRecording,
+                    icon: const Icon(Icons.send_rounded),
+                  ),
+                ],
+              ),
+            ),
           if (_replyingTo != null)
             Container(
               margin: const EdgeInsets.only(bottom: 8),
@@ -2027,80 +2816,94 @@ class _GroupChatsScreenState extends State<GroupChatsScreen>
                 ],
               ),
             ),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: <Widget>[
-              PopupMenuButton<String>(
-                tooltip: 'Add to message',
-                icon: const Icon(Icons.add_circle_outline_rounded),
-                onSelected: (value) {
-                  if (value == 'file') unawaited(_pickAndSendAttachment());
-                  if (value == 'poll') unawaited(_showCreatePoll());
-                },
-                itemBuilder: (_) => const <PopupMenuEntry<String>>[
-                  PopupMenuItem(
-                    value: 'file',
-                    child: ListTile(
-                      leading: Icon(Icons.attach_file_rounded),
-                      title: Text('Media or document'),
+          if (!_recording)
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: <Widget>[
+                PopupMenuButton<String>(
+                  tooltip: 'Add to message',
+                  icon: const Icon(Icons.add_circle_outline_rounded),
+                  onSelected: (value) {
+                    if (value == 'file') unawaited(_pickAndSendAttachment());
+                    if (value == 'poll') unawaited(_showCreatePoll());
+                  },
+                  itemBuilder: (_) => const <PopupMenuEntry<String>>[
+                    PopupMenuItem(
+                      value: 'file',
+                      child: ListTile(
+                        leading: Icon(Icons.attach_file_rounded),
+                        title: Text('Media or document'),
+                      ),
                     ),
-                  ),
-                  PopupMenuItem(
-                    value: 'poll',
-                    child: ListTile(
-                      leading: Icon(Icons.poll_outlined),
-                      title: Text('Poll'),
+                    PopupMenuItem(
+                      value: 'poll',
+                      child: ListTile(
+                        leading: Icon(Icons.poll_outlined),
+                        title: Text('Poll'),
+                      ),
                     ),
-                  ),
-                ],
-              ),
-              Expanded(
-                child: TextField(
-                  controller: _messageController,
-                  minLines: 1,
-                  maxLines: 5,
-                  textInputAction: TextInputAction.newline,
-                  decoration: InputDecoration(
-                    hintText: 'Message ${group.name}…',
-                    filled: true,
-                    fillColor: const Color(0xFFF2F5FA),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(22),
-                      borderSide: BorderSide.none,
-                    ),
-                    contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 11,
+                  ],
+                ),
+                Expanded(
+                  child: TextField(
+                    controller: _messageController,
+                    minLines: 1,
+                    maxLines: 5,
+                    textInputAction: TextInputAction.newline,
+                    decoration: InputDecoration(
+                      hintText: 'Message ${group.name}…',
+                      filled: true,
+                      fillColor: AppColors.surfaceMuted,
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(22),
+                        borderSide: BorderSide.none,
+                      ),
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 11,
+                      ),
                     ),
                   ),
                 ),
-              ),
-              const SizedBox(width: 7),
-              IconButton.filled(
-                onPressed: _sending ? null : _sendText,
-                style: IconButton.styleFrom(
-                  backgroundColor: group.accentColor,
-                  foregroundColor: Colors.white,
-                ),
-                icon: _sending
-                    ? const SizedBox.square(
-                        dimension: 18,
-                        child: CircularProgressIndicator(
-                          color: Colors.white,
-                          strokeWidth: 2,
+                const SizedBox(width: 7),
+                IconButton.filled(
+                  onPressed: _sending
+                      ? null
+                      : (_messageController.text.trim().isEmpty
+                            ? _toggleVoiceRecording
+                            : _sendText),
+                  style: IconButton.styleFrom(
+                    backgroundColor: group.accentColor,
+                    foregroundColor: Colors.white,
+                  ),
+                  icon: _sending
+                      ? const SizedBox.square(
+                          dimension: 18,
+                          child: CircularProgressIndicator(
+                            color: Colors.white,
+                            strokeWidth: 2,
+                          ),
+                        )
+                      : Icon(
+                          _messageController.text.trim().isEmpty
+                              ? Icons.mic_rounded
+                              : Icons.send_rounded,
                         ),
-                      )
-                    : const Icon(Icons.send_rounded),
-              ),
-            ],
-          ),
+                ),
+              ],
+            ),
         ],
       ),
     );
   }
 
   Future<void> _openAttachment(GroupMessage message) async {
-    final url = message.attachmentUrl;
+    final url = message.messageType == 'link'
+        ? RegExp(
+            r'https?://\S+',
+            caseSensitive: false,
+          ).firstMatch(message.text)?.group(0)
+        : message.attachmentUrl;
     if (url == null) return;
     final uri = Uri.tryParse(url);
     if (uri != null) {
@@ -2111,7 +2914,7 @@ class _GroupChatsScreenState extends State<GroupChatsScreen>
   Widget _buildError() {
     return _EmptyState(
       icon: Icons.cloud_off_outlined,
-      title: 'Group Chats could not load',
+      title: 'Group chats could not load',
       subtitle: _error!,
       action: FilledButton.icon(
         onPressed: _loadDashboard,
@@ -2123,16 +2926,16 @@ class _GroupChatsScreenState extends State<GroupChatsScreen>
 
   void _showMessage(String message) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message)),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
   }
 
   void _showError(String title, Object error) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('$title: ${_friendlyError(error)}')),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text('$title: ${_friendlyError(error)}')));
   }
 
   static String _friendlyError(Object error) {
@@ -2143,7 +2946,10 @@ class _GroupChatsScreenState extends State<GroupChatsScreen>
     if (text.contains('row-level security')) {
       return 'You do not have permission for this action.';
     }
-    return text.replaceFirst('PostgrestException(message: ', '').split(',').first;
+    return text
+        .replaceFirst('PostgrestException(message: ', '')
+        .split(',')
+        .first;
   }
 
   static bool _looksLikeLink(String text) =>
@@ -2174,17 +2980,14 @@ class _GlassPanel extends StatelessWidget {
       ),
       child: ClipRRect(
         borderRadius: AppStyles.bentoRadius,
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
-          child: Container(
-            padding: padding,
-            decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: .78),
-              borderRadius: AppStyles.bentoRadius,
-              border: Border.all(color: Colors.white.withValues(alpha: .86)),
-            ),
-            child: child,
+        child: Container(
+          padding: padding,
+          decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: .94),
+            borderRadius: AppStyles.bentoRadius,
+            border: Border.all(color: AppColors.glassBorder),
           ),
+          child: child,
         ),
       ),
     );
@@ -2285,8 +3088,8 @@ class _GroupCard extends StatelessWidget {
                     Text(
                       joined
                           ? (group.lastMessage.isEmpty
-                              ? 'No messages yet'
-                              : group.lastMessage)
+                                ? 'No messages yet'
+                                : '${group.lastSenderName}: ${group.lastMessage}')
                           : group.description,
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
@@ -2347,6 +3150,7 @@ class _MessageBubble extends StatelessWidget {
     required this.reactions,
     required this.votes,
     required this.currentUserId,
+    required this.onOpenProfile,
     required this.onLongPress,
     required this.onReact,
     required this.onVote,
@@ -2360,6 +3164,7 @@ class _MessageBubble extends StatelessWidget {
   final List<MessageReaction> reactions;
   final List<PollVote> votes;
   final String currentUserId;
+  final VoidCallback onOpenProfile;
   final VoidCallback onLongPress;
   final ValueChanged<String> onReact;
   final ValueChanged<int> onVote;
@@ -2401,23 +3206,31 @@ class _MessageBubble extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.end,
               children: <Widget>[
                 if (!mine) ...<Widget>[
-                  _ProfileAvatar(profile: profile, radius: 15),
+                  InkWell(
+                    customBorder: const CircleBorder(),
+                    onTap: onOpenProfile,
+                    child: _ProfileAvatar(profile: profile, radius: 15),
+                  ),
                   const SizedBox(width: 7),
                 ],
                 Flexible(
                   child: Column(
-                    crossAxisAlignment:
-                        mine ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+                    crossAxisAlignment: mine
+                        ? CrossAxisAlignment.end
+                        : CrossAxisAlignment.start,
                     children: <Widget>[
                       if (!mine)
                         Padding(
                           padding: const EdgeInsets.only(left: 4, bottom: 4),
-                          child: Text(
-                            profile.displayName,
-                            style: const TextStyle(
-                              color: AppColors.textMuted,
-                              fontSize: 10,
-                              fontWeight: FontWeight.w800,
+                          child: InkWell(
+                            onTap: onOpenProfile,
+                            child: Text(
+                              profile.displayName,
+                              style: const TextStyle(
+                                color: AppColors.textMuted,
+                                fontSize: 10,
+                                fontWeight: FontWeight.w800,
+                              ),
                             ),
                           ),
                         ),
@@ -2426,7 +3239,7 @@ class _MessageBubble extends StatelessWidget {
                         decoration: BoxDecoration(
                           color: mine
                               ? AppColors.vibeBlue
-                              : const Color(0xFFF0F3F8),
+                              : AppColors.surfaceSoft,
                           borderRadius: BorderRadius.only(
                             topLeft: const Radius.circular(18),
                             topRight: const Radius.circular(18),
@@ -2468,12 +3281,19 @@ class _MessageBubble extends StatelessWidget {
                               onVote: onVote,
                               onOpenAttachment: onOpenAttachment,
                             ),
+                            if (message.messageType == 'document' && message.text.trim().isNotEmpty)
+                              Padding(padding: const EdgeInsets.only(top: 8), child: SelectableText(
+                                message.text,
+                                style: TextStyle(color: mine ? Colors.white : AppColors.midnightInk),
+                              )),
                             const SizedBox(height: 6),
                             Text(
                               _relativeTime(message.createdAt) +
                                   (message.isEdited ? ' • edited' : ''),
                               style: TextStyle(
-                                color: mine ? Colors.white60 : AppColors.textMuted,
+                                color: mine
+                                    ? Colors.white60
+                                    : AppColors.textMuted,
                                 fontSize: 9,
                               ),
                             ),
@@ -2501,8 +3321,9 @@ class _MessageBubble extends StatelessWidget {
                                   ),
                                   decoration: BoxDecoration(
                                     color: mineReaction
-                                        ? AppColors.vibeBlue
-                                            .withValues(alpha: .14)
+                                        ? AppColors.vibeBlue.withValues(
+                                            alpha: .14,
+                                          )
                                         : Colors.white,
                                     borderRadius: AppStyles.pillRadius,
                                     border: Border.all(
@@ -2580,8 +3401,9 @@ class _MessageContent extends StatelessWidget {
           ),
           const SizedBox(height: 10),
           ...List<Widget>.generate(options.length, (index) {
-            final count =
-                votes.where((vote) => vote.optionIndex == index).length;
+            final count = votes
+                .where((vote) => vote.optionIndex == index)
+                .length;
             final selected = myVote == index;
             return Padding(
               padding: const EdgeInsets.only(bottom: 6),
@@ -2589,11 +3411,15 @@ class _MessageContent extends StatelessWidget {
                 onTap: () => onVote(index),
                 borderRadius: BorderRadius.circular(10),
                 child: Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 8,
+                  ),
                   decoration: BoxDecoration(
                     color: selected
-                        ? (mine ? Colors.white24 : AppColors.vibeBlue.withValues(alpha: .12))
+                        ? (mine
+                              ? Colors.white24
+                              : AppColors.vibeBlue.withValues(alpha: .12))
                         : (mine ? Colors.white10 : Colors.white),
                     borderRadius: BorderRadius.circular(10),
                   ),
@@ -2631,16 +3457,13 @@ class _MessageContent extends StatelessWidget {
             width: 260,
             height: 180,
             fit: BoxFit.cover,
-            errorBuilder: (_, _, _) => _AttachmentFallback(
-              message: message,
-              mine: mine,
-            ),
+            errorBuilder: (_, _, _) =>
+                _AttachmentFallback(message: message, mine: mine),
           ),
         ),
       );
     }
-    if (<String>['video', 'audio', 'document']
-        .contains(message.messageType)) {
+    if (<String>['video', 'audio', 'document'].contains(message.messageType)) {
       return InkWell(
         onTap: onOpenAttachment,
         borderRadius: BorderRadius.circular(11),
@@ -2650,39 +3473,84 @@ class _MessageContent extends StatelessWidget {
             color: mine ? Colors.white12 : Colors.white,
             borderRadius: BorderRadius.circular(11),
           ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: <Widget>[
-              Icon(
-                message.messageType == 'audio'
-                    ? Icons.graphic_eq_rounded
-                    : message.messageType == 'video'
-                        ? Icons.play_circle_outline_rounded
-                        : Icons.description_outlined,
-                color: textColor,
-              ),
-              const SizedBox(width: 9),
-              Flexible(
-                child: Text(
-                  message.attachmentName ?? message.messageType,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    color: textColor,
-                    fontWeight: FontWeight.w800,
-                  ),
+          child: message.messageType == 'audio'
+              ? Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: <Widget>[
+                    Icon(
+                      Icons.play_circle_fill_rounded,
+                      color: textColor,
+                      size: 32,
+                    ),
+                    const SizedBox(width: 9),
+                    SizedBox(
+                      width: 118,
+                      child: _RecordingWave(
+                        values: const [
+                          .25,
+                          .55,
+                          .38,
+                          .82,
+                          .42,
+                          .67,
+                          .31,
+                          .74,
+                          .48,
+                          .58,
+                          .29,
+                          .7,
+                        ],
+                        color: textColor,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      _groupDuration(
+                        (message.metadata['duration_seconds'] as num?)
+                                ?.toInt() ??
+                            0,
+                      ),
+                      style: TextStyle(
+                        color: textColor,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ],
+                )
+              : Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: <Widget>[
+                    Icon(
+                      message.messageType == 'video'
+                          ? Icons.play_circle_outline_rounded
+                          : Icons.description_outlined,
+                      color: textColor,
+                    ),
+                    const SizedBox(width: 9),
+                    Flexible(
+                      child: Text(
+                        message.attachmentName ?? message.messageType,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: textColor,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Icon(Icons.open_in_new_rounded, size: 16, color: textColor),
+                  ],
                 ),
-              ),
-              const SizedBox(width: 8),
-              Icon(Icons.open_in_new_rounded, size: 16, color: textColor),
-            ],
-          ),
         ),
       );
     }
     if (message.messageType == 'link') {
-      final match =
-          RegExp(r'https?://\S+', caseSensitive: false).firstMatch(message.text);
+      final match = RegExp(
+        r'https?://\S+',
+        caseSensitive: false,
+      ).firstMatch(message.text);
       final link = match?.group(0);
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -2723,10 +3591,7 @@ class _MessageContent extends StatelessWidget {
         ],
       );
     }
-    return Text(
-      message.text,
-      style: TextStyle(color: textColor, height: 1.38),
-    );
+    return Text(message.text, style: TextStyle(color: textColor, height: 1.38));
   }
 }
 
@@ -2811,17 +3676,11 @@ class _ProfileAvatar extends StatelessWidget {
     return CircleAvatar(
       radius: radius,
       backgroundColor: AppColors.vibeBlue.withValues(alpha: .12),
-      backgroundImage:
-          profile.avatarUrl == null ? null : NetworkImage(profile.avatarUrl!),
+      backgroundImage: profile.avatarUrl == null
+          ? null
+          : NetworkImage(profile.avatarUrl!),
       child: profile.avatarUrl == null
-          ? Text(
-              profile.initials,
-              style: TextStyle(
-                color: AppColors.vibeBlue,
-                fontSize: radius * .65,
-                fontWeight: FontWeight.w900,
-              ),
-            )
+          ? Icon(Icons.person_rounded, color: AppColors.vibeBlue, size: radius)
           : null,
     );
   }
@@ -2844,7 +3703,7 @@ class _RoleBadge extends StatelessWidget {
       child: Text(
         role.toUpperCase(),
         style: const TextStyle(
-          color: Color(0xFF8A6500),
+          color: AppColors.warningText,
           fontSize: 9,
           fontWeight: FontWeight.w900,
         ),
@@ -2896,10 +3755,7 @@ class _EmptyState extends StatelessWidget {
             Text(
               subtitle,
               textAlign: TextAlign.center,
-              style: const TextStyle(
-                color: AppColors.textMuted,
-                height: 1.4,
-              ),
+              style: const TextStyle(color: AppColors.textMuted, height: 1.4),
             ),
             if (action != null) ...<Widget>[
               const SizedBox(height: 18),
@@ -2926,23 +3782,26 @@ class ChatGroup {
     required this.bannerPath,
     required this.accentHex,
     required this.rules,
+    required this.moduleId,
+    required this.groupKind,
   });
 
   factory ChatGroup.fromRow(Map<String, dynamic> row) => ChatGroup(
-        id: row['id'].toString(),
-        name: row['name']?.toString().trim() ?? 'Student group',
-        description: row['description']?.toString().trim() ?? '',
-        memberCount:
-            int.tryParse(row['member_count']?.toString() ?? '') ?? 0,
-        createdBy: row['created_by']?.toString() ?? '',
-        createdAt: _GroupChatsScreenState._date(row['created_at']),
-        visibility: row['visibility']?.toString() ?? 'public',
-        category: row['category']?.toString() ?? 'class',
-        avatarPath: _optional(row['avatar_url']),
-        bannerPath: _optional(row['banner_url']),
-        accentHex: row['accent_color']?.toString() ?? '#2457F5',
-        rules: row['rules']?.toString().trim() ?? '',
-      );
+    id: row['id'].toString(),
+    name: row['name']?.toString().trim() ?? 'Student group',
+    description: row['description']?.toString().trim() ?? '',
+    memberCount: int.tryParse(row['member_count']?.toString() ?? '') ?? 0,
+    createdBy: row['created_by']?.toString() ?? '',
+    createdAt: _GroupChatsScreenState._date(row['created_at']),
+    visibility: row['visibility']?.toString() ?? 'public',
+    category: row['category']?.toString() ?? 'class',
+    avatarPath: _optional(row['avatar_url']),
+    bannerPath: _optional(row['banner_url']),
+    accentHex: row['accent_color']?.toString() ?? '#2457F5',
+    rules: row['rules']?.toString().trim() ?? '',
+    moduleId: _optional(row['module_id']),
+    groupKind: row['group_kind']?.toString() ?? 'student',
+  );
 
   final String id;
   final String name;
@@ -2956,17 +3815,22 @@ class ChatGroup {
   final String? bannerPath;
   final String accentHex;
   final String rules;
+  final String? moduleId;
+  final String groupKind;
   final List<String> memberPreviewIds = <String>[];
   String? avatarUrl;
   String? bannerUrl;
   String lastMessage = '';
+  String lastSenderName = 'Student';
   DateTime? lastMessageAt;
+  String? moduleName;
+  String? moduleCode;
   int unreadCount = 0;
 
   Color get accentColor => _hexColor(accentHex);
-  String get visibilityLabel =>
-      visibility == 'private' ? 'Private' : 'Public';
+  String get visibilityLabel => visibility == 'private' ? 'Private' : 'Public';
   String get categoryLabel => category == 'src' ? 'SRC' : 'Class';
+  bool get isOfficialModule => moduleId != null || groupKind == 'module';
   String get initials {
     final words = name
         .split(RegExp(r'\s+'))
@@ -2987,13 +3851,13 @@ class GroupMembership {
   });
 
   factory GroupMembership.fromRow(Map<String, dynamic> row) => GroupMembership(
-        groupId: row['group_id'].toString(),
-        userId: row['user_id'].toString(),
-        role: row['role']?.toString() ?? 'student',
-        joinedAt: _GroupChatsScreenState._date(row['joined_at']),
-        lastReadAt: _GroupChatsScreenState._date(row['last_read_at']),
-        muted: row['muted'] == true,
-      );
+    groupId: row['group_id'].toString(),
+    userId: row['user_id'].toString(),
+    role: row['role']?.toString() ?? 'student',
+    joinedAt: _GroupChatsScreenState._date(row['joined_at']),
+    lastReadAt: _GroupChatsScreenState._date(row['last_read_at']),
+    muted: row['muted'] == true,
+  );
 
   final String groupId;
   final String userId;
@@ -3005,11 +3869,11 @@ class GroupMembership {
   bool get isManager =>
       role == 'creator' || role == 'admin' || role == 'moderator';
   String get roleLabel => switch (role) {
-        'creator' => 'Group creator',
-        'admin' => 'Administrator',
-        'moderator' => 'Moderator',
-        _ => 'Student',
-      };
+    'creator' => 'Group creator',
+    'admin' => 'Administrator',
+    'moderator' => 'Moderator',
+    _ => 'Student',
+  };
 }
 
 class GroupMessage {
@@ -3030,22 +3894,22 @@ class GroupMessage {
   });
 
   factory GroupMessage.fromRow(Map<String, dynamic> row) => GroupMessage(
-        id: row['id'].toString(),
-        groupId: row['group_id'].toString(),
-        senderId: row['sender_id'].toString(),
-        text: row['text']?.toString() ?? '',
-        messageType: row['message_type']?.toString() ?? 'text',
-        attachmentPath: _optional(row['attachment_url']),
-        attachmentName: _optional(row['attachment_name']),
-        attachmentMime: _optional(row['attachment_mime']),
-        replyToId: _optional(row['reply_to_id']),
-        metadata: row['metadata'] is Map
-            ? Map<String, dynamic>.from(row['metadata'] as Map)
-            : <String, dynamic>{},
-        isEdited: row['is_edited'] == true,
-        isDeleted: row['is_deleted'] == true,
-        createdAt: _GroupChatsScreenState._date(row['created_at']),
-      );
+    id: row['id'].toString(),
+    groupId: row['group_id'].toString(),
+    senderId: row['sender_id'].toString(),
+    text: row['text']?.toString() ?? '',
+    messageType: row['message_type']?.toString() ?? 'text',
+    attachmentPath: _optional(row['attachment_url']),
+    attachmentName: _optional(row['attachment_name']),
+    attachmentMime: _optional(row['attachment_mime']),
+    replyToId: _optional(row['reply_to_id']),
+    metadata: row['metadata'] is Map
+        ? Map<String, dynamic>.from(row['metadata'] as Map)
+        : <String, dynamic>{},
+    isEdited: row['is_edited'] == true,
+    isDeleted: row['is_deleted'] == true,
+    createdAt: _GroupChatsScreenState._date(row['created_at']),
+  );
 
   final String id;
   final String groupId;
@@ -3071,6 +3935,38 @@ class GroupMessage {
     if (messageType == 'document') return attachmentName ?? 'Document';
     return text;
   }
+
+  Map<String, dynamic> toCacheRow() => <String, dynamic>{
+    'id': id,
+    'group_id': groupId,
+    'sender_id': senderId,
+    'text': text,
+    'message_type': messageType,
+    'attachment_url': attachmentPath,
+    'attachment_name': attachmentName,
+    'attachment_mime': attachmentMime,
+    'reply_to_id': replyToId,
+    'metadata': metadata,
+    'is_edited': isEdited,
+    'is_deleted': isDeleted,
+    'created_at': createdAt.toUtc().toIso8601String(),
+  };
+}
+
+class _PendingGroupAttachment {
+  const _PendingGroupAttachment({
+    required this.bytes,
+    required this.name,
+    required this.extension,
+    required this.type,
+    required this.mime,
+  });
+
+  final Uint8List bytes;
+  final String name;
+  final String extension;
+  final String type;
+  final String mime;
 }
 
 class StudentProfile {
@@ -3081,18 +3977,13 @@ class StudentProfile {
   });
 
   factory StudentProfile.fromRow(Map<String, dynamic> row) => StudentProfile(
-        id: row['id'].toString(),
-        displayName: row['full_name']?.toString().trim().isNotEmpty == true
-            ? row['full_name'].toString().trim()
-            : 'OG Student',
-        avatarUrl: _optional(row['avatar_url']),
-      );
+    id: row['id'].toString(),
+    displayName: _profileDisplayName(row),
+    avatarUrl: _optional(row['photo_url']),
+  );
 
-  factory StudentProfile.fallback(String id) => StudentProfile(
-        id: id,
-        displayName: 'OG Student',
-        avatarUrl: null,
-      );
+  factory StudentProfile.fallback(String id) =>
+      StudentProfile(id: id, displayName: 'OG Vibester', avatarUrl: null);
 
   final String id;
   final String displayName;
@@ -3106,6 +3997,11 @@ class StudentProfile {
       .join();
 }
 
+String _profileDisplayName(Map<String, dynamic> row) {
+  final nickname = _optional(row['nickname']);
+  return nickname ?? 'OG Vibester';
+}
+
 class MessageReaction {
   const MessageReaction({
     required this.messageId,
@@ -3114,10 +4010,10 @@ class MessageReaction {
   });
 
   factory MessageReaction.fromRow(Map<String, dynamic> row) => MessageReaction(
-        messageId: row['message_id'].toString(),
-        userId: row['user_id'].toString(),
-        emoji: row['emoji'].toString(),
-      );
+    messageId: row['message_id'].toString(),
+    userId: row['user_id'].toString(),
+    emoji: row['emoji'].toString(),
+  );
 
   final String messageId;
   final String userId;
@@ -3132,10 +4028,10 @@ class PollVote {
   });
 
   factory PollVote.fromRow(Map<String, dynamic> row) => PollVote(
-        messageId: row['message_id'].toString(),
-        userId: row['user_id'].toString(),
-        optionIndex: int.tryParse(row['option_index'].toString()) ?? 0,
-      );
+    messageId: row['message_id'].toString(),
+    userId: row['user_id'].toString(),
+    optionIndex: int.tryParse(row['option_index'].toString()) ?? 0,
+  );
 
   final String messageId;
   final String userId;
@@ -3160,4 +4056,77 @@ String _relativeTime(DateTime date) {
   if (difference.inDays < 1) return '${difference.inHours}h';
   if (difference.inDays < 7) return '${difference.inDays}d';
   return '${date.day}/${date.month}/${date.year}';
+}
+
+String _groupDuration(int seconds) {
+  final minutes = seconds ~/ 60;
+  final remainder = seconds.remainder(60).toString().padLeft(2, '0');
+  return '$minutes:$remainder';
+}
+
+Uint8List _groupPcm16ToWave(
+  Uint8List pcm, {
+  required int sampleRate,
+  required int channels,
+}) {
+  const bitsPerSample = 16;
+  final byteRate = sampleRate * channels * bitsPerSample ~/ 8;
+  final blockAlign = channels * bitsPerSample ~/ 8;
+  final output = Uint8List(44 + pcm.length);
+  final header = ByteData.sublistView(output);
+
+  void ascii(int offset, String value) {
+    for (var index = 0; index < value.length; index++) {
+      output[offset + index] = value.codeUnitAt(index);
+    }
+  }
+
+  ascii(0, 'RIFF');
+  header.setUint32(4, 36 + pcm.length, Endian.little);
+  ascii(8, 'WAVE');
+  ascii(12, 'fmt ');
+  header.setUint32(16, 16, Endian.little);
+  header.setUint16(20, 1, Endian.little);
+  header.setUint16(22, channels, Endian.little);
+  header.setUint32(24, sampleRate, Endian.little);
+  header.setUint32(28, byteRate, Endian.little);
+  header.setUint16(32, blockAlign, Endian.little);
+  header.setUint16(34, bitsPerSample, Endian.little);
+  ascii(36, 'data');
+  header.setUint32(40, pcm.length, Endian.little);
+  output.setRange(44, output.length, pcm);
+  return output;
+}
+
+class _RecordingWave extends StatelessWidget {
+  const _RecordingWave({required this.values, this.color});
+  final List<double> values;
+  final Color? color;
+
+  @override
+  Widget build(BuildContext context) {
+    final bars = values.isEmpty
+        ? const <double>[.18, .28, .18, .34, .22, .3, .18, .25]
+        : values;
+    return SizedBox(
+      height: 28,
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: bars
+            .map(
+              (value) => AnimatedContainer(
+                duration: const Duration(milliseconds: 120),
+                width: 3,
+                height: 6 + (value.clamp(.08, 1) * 21),
+                decoration: BoxDecoration(
+                  color: color ?? AppColors.vibeBlue,
+                  borderRadius: BorderRadius.circular(99),
+                ),
+              ),
+            )
+            .toList(),
+      ),
+    );
+  }
 }

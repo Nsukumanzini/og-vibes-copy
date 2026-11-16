@@ -8,6 +8,7 @@ import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../utils/theme_constants.dart';
 import '../widgets/vibe_scaffold.dart';
@@ -41,9 +42,6 @@ class _CareerScreenState extends State<CareerScreen> {
   String? _error;
   Set<String> _typeFilters = {};
   String? _locationFilter;
-  String? _courseFilter;
-  String? _facultyFilter;
-  String? _levelFilter;
   bool _remoteOnly = false;
 
   @override
@@ -126,7 +124,7 @@ class _CareerScreenState extends State<CareerScreen> {
       final results = await Future.wait<dynamic>([
         _client
             .from('profiles')
-            .select('id, name, surname, campus, faculty, course, level')
+            .select('id, nickname, campus, faculty, course, level')
             .eq('id', user.id)
             .maybeSingle(),
         _client
@@ -230,23 +228,18 @@ class _CareerScreenState extends State<CareerScreen> {
       final searchText = [
         opportunity['title'],
         opportunity['company'],
-        opportunity['qualification'],
         opportunity['description'],
-        opportunity['course'],
-        opportunity['faculty'],
+        opportunity['category'],
+        opportunity['location'],
+        if (opportunity['requirements'] is List)
+          ...(opportunity['requirements'] as List),
       ].whereType<Object>().join(' ').toLowerCase();
       final type = _opportunityType(opportunity).toLowerCase();
       final location = (opportunity['location'] ?? '').toString();
-      final course = (opportunity['course'] ?? '').toString();
-      final faculty = (opportunity['faculty'] ?? '').toString();
-      final level = (opportunity['level'] ?? '').toString();
 
       return (query.isEmpty || searchText.contains(query)) &&
           (_typeFilters.isEmpty || _typeFilters.contains(type)) &&
           (_locationFilter == null || location == _locationFilter) &&
-          (_courseFilter == null || course == _courseFilter) &&
-          (_facultyFilter == null || faculty == _facultyFilter) &&
-          (_levelFilter == null || level == _levelFilter) &&
           (!_remoteOnly || opportunity['is_remote'] == true);
     }).toList();
   }
@@ -254,9 +247,6 @@ class _CareerScreenState extends State<CareerScreen> {
   int get _activeFilterCount =>
       _typeFilters.length +
       (_locationFilter == null ? 0 : 1) +
-      (_courseFilter == null ? 0 : 1) +
-      (_facultyFilter == null ? 0 : 1) +
-      (_levelFilter == null ? 0 : 1) +
       (_remoteOnly ? 1 : 0);
 
   String _opportunityType(Map<String, dynamic> opportunity) {
@@ -291,9 +281,6 @@ class _CareerScreenState extends State<CareerScreen> {
     setState(() {
       _typeFilters = {};
       _locationFilter = null;
-      _courseFilter = null;
-      _facultyFilter = null;
-      _levelFilter = null;
       _remoteOnly = false;
     });
   }
@@ -302,9 +289,6 @@ class _CareerScreenState extends State<CareerScreen> {
     HapticFeedback.selectionClick();
     var types = Set<String>.from(_typeFilters);
     var location = _locationFilter;
-    var course = _courseFilter;
-    var faculty = _facultyFilter;
-    var level = _levelFilter;
     var remote = _remoteOnly;
 
     final result = await showModalBottomSheet<_CareerFilters>(
@@ -315,19 +299,10 @@ class _CareerScreenState extends State<CareerScreen> {
         builder: (context, setSheetState) => _FilterSheet(
           selectedTypes: types,
           location: location,
-          course: course,
-          faculty: faculty,
-          level: level,
           remoteOnly: remote,
           locations: _distinctValues('location'),
-          courses: _distinctValues('course'),
-          faculties: _distinctValues('faculty'),
-          levels: _distinctValues('level'),
           onTypesChanged: (value) => setSheetState(() => types = value),
           onLocationChanged: (value) => setSheetState(() => location = value),
-          onCourseChanged: (value) => setSheetState(() => course = value),
-          onFacultyChanged: (value) => setSheetState(() => faculty = value),
-          onLevelChanged: (value) => setSheetState(() => level = value),
           onRemoteChanged: (value) => setSheetState(() => remote = value),
         ),
       ),
@@ -337,9 +312,6 @@ class _CareerScreenState extends State<CareerScreen> {
     setState(() {
       _typeFilters = result.types;
       _locationFilter = result.location;
-      _courseFilter = result.course;
-      _facultyFilter = result.faculty;
-      _levelFilter = result.level;
       _remoteOnly = result.remoteOnly;
     });
   }
@@ -377,6 +349,48 @@ class _CareerScreenState extends State<CareerScreen> {
   }
 
   Future<void> _startApplication(Map<String, dynamic> opportunity) async {
+    final destination = (opportunity['application_url'] ?? '')
+        .toString()
+        .trim();
+    if (destination.isNotEmpty) {
+      final parsed = Uri.tryParse(destination);
+      final isEmail = RegExp(
+        r'^[^\s@]+@[^\s@]+\.[^\s@]+$',
+      ).hasMatch(destination);
+      final uri = isEmail ? Uri(scheme: 'mailto', path: destination) : parsed;
+      if (uri != null && ['https', 'http', 'mailto'].contains(uri.scheme)) {
+        try {
+          if (!await launchUrl(uri, mode: LaunchMode.externalApplication)) {
+            throw StateError('No application could open this destination');
+          }
+          return;
+        } catch (_) {
+          // Keep the destination available to copy when no mail/browser app exists.
+        }
+      }
+      if (!mounted) return;
+      await showDialog<void>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Where to apply'),
+          content: SingleChildScrollView(child: SelectableText(destination)),
+          actions: [
+            TextButton(
+              onPressed: () async {
+                await Clipboard.setData(ClipboardData(text: destination));
+                if (context.mounted) Navigator.pop(context);
+              },
+              child: const Text('Copy details'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Done'),
+            ),
+          ],
+        ),
+      );
+      return;
+    }
     HapticFeedback.mediumImpact();
     final result = await showDialog<_ApplicationPayload>(
       context: context,
@@ -511,7 +525,7 @@ class _CareerScreenState extends State<CareerScreen> {
   Widget build(BuildContext context) {
     return VibeScaffold(
       appBar: AppBar(
-        title: const Text('Career & Funding'),
+        title: const Text('Careers and funding'),
         elevation: 0,
         backgroundColor: Colors.transparent,
         actions: [
@@ -618,7 +632,7 @@ class _CareerScreenState extends State<CareerScreen> {
           controller: _searchController,
           textInputAction: TextInputAction.search,
           decoration: InputDecoration(
-            hintText: 'Search title, employer, qualification or keyword',
+            hintText: 'Search title, employer, category or keyword',
             prefixIcon: const Icon(Icons.search_rounded),
             suffixIcon: _searchController.text.isEmpty
                 ? null
@@ -1379,7 +1393,6 @@ class _OpportunitySheet extends StatelessWidget {
     );
     final company = (opportunity['company'] ?? 'Opportunity provider')
         .toString();
-    final qualification = (opportunity['qualification'] ?? '').toString();
     final closingAt = DateTime.tryParse(
       (opportunity['closing_at'] ?? '').toString(),
     );
@@ -1449,12 +1462,6 @@ class _OpportunitySheet extends StatelessWidget {
                 ),
             ],
           ),
-          if (qualification.isNotEmpty) ...[
-            const SizedBox(height: 22),
-            const _SheetHeading('Qualification'),
-            const SizedBox(height: 7),
-            Text(qualification),
-          ],
           const SizedBox(height: 22),
           const _SheetHeading('About this opportunity'),
           const SizedBox(height: 7),
@@ -1736,7 +1743,9 @@ class _ApplicationWizardState extends State<_ApplicationWizard> {
           label: 'Student',
           value: profile == null
               ? 'Profile details unavailable'
-              : '${profile['name'] ?? ''} ${profile['surname'] ?? ''}'.trim(),
+              : (profile['nickname']?.toString().trim().isNotEmpty == true
+                    ? profile['nickname'].toString().trim()
+                    : 'OG Vibester'),
         ),
         _ReviewRow(
           icon: Icons.school_outlined,
@@ -2184,37 +2193,19 @@ class _FilterSheet extends StatelessWidget {
   const _FilterSheet({
     required this.selectedTypes,
     required this.location,
-    required this.course,
-    required this.faculty,
-    required this.level,
     required this.remoteOnly,
     required this.locations,
-    required this.courses,
-    required this.faculties,
-    required this.levels,
     required this.onTypesChanged,
     required this.onLocationChanged,
-    required this.onCourseChanged,
-    required this.onFacultyChanged,
-    required this.onLevelChanged,
     required this.onRemoteChanged,
   });
 
   final Set<String> selectedTypes;
   final String? location;
-  final String? course;
-  final String? faculty;
-  final String? level;
   final bool remoteOnly;
   final List<String> locations;
-  final List<String> courses;
-  final List<String> faculties;
-  final List<String> levels;
   final ValueChanged<Set<String>> onTypesChanged;
   final ValueChanged<String?> onLocationChanged;
-  final ValueChanged<String?> onCourseChanged;
-  final ValueChanged<String?> onFacultyChanged;
-  final ValueChanged<String?> onLevelChanged;
   final ValueChanged<bool> onRemoteChanged;
 
   static const types = [
@@ -2223,6 +2214,8 @@ class _FilterSheet extends StatelessWidget {
     'learnership',
     'bursary',
     'graduate programme',
+    'apprenticeship',
+    'volunteer opportunity',
   ];
 
   @override
@@ -2288,30 +2281,6 @@ class _FilterSheet extends StatelessWidget {
             values: locations,
             onChanged: onLocationChanged,
           ),
-          const SizedBox(height: 12),
-          _FilterDropdown(
-            label: 'Faculty',
-            icon: Icons.account_balance_outlined,
-            value: faculty,
-            values: faculties,
-            onChanged: onFacultyChanged,
-          ),
-          const SizedBox(height: 12),
-          _FilterDropdown(
-            label: 'Course',
-            icon: Icons.school_outlined,
-            value: course,
-            values: courses,
-            onChanged: onCourseChanged,
-          ),
-          const SizedBox(height: 12),
-          _FilterDropdown(
-            label: 'Level',
-            icon: Icons.stairs_outlined,
-            value: level,
-            values: levels,
-            onChanged: onLevelChanged,
-          ),
           const SizedBox(height: 22),
           Row(
             children: [
@@ -2335,9 +2304,6 @@ class _FilterSheet extends StatelessWidget {
                       _CareerFilters(
                         types: selectedTypes,
                         location: location,
-                        course: course,
-                        faculty: faculty,
-                        level: level,
                         remoteOnly: remoteOnly,
                       ),
                     );
@@ -2392,17 +2358,11 @@ class _CareerFilters {
   const _CareerFilters({
     required this.types,
     this.location,
-    this.course,
-    this.faculty,
-    this.level,
     required this.remoteOnly,
   });
 
   final Set<String> types;
   final String? location;
-  final String? course;
-  final String? faculty;
-  final String? level;
   final bool remoteOnly;
 }
 
@@ -2419,24 +2379,15 @@ class _GlassSurface extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(radius),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 14, sigmaY: 14),
-        child: Container(
-          padding: padding,
-          decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: .72),
-            borderRadius: BorderRadius.circular(radius),
-            border: Border.all(
-              color: Colors.white.withValues(alpha: .9),
-              width: 1.2,
-            ),
-            boxShadow: AppStyles.glassShadow,
-          ),
-          child: child,
-        ),
+    return Container(
+      padding: padding,
+      decoration: BoxDecoration(
+        color: AppColors.surfaceElevated,
+        borderRadius: BorderRadius.circular(radius),
+        border: Border.all(color: AppColors.outline, width: 1.2),
+        boxShadow: AppStyles.softShadow,
       ),
+      child: child,
     );
   }
 }
@@ -2839,10 +2790,13 @@ Map<String, dynamic> mapCareerRowToItem(Map<String, dynamic> row) {
     'category': (row['category'] ?? '').toString(),
     'company': (row['company'] ?? '').toString(),
     'duration': (row['duration'] ?? '').toString(),
-    'type': (row['type'] ?? '').toString(),
     'salary': (row['salary'] ?? '').toString(),
     'location': (row['location'] ?? '').toString(),
-    'qualification': (row['qualification'] ?? '').toString(),
+    'requirements': row['requirements'] is List
+        ? List<String>.from(
+            (row['requirements'] as List).map((item) => item.toString()),
+          )
+        : const <String>[],
     'is_remote': row['is_remote'] == true,
   };
 }

@@ -1,6 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:ui';
+import 'dart:typed_data';
 
 import 'package:audioplayers/audioplayers.dart';
 import 'package:cached_network_image/cached_network_image.dart';
@@ -12,10 +12,16 @@ import 'package:intl/intl.dart';
 import 'package:record/record.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+
+import '../services/diagnostics_service.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../utils/theme_constants.dart';
+import '../services/offline_cache_service.dart';
+import '../services/presence_service.dart';
+import 'student_profile_screen.dart';
 import '../widgets/vibe_scaffold.dart';
+import '../widgets/standard_ui.dart';
 import 'outgoing_call_screen.dart';
 
 class ChatDetailScreen extends StatefulWidget {
@@ -47,30 +53,34 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
   Map<String, dynamic>? _peer;
   bool _loading = true, _sending = false, _offline = false;
   bool _typing = false, _recording = false, _blocked = false;
+  bool _loadingOlder = false, _hasOlder = true;
+  DateTime? _oldestMessageCursor;
   int _recordSeconds = 0;
+  String? _sendStatus;
+  _PendingAttachment? _failedAttachment;
+  static const int _messagePageSize = 30;
 
   String? get _uid => _db.auth.currentUser?.id;
   String get _queueKey => 'chat_queue_${_uid}_${widget.chatId}';
+  String get _messageCacheNamespace => 'private_chat_${widget.chatId}';
   String get _name {
     final nick = (_peer?['nickname'] ?? '').toString().trim();
     if (nick.isNotEmpty) return nick;
-    final full = [
-      _peer?['name'],
-      _peer?['surname'],
-    ].whereType<String>().where((v) => v.trim().isNotEmpty).join(' ');
-    return full.isEmpty ? (widget.chatTitle ?? 'Private chat') : full;
+    return 'OG Vibester';
   }
 
   @override
   void initState() {
     super.initState();
     _text.addListener(_composerChanged);
+    PresenceService.instance.onlineUserIds.addListener(_presenceChanged);
     _start();
   }
 
   @override
   void dispose() {
     _text.removeListener(_composerChanged);
+    PresenceService.instance.onlineUserIds.removeListener(_presenceChanged);
     _text.dispose();
     _scroll.dispose();
     _reloadTimer?.cancel();
@@ -85,6 +95,10 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
     super.dispose();
   }
 
+  void _presenceChanged() {
+    if (mounted) setState(() {});
+  }
+
   Future<void> _start() async {
     final status = await Connectivity().checkConnectivity();
     _offline = status.contains(ConnectivityResult.none);
@@ -93,35 +107,57 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
       if (mounted) setState(() => _offline = offline);
       if (!offline) unawaited(_flushQueue());
     });
+    await _loadCachedConversation();
     await _load();
     _listen();
   }
 
-  Future<void> _load({bool loader = true}) async {
+  Future<void> _loadCachedConversation() async {
+    final rows = await OfflineCacheService.readList(_messageCacheNamespace);
+    if (rows.isEmpty || !mounted) return;
+    final messages = rows.map(_ChatMessage.fromRow).toList()
+      ..sort((a, b) => a.createdAt.compareTo(b.createdAt));
+    messages.addAll(await _queued());
+    setState(() {
+      _messages
+        ..clear()
+        ..addAll(messages);
+      _loading = false;
+      _oldestMessageCursor = messages.isEmpty ? null : messages.first.createdAt;
+    });
+  }
+
+  Future<void> _load({bool loader = true, bool older = false}) async {
     final uid = _uid;
     if (uid == null) return;
     if (loader && _messages.isEmpty && mounted) setState(() => _loading = true);
     try {
+      var messageQuery = _db
+          .from('messages')
+          .select(
+            'id,sender_id,recipient_id,text,message_type,attachment_url,'
+            'attachment_name,attachment_mime,attachment_size,metadata,is_read,'
+            'delivered_at,read_at,created_at',
+          )
+          .or(
+            'and(sender_id.eq.$uid,recipient_id.eq.${widget.chatId}),'
+            'and(sender_id.eq.${widget.chatId},recipient_id.eq.$uid)',
+          )
+          .eq('is_deleted', false);
+      final cursor = _oldestMessageCursor;
+      if (older && cursor != null) {
+        messageQuery = messageQuery.lt(
+          'created_at',
+          cursor.toUtc().toIso8601String(),
+        );
+      }
       final data = await Future.wait<dynamic>([
-        _db
-            .from('messages')
-            .select(
-              'id,sender_id,recipient_id,text,message_type,attachment_url,'
-              'attachment_name,attachment_mime,attachment_size,metadata,is_read,'
-              'delivered_at,read_at,created_at',
-            )
-            .or(
-              'and(sender_id.eq.$uid,recipient_id.eq.${widget.chatId}),'
-              'and(sender_id.eq.${widget.chatId},recipient_id.eq.$uid)',
-            )
-            .eq('is_deleted', false)
-            .order('created_at')
-            .limit(300),
+        messageQuery
+            .order('created_at', ascending: false)
+            .limit(_messagePageSize),
         _db
             .from('profiles')
-            .select(
-              'id,name,surname,nickname,photo_url,is_online,is_verified,course,campus',
-            )
+            .select('id,nickname,photo_url,is_online,is_verified,course,campus')
             .eq('id', widget.chatId)
             .maybeSingle(),
         _db
@@ -132,35 +168,83 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
             .maybeSingle(),
       ]);
       final rows = List<Map<String, dynamic>>.from(data[0] as List<dynamic>);
-      final messages = rows.map(_ChatMessage.fromRow).toList();
+      final messages = rows.reversed.map(_ChatMessage.fromRow).toList();
       await Future.wait(messages.map(_signMedia));
       await _loadReactions(messages);
-      messages.addAll(await _queued());
+      final queued = await _queued();
       if (!mounted) return;
       setState(() {
+        final merged = <_ChatMessage>[
+          if (older || !loader)
+            ..._messages.where((message) => !message.queued),
+          ...messages,
+        ];
+        final byId = <String, _ChatMessage>{
+          for (final message in merged) message.id: message,
+        };
+        final ordered = byId.values.toList()
+          ..sort((a, b) => a.createdAt.compareTo(b.createdAt));
         _messages
           ..clear()
-          ..addAll(messages);
+          ..addAll(ordered)
+          ..addAll(queued);
         _peer = data[1] as Map<String, dynamic>?;
         _blocked = data[2] != null;
         _loading = false;
+        _hasOlder = rows.length == _messagePageSize;
+        if (ordered.isNotEmpty) _oldestMessageCursor = ordered.first.createdAt;
       });
+      unawaited(
+        OfflineCacheService.writeList(
+          _messageCacheNamespace,
+          _messages
+              .where((message) => !message.queued)
+              .map((message) => message.toCacheRow()),
+        ),
+      );
       unawaited(_markRead());
       unawaited(_loadTyping());
-      WidgetsBinding.instance.addPostFrameCallback((_) => _goBottom());
+      if (!older) {
+        WidgetsBinding.instance.addPostFrameCallback((_) => _goBottom());
+      }
     } catch (_) {
       if (mounted) setState(() => _loading = false);
       _snack('Unable to load this conversation.');
     }
   }
 
+  Future<void> _loadOlder() async {
+    if (_loadingOlder || !_hasOlder) return;
+    final before = _scroll.hasClients ? _scroll.position.maxScrollExtent : 0.0;
+    setState(() => _loadingOlder = true);
+    await _load(loader: false, older: true);
+    if (!mounted) return;
+    setState(() => _loadingOlder = false);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!_scroll.hasClients) return;
+      final addedExtent = _scroll.position.maxScrollExtent - before;
+      _scroll.jumpTo(
+        (_scroll.offset + addedExtent)
+            .clamp(
+              _scroll.position.minScrollExtent,
+              _scroll.position.maxScrollExtent,
+            )
+            .toDouble(),
+      );
+    });
+  }
+
   Future<void> _signMedia(_ChatMessage message) async {
     if (message.path == null) return;
+    final objectPath = _chatMediaObjectPath(message.path!);
+    if (objectPath == null) return;
     try {
       _mediaUrls[message.id] = await _db.storage
           .from('chat-media')
-          .createSignedUrl(message.path!, 3600);
-    } catch (_) {}
+          .createSignedUrl(objectPath, 60 * 60 * 6);
+    } catch (error) {
+      debugPrint('Unable to sign chat attachment $objectPath: $error');
+    }
   }
 
   Future<void> _loadReactions(List<_ChatMessage> messages) async {
@@ -340,6 +424,33 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
         final p = Map<String, dynamic>.from(jsonDecode(raw) as Map)
           ..remove('local_id')
           ..remove('queued_at');
+        final encodedBytes = p.remove('attachment_bytes_b64')?.toString();
+        if (encodedBytes?.isNotEmpty == true) {
+          final bytes = base64Decode(encodedBytes!);
+          final name = p['attachment_name']?.toString() ?? 'attachment';
+          final mime =
+              p['attachment_mime']?.toString() ?? 'application/octet-stream';
+          final safe = name.replaceAll(RegExp(r'[^A-Za-z0-9._-]'), '_');
+          final path =
+              '$_uid/${widget.chatId}/${DateTime.now().microsecondsSinceEpoch}-$safe';
+          try {
+            await _db.storage
+                .from('chat-media')
+                .uploadBinary(
+                  path,
+                  bytes,
+                  fileOptions: FileOptions(contentType: mime, upsert: false),
+                );
+            p['attachment_url'] = path;
+            await _db.from('messages').insert(p);
+          } catch (_) {
+            try {
+              await _db.storage.from('chat-media').remove([path]);
+            } catch (_) {}
+            rethrow;
+          }
+          continue;
+        }
         await _db.from('messages').insert(p);
       } catch (_) {
         remaining.add(raw);
@@ -350,7 +461,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
   }
 
   Future<void> _pickFile() async {
-    if (_offline || _blocked) return _snack('Connect before sending a file.');
+    if (_blocked) return;
     final result = await FilePicker.platform.pickFiles(
       withData: true,
       type: FileType.custom,
@@ -383,6 +494,23 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
       return _snack('Files must be 25 MB or smaller.');
     }
     final ext = (file.extension ?? 'bin').toLowerCase();
+    if (_offline) {
+      if (bytes.length > 8 * 1024 * 1024) {
+        return _snack('Offline attachments must be 8 MB or smaller.');
+      }
+      await _queue(<String, dynamic>{
+        'sender_id': _uid,
+        'recipient_id': widget.chatId,
+        'text': '',
+        'message_type': _kind(ext),
+        'attachment_name': file.name,
+        'attachment_mime': _mime(ext),
+        'attachment_size': bytes.length,
+        'attachment_bytes_b64': base64Encode(bytes),
+        'metadata': <String, dynamic>{},
+      });
+      return;
+    }
     await _upload(bytes, file.name, ext, _kind(ext), _mime(ext), {});
   }
 
@@ -395,7 +523,11 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
     Map<String, dynamic> metadata,
   ) async {
     if (_uid == null) return;
-    setState(() => _sending = true);
+    setState(() {
+      _sending = true;
+      _failedAttachment = null;
+      _sendStatus = 'Uploading attachment…';
+    });
     final safe = name.replaceAll(RegExp(r'[^A-Za-z0-9._-]'), '_');
     final path =
         '$_uid/${widget.chatId}/${DateTime.now().microsecondsSinceEpoch}-$safe';
@@ -407,6 +539,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
             bytes,
             fileOptions: FileOptions(contentType: mime, upsert: false),
           );
+      if (mounted) setState(() => _sendStatus = 'Sending message…');
       await _db.from('messages').insert({
         'sender_id': _uid,
         'recipient_id': widget.chatId,
@@ -420,14 +553,65 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
       });
       await _load(loader: false);
       HapticFeedback.mediumImpact();
-    } catch (_) {
+    } catch (error) {
+      unawaited(
+        DiagnosticsService.record(
+          'upload_failed_private_chat',
+          metadata: {'error_type': error.runtimeType.toString()},
+        ),
+      );
       try {
         await _db.storage.from('chat-media').remove([path]);
       } catch (_) {}
-      _snack('Attachment upload failed.');
+      if (bytes.length <= 8 * 1024 * 1024) {
+        await _queue(<String, dynamic>{
+          'sender_id': _uid,
+          'recipient_id': widget.chatId,
+          'text': '',
+          'message_type': type,
+          'attachment_name': name,
+          'attachment_mime': mime,
+          'attachment_size': bytes.length,
+          'attachment_bytes_b64': base64Encode(bytes),
+          'metadata': metadata,
+        });
+        _snack('Upload paused. Tap retry when your connection improves.');
+      } else {
+        if (mounted) {
+          setState(
+            () => _failedAttachment = _PendingAttachment(
+              bytes: bytes,
+              name: name,
+              extension: ext,
+              type: type,
+              mime: mime,
+              metadata: metadata,
+            ),
+          );
+        }
+        _snack('Attachment upload failed. Try again.');
+      }
     } finally {
-      if (mounted) setState(() => _sending = false);
+      if (mounted) {
+        setState(() {
+          _sending = false;
+          _sendStatus = null;
+        });
+      }
     }
+  }
+
+  Future<void> _retryFailedAttachment() async {
+    final attachment = _failedAttachment;
+    if (attachment == null || _sending) return;
+    await _upload(
+      attachment.bytes,
+      attachment.name,
+      attachment.extension,
+      attachment.type,
+      attachment.mime,
+      attachment.metadata,
+    );
   }
 
   Future<void> _toggleRecording() async =>
@@ -441,7 +625,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
     try {
       final stream = await _recorder.startStream(
         const RecordConfig(
-          encoder: AudioEncoder.wav,
+          encoder: AudioEncoder.pcm16bits,
           sampleRate: 16000,
           numChannels: 1,
           echoCancel: true,
@@ -466,7 +650,8 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
         if (mounted) setState(() => _recordSeconds++);
         if (_recordSeconds >= 120) unawaited(_finishVoice());
       });
-    } catch (_) {
+    } catch (error) {
+      debugPrint('Voice recorder start failed: $error');
       _snack('Voice recording is unavailable on this device.');
     }
   }
@@ -477,12 +662,15 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
     await Future<void>.delayed(const Duration(milliseconds: 120));
     await _voiceStream?.cancel();
     await _amplitudes?.cancel();
-    final bytes = Uint8List.fromList(_voiceChunks.expand((e) => e).toList());
+    final pcmBytes = Uint8List.fromList(
+      _voiceChunks.expand((chunk) => chunk).toList(),
+    );
     final seconds = _recordSeconds;
     if (mounted) setState(() => _recording = false);
-    if (bytes.isEmpty || seconds < 1) {
+    if (pcmBytes.isEmpty || seconds < 1) {
       return _snack('Voice note was too short.');
     }
+    final bytes = _pcm16ToWave(pcmBytes, sampleRate: 16000, channels: 1);
     await _upload(bytes, 'Voice note.wav', 'wav', 'audio', 'audio/wav', {
       'duration_seconds': seconds,
     });
@@ -667,6 +855,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
           contactName: _name,
           callType: type,
           calleeId: widget.chatId,
+          contactPhotoUrl: _peer?['photo_url']?.toString(),
         ),
       ),
     );
@@ -677,7 +866,13 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
     appBar: AppBar(
       backgroundColor: Colors.white.withValues(alpha: .72),
       titleSpacing: 0,
-      title: _Header(name: _name, peer: _peer, typing: _typing),
+      title: _Header(
+        name: _name,
+        peer: _peer,
+        typing: _typing,
+        online: PresenceService.instance.isOnline(widget.chatId),
+        onTap: () => StudentProfileNavigator.open(context, widget.chatId),
+      ),
       actions: [
         IconButton(
           tooltip: 'Voice call',
@@ -715,6 +910,49 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
     body: Column(
       children: [
         _Banner(name: _name, offline: _offline, blocked: _blocked),
+        if (_sendStatus != null)
+          Semantics(
+            liveRegion: true,
+            label: _sendStatus,
+            child: Column(
+              children: [
+                const LinearProgressIndicator(minHeight: 3),
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 5),
+                  child: Text(
+                    _sendStatus!,
+                    style: const TextStyle(
+                      color: AppColors.textMuted,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        if (_failedAttachment != null)
+          Material(
+            color: AppColors.dangerSurface,
+            child: ListTile(
+              dense: true,
+              leading: const Icon(
+                Icons.cloud_off_rounded,
+                color: AppColors.danger,
+              ),
+              title: Text(
+                '${_failedAttachment!.name} was not sent',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+              subtitle: const Text('Check your connection and try again.'),
+              trailing: TextButton.icon(
+                onPressed: _retryFailedAttachment,
+                icon: const Icon(Icons.refresh_rounded, size: 18),
+                label: const Text('Retry'),
+              ),
+            ),
+          ),
         Expanded(
           child: Center(
             child: ConstrainedBox(
@@ -735,9 +973,18 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
   Widget _messageList() => ListView.builder(
     controller: _scroll,
     padding: const EdgeInsets.fromLTRB(14, 16, 14, 16),
-    itemCount: _messages.length,
+    itemCount: _messages.length + (_hasOlder || _loadingOlder ? 1 : 0),
     itemBuilder: (context, i) {
-      final m = _messages[i], prev = i > 0 ? _messages[i - 1] : null;
+      if ((_hasOlder || _loadingOlder) && i == 0) {
+        return OgLoadOlderButton(
+          onPressed: _loadOlder,
+          loading: _loadingOlder,
+          label: 'Load older messages',
+        );
+      }
+      final messageIndex = i - (_hasOlder || _loadingOlder ? 1 : 0);
+      final m = _messages[messageIndex];
+      final prev = messageIndex > 0 ? _messages[messageIndex - 1] : null;
       final date =
           prev == null || !DateUtils.isSameDay(prev.createdAt, m.createdAt);
       return Column(
@@ -852,82 +1099,109 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
 }
 
 class _Header extends StatelessWidget {
-  const _Header({required this.name, required this.peer, required this.typing});
+  const _Header({
+    required this.name,
+    required this.peer,
+    required this.typing,
+    required this.online,
+    required this.onTap,
+  });
   final String name;
   final Map<String, dynamic>? peer;
   final bool typing;
+  final bool online;
+  final VoidCallback onTap;
   @override
   Widget build(BuildContext context) {
     final photo = (peer?['photo_url'] ?? '').toString();
-    final online = peer?['is_online'] == true;
-    return Row(
-      children: [
-        Stack(
-          children: [
-            CircleAvatar(
-              radius: 19,
-              backgroundImage: photo.isEmpty ? null : NetworkImage(photo),
-              child: photo.isEmpty
-                  ? Text(name.isEmpty ? '?' : name[0].toUpperCase())
-                  : null,
-            ),
-            Positioned(
-              right: 0,
-              bottom: 0,
-              child: Container(
-                width: 10,
-                height: 10,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: online ? AppColors.success : Colors.grey,
-                  border: Border.all(color: Colors.white, width: 2),
-                ),
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(width: 9),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+    return InkWell(
+      borderRadius: BorderRadius.circular(14),
+      onTap: onTap,
+      child: Row(
+        children: [
+          Stack(
             children: [
-              Row(
-                children: [
-                  Flexible(
-                    child: Text(
-                      name,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        fontWeight: FontWeight.w900,
-                        fontSize: 15,
-                      ),
-                    ),
-                  ),
-                  if (peer?['is_verified'] == true)
-                    const Padding(
-                      padding: EdgeInsets.only(left: 4),
-                      child: Icon(
-                        Icons.verified,
-                        color: AppColors.vibeBlue,
-                        size: 16,
-                      ),
-                    ),
-                ],
+              CircleAvatar(
+                radius: 19,
+                backgroundImage: photo.isEmpty ? null : NetworkImage(photo),
+                child: photo.isEmpty ? const Icon(Icons.person_rounded) : null,
               ),
-              Text(
-                typing ? 'typing…' : (online ? 'Online' : 'Offline'),
-                style: TextStyle(
-                  fontSize: 11,
-                  color: typing ? AppColors.vibeBlue : AppColors.textMuted,
+              Positioned(
+                right: 0,
+                bottom: 0,
+                child: Container(
+                  width: 10,
+                  height: 10,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: online ? AppColors.success : Colors.grey,
+                    border: Border.all(color: Colors.white, width: 2),
+                  ),
                 ),
               ),
             ],
           ),
-        ),
-      ],
+          const SizedBox(width: 9),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Flexible(
+                      child: Text(
+                        name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w900,
+                          fontSize: 15,
+                        ),
+                      ),
+                    ),
+                    if (peer?['is_verified'] == true)
+                      const Padding(
+                        padding: EdgeInsets.only(left: 4),
+                        child: Icon(
+                          Icons.verified,
+                          color: AppColors.vibeBlue,
+                          size: 16,
+                        ),
+                      ),
+                  ],
+                ),
+                Text(
+                  typing ? 'typing…' : (online ? 'Online' : 'Offline'),
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: typing ? AppColors.vibeBlue : AppColors.textMuted,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
+}
+
+class _PendingAttachment {
+  const _PendingAttachment({
+    required this.bytes,
+    required this.name,
+    required this.extension,
+    required this.type,
+    required this.mime,
+    required this.metadata,
+  });
+
+  final Uint8List bytes;
+  final String name;
+  final String extension;
+  final String type;
+  final String mime;
+  final Map<String, dynamic> metadata;
 }
 
 class _Banner extends StatelessWidget {
@@ -1043,6 +1317,11 @@ class _Bubble extends StatelessWidget {
                         url: url,
                         onMedia: onMedia,
                       ),
+                      if (message.type == 'document' && message.text.trim().isNotEmpty)
+                        Padding(padding: const EdgeInsets.only(top: 8), child: SelectableText(
+                          message.text,
+                          style: TextStyle(color: mine ? Colors.white : AppColors.midnightInk),
+                        )),
                       const SizedBox(height: 6),
                       Row(
                         mainAxisSize: MainAxisSize.min,
@@ -1440,18 +1719,15 @@ class _Glass extends StatelessWidget {
     margin: margin,
     child: ClipRRect(
       borderRadius: BorderRadius.circular(23),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15),
-        child: Container(
-          padding: padding,
-          decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: .8),
-            borderRadius: BorderRadius.circular(23),
-            border: Border.all(color: Colors.white),
-            boxShadow: AppStyles.glassShadow,
-          ),
-          child: child,
+      child: Container(
+        padding: padding,
+        decoration: BoxDecoration(
+          color: Colors.white.withValues(alpha: .94),
+          borderRadius: BorderRadius.circular(23),
+          border: Border.all(color: AppColors.glassBorder),
+          boxShadow: AppStyles.glassShadow,
         ),
+        child: child,
       ),
     ),
   );
@@ -1484,9 +1760,7 @@ class _ChatMessage {
         ? Map<String, dynamic>.from(r['metadata'] as Map)
         : {},
     read: r['is_read'] == true,
-    deliveredAt: r['delivered_at'] == null
-        ? null
-        : _date(r['delivered_at']),
+    deliveredAt: r['delivered_at'] == null ? null : _date(r['delivered_at']),
     createdAt: _date(r['created_at']),
     queued: false,
   );
@@ -1496,8 +1770,8 @@ class _ChatMessage {
     text: (r['text'] ?? '').toString(),
     type: (r['message_type'] ?? 'text').toString(),
     path: null,
-    name: null,
-    size: null,
+    name: _opt(r['attachment_name']),
+    size: (r['attachment_size'] as num?)?.toInt(),
     meta: r['metadata'] is Map
         ? Map<String, dynamic>.from(r['metadata'] as Map)
         : {},
@@ -1522,11 +1796,76 @@ class _ChatMessage {
     'document' => 'a document',
     _ => text,
   };
+
+  Map<String, dynamic> toCacheRow() => <String, dynamic>{
+    'id': id,
+    'sender_id': senderId,
+    'text': text,
+    'message_type': type,
+    'attachment_url': path,
+    'attachment_name': name,
+    'attachment_size': size,
+    'metadata': meta,
+    'is_read': read,
+    'delivered_at': deliveredAt?.toUtc().toIso8601String(),
+    'created_at': createdAt.toUtc().toIso8601String(),
+  };
 }
 
 String? _opt(dynamic v) {
   final s = v?.toString().trim() ?? '';
   return s.isEmpty ? null : s;
+}
+
+String? _chatMediaObjectPath(String storedValue) {
+  final value = storedValue.trim();
+  final uri = Uri.tryParse(value);
+  if (uri == null || !uri.hasScheme) {
+    return value.replaceFirst(RegExp(r'^/+'), '');
+  }
+  final segments = uri.pathSegments;
+  final objectIndex = segments.indexOf('object');
+  if (objectIndex < 0 || objectIndex + 3 >= segments.length) return null;
+  final access = segments[objectIndex + 1];
+  if (!const {'public', 'sign', 'authenticated'}.contains(access) ||
+      segments[objectIndex + 2] != 'chat-media') {
+    return null;
+  }
+  return segments.sublist(objectIndex + 3).join('/');
+}
+
+Uint8List _pcm16ToWave(
+  Uint8List pcm, {
+  required int sampleRate,
+  required int channels,
+}) {
+  const bitsPerSample = 16;
+  final byteRate = sampleRate * channels * bitsPerSample ~/ 8;
+  final blockAlign = channels * bitsPerSample ~/ 8;
+  final output = Uint8List(44 + pcm.length);
+  final header = ByteData.sublistView(output);
+
+  void ascii(int offset, String value) {
+    for (var index = 0; index < value.length; index++) {
+      output[offset + index] = value.codeUnitAt(index);
+    }
+  }
+
+  ascii(0, 'RIFF');
+  header.setUint32(4, 36 + pcm.length, Endian.little);
+  ascii(8, 'WAVE');
+  ascii(12, 'fmt ');
+  header.setUint32(16, 16, Endian.little);
+  header.setUint16(20, 1, Endian.little);
+  header.setUint16(22, channels, Endian.little);
+  header.setUint32(24, sampleRate, Endian.little);
+  header.setUint32(28, byteRate, Endian.little);
+  header.setUint16(32, blockAlign, Endian.little);
+  header.setUint16(34, bitsPerSample, Endian.little);
+  ascii(36, 'data');
+  header.setUint32(40, pcm.length, Endian.little);
+  output.setRange(44, output.length, pcm);
+  return output;
 }
 
 DateTime _date(dynamic v) =>

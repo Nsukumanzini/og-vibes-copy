@@ -2,7 +2,7 @@ import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_animate/flutter_animate.dart';
+import '../widgets/academic_attachment_actions.dart';
 
 import 'package:og_vibes_student/screens/quiz_screen.dart'
     show QuizRunnerScreen;
@@ -15,8 +15,7 @@ class LmsQuizLockdownScreen extends StatefulWidget {
   final Map<String, dynamic>? quiz;
 
   @override
-  State<LmsQuizLockdownScreen> createState() =>
-      _LmsQuizLockdownScreenState();
+  State<LmsQuizLockdownScreen> createState() => _LmsQuizLockdownScreenState();
 }
 
 class _LmsQuizLockdownScreenState extends State<LmsQuizLockdownScreen> {
@@ -29,9 +28,7 @@ class _LmsQuizLockdownScreenState extends State<LmsQuizLockdownScreen> {
     HapticFeedback.mediumImpact();
     setState(() => _starting = true);
     final completed = await Navigator.of(context).push<bool>(
-      MaterialPageRoute<bool>(
-        builder: (_) => QuizRunnerScreen(quiz: _quiz),
-      ),
+      MaterialPageRoute<bool>(builder: (_) => QuizRunnerScreen(quiz: _quiz)),
     );
     if (!mounted) return;
     if (completed == true) {
@@ -133,10 +130,11 @@ class _LmsQuizLockdownScreenState extends State<LmsQuizLockdownScreen> {
     required int passMark,
   }) {
     final title = (_quiz['title'] ?? 'Secure quiz').toString();
-    final module = (_quiz['module_name'] ??
-            _quiz['module_code'] ??
-            'Your registered module')
-        .toString();
+    final module =
+        (_quiz['module_name'] ??
+                _quiz['module_code'] ??
+                'Your registered module')
+            .toString();
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(26),
@@ -166,7 +164,7 @@ class _LmsQuizLockdownScreenState extends State<LmsQuizLockdownScreen> {
                     ),
                     const SizedBox(width: 6),
                     Text(
-                      secureMode ? 'OG SECURE ASSESSMENT' : 'OG QUIZ ARENA',
+                      secureMode ? 'OG SECURE ASSESSMENT' : 'OG QUIZ BRIEFING',
                       style: const TextStyle(
                         color: AppColors.electricCyan,
                         fontSize: 11,
@@ -215,7 +213,7 @@ class _LmsQuizLockdownScreenState extends State<LmsQuizLockdownScreen> {
           ),
         ],
       ),
-    ).animate().fadeIn(duration: 420.ms).slideY(begin: .08, end: 0);
+    );
   }
 
   Widget _buildBriefingCard({
@@ -223,10 +221,11 @@ class _LmsQuizLockdownScreenState extends State<LmsQuizLockdownScreen> {
     required bool randomOptions,
     required bool secureMode,
   }) {
-    final instructions = (_quiz['instructions'] ??
-            _quiz['description'] ??
-            'Read every question carefully and submit before time expires.')
-        .toString();
+    final instructions =
+        (_quiz['instructions'] ??
+                _quiz['description'] ??
+                'Read every question carefully and submit before time expires.')
+            .toString();
     return _GlassCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -246,6 +245,13 @@ class _LmsQuizLockdownScreenState extends State<LmsQuizLockdownScreen> {
             ),
           ),
           const SizedBox(height: 20),
+          _RuleRow(
+            icon: Icons.attach_file,
+            title: 'Supporting material',
+            detail: 'Check any attached material before starting.',
+            enabled: true,
+          ),
+          AcademicAttachmentActions(table: 'quizzes', recordId: _quiz['id']?.toString() ?? ''),
           _RuleRow(
             icon: Icons.cloud_done_outlined,
             title: 'Automatic answer saving',
@@ -333,8 +339,9 @@ class _LmsQuizLockdownScreenState extends State<LmsQuizLockdownScreen> {
           SizedBox(
             width: double.infinity,
             child: TextButton(
-              onPressed:
-                  _starting ? null : () => Navigator.of(context).pop(false),
+              onPressed: _starting
+                  ? null
+                  : () => Navigator.of(context).pop(false),
               child: const Text('Not now'),
             ),
           ),

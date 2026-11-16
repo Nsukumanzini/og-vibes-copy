@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:ui';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
@@ -7,10 +6,14 @@ import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:shimmer/shimmer.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:url_launcher/url_launcher.dart';
+
+import '../services/diagnostics_service.dart';
 
 import 'package:og_vibes_student/utils/theme_constants.dart';
 import 'package:og_vibes_student/widgets/vibe_scaffold.dart';
+import '../services/offline_cache_service.dart';
+import '../services/academic_file_service.dart';
+import 'pdf_viewer_screen.dart';
 
 class AssignmentSubmissionScreen extends StatefulWidget {
   const AssignmentSubmissionScreen({super.key});
@@ -20,16 +23,13 @@ class AssignmentSubmissionScreen extends StatefulWidget {
       _AssignmentSubmissionScreenState();
 }
 
-class _AssignmentSubmissionScreenState
-    extends State<AssignmentSubmissionScreen>
+class _AssignmentSubmissionScreenState extends State<AssignmentSubmissionScreen>
     with SingleTickerProviderStateMixin {
   static const int _absoluteMaxFileSize = 50 * 1024 * 1024;
   static const List<String> _tabLabels = <String>[
-    'All',
-    'Due Soon',
+    'Open',
     'Submitted',
-    'Graded',
-    'Overdue',
+    'Past Due',
   ];
   static const Set<String> _blockedExtensions = <String>{
     'apk',
@@ -108,27 +108,48 @@ class _AssignmentSubmissionScreenState
 
     try {
       await _loadAcademicContext(user.id);
-      final results = await Future.wait<dynamic>(<Future<dynamic>>[
-        Supabase.instance.client
-            .from('assessment_briefs')
-            .select(
-              'id, module_id, level, title, subject, instructions, due_at, '
-              'allow_late, max_file_size_bytes, published, created_at',
-            )
-            .eq('published', true)
-            .order('due_at', ascending: true),
-        Supabase.instance.client
-            .from('assignment_submissions')
-            .select(
-              'id, user_id, brief_id, module_id, level, title, subject, '
-              'due_date, status, storage_path, submitted_at, grade, feedback, '
-              'file_name, file_size_bytes, file_fingerprint, mime_type, '
-              'late_reason, extension_requested, extension_status, '
-              'withdrawn_at, updated_at, upload_version',
-            )
-            .eq('user_id', user.id)
-            .order('created_at', ascending: false),
-      ]);
+      List<dynamic> results;
+      try {
+        results = await Future.wait<dynamic>(<Future<dynamic>>[
+          Supabase.instance.client
+              .from('assessment_briefs')
+              .select(
+                'id, module_id, level, title, subject, instructions, due_at, '
+                'allow_late, max_file_size_bytes, published, created_at, '
+                'attachment_storage_path, attachment_file_name',
+              )
+              .eq('published', true)
+              .order('due_at', ascending: true)
+              .limit(30),
+          Supabase.instance.client
+              .from('assignment_submissions')
+              .select(
+                'id, user_id, brief_id, module_id, level, title, subject, '
+                'due_date, status, storage_path, submitted_at, grade, feedback, '
+                'file_name, file_size_bytes, file_fingerprint, mime_type, '
+                'late_reason, extension_requested, extension_status, '
+                'withdrawn_at, updated_at, upload_version',
+              )
+              .eq('user_id', user.id)
+              .order('created_at', ascending: false)
+              .limit(30),
+        ]);
+        unawaited(
+          OfflineCacheService.writeList(
+            'assignment_submissions',
+            <Map<String, dynamic>>[
+              {'results': results},
+            ],
+            maxRecords: 1,
+          ),
+        );
+      } catch (_) {
+        final cached = await OfflineCacheService.readList(
+          'assignment_submissions',
+        );
+        if (cached.isEmpty || cached.first['results'] is! List) rethrow;
+        results = List<dynamic>.from(cached.first['results'] as List);
+      }
 
       final briefs = List<Map<String, dynamic>>.from(
         results[0] as List<dynamic>? ?? <dynamic>[],
@@ -158,17 +179,35 @@ class _AssignmentSubmissionScreenState
   }
 
   Future<void> _loadAcademicContext(String userId) async {
-    final results = await Future.wait<dynamic>(<Future<dynamic>>[
-      Supabase.instance.client
-          .from('profiles')
-          .select('department, level')
-          .eq('id', userId)
-          .maybeSingle(),
-      Supabase.instance.client.from('programmes').select('id, name'),
-      Supabase.instance.client
-          .from('modules')
-          .select('id, programme_id, level, name, code'),
-    ]);
+    List<dynamic> results;
+    try {
+      results = await Future.wait<dynamic>(<Future<dynamic>>[
+        Supabase.instance.client
+            .from('profiles')
+            .select('department, level')
+            .eq('id', userId)
+            .maybeSingle(),
+        Supabase.instance.client.from('programmes').select('id, name'),
+        Supabase.instance.client
+            .from('modules')
+            .select('id, programme_id, level, name, code'),
+      ]);
+      unawaited(
+        OfflineCacheService.writeList(
+          'assignment_academic_context',
+          <Map<String, dynamic>>[
+            {'results': results},
+          ],
+          maxRecords: 1,
+        ),
+      );
+    } catch (_) {
+      final cached = await OfflineCacheService.readList(
+        'assignment_academic_context',
+      );
+      if (cached.isEmpty || cached.first['results'] is! List) rethrow;
+      results = List<dynamic>.from(cached.first['results'] as List);
+    }
 
     final profile = results[0] is Map
         ? Map<String, dynamic>.from(results[0] as Map)
@@ -181,11 +220,14 @@ class _AssignmentSubmissionScreenState
     );
     final department = _normalize(profile['department']);
     final level = _normalize(profile['level']);
-    final programmeIds = programmes.where((programme) {
-      final name = _normalize(programme['name']);
-      return department.isNotEmpty &&
-          (department.contains(name) || name.contains(department));
-    }).map((programme) => _text(programme['id'])).toSet();
+    final programmeIds = programmes
+        .where((programme) {
+          final name = _normalize(programme['name']);
+          return department.isNotEmpty &&
+              (department.contains(name) || name.contains(department));
+        })
+        .map((programme) => _text(programme['id']))
+        .toSet();
 
     _modules
       ..clear()
@@ -193,14 +235,16 @@ class _AssignmentSubmissionScreenState
     _registeredModuleIds
       ..clear()
       ..addAll(
-        _modules.where((module) {
-          final moduleLevel = _normalize(module.level);
-          return programmeIds.contains(module.programmeId) &&
-              (level.isEmpty ||
-                  level == moduleLevel ||
-                  level.contains(moduleLevel) ||
-                  moduleLevel.contains(level));
-        }).map((module) => module.id),
+        _modules
+            .where((module) {
+              final moduleLevel = _normalize(module.level);
+              return programmeIds.contains(module.programmeId) &&
+                  (level.isEmpty ||
+                      level == moduleLevel ||
+                      level.contains(moduleLevel) ||
+                      moduleLevel.contains(level));
+            })
+            .map((module) => module.id),
       );
     _hasRegistrationMatch = _registeredModuleIds.isNotEmpty;
     if (!_hasRegistrationMatch) _myModulesOnly = false;
@@ -211,10 +255,10 @@ class _AssignmentSubmissionScreenState
         .from('assignment_submissions')
         .stream(primaryKey: <String>['id'])
         .listen((_) {
-      if (mounted && !_isUploading) {
-        unawaited(_loadDashboard(showLoader: false));
-      }
-    }, onError: (_) {});
+          if (mounted && !_isUploading) {
+            unawaited(_loadDashboard(showLoader: false));
+          }
+        }, onError: (_) {});
   }
 
   List<_AssessmentEntry> get _entries {
@@ -263,15 +307,24 @@ class _AssignmentSubmissionScreenState
     final entries = _entries;
     switch (index) {
       case 1:
-        return entries.where((entry) => entry.isDueSoon).toList();
+        return entries
+            .where(
+              (entry) =>
+                  entry.isSubmitted || entry.isGraded || entry.isWithdrawn,
+            )
+            .toList();
       case 2:
-        return entries.where((entry) => entry.isSubmitted).toList();
-      case 3:
-        return entries.where((entry) => entry.isGraded).toList();
-      case 4:
         return entries.where((entry) => entry.isOverdue).toList();
       default:
-        return entries;
+        return entries
+            .where(
+              (entry) =>
+                  !entry.isSubmitted &&
+                  !entry.isGraded &&
+                  !entry.isOverdue &&
+                  !entry.isWithdrawn,
+            )
+            .toList();
     }
   }
 
@@ -285,7 +338,11 @@ class _AssignmentSubmissionScreenState
       )
       .length;
   int get _submittedCount =>
-      _entries.where((entry) => entry.isSubmitted).length;
+      _entries
+          .where(
+            (entry) => entry.isSubmitted || entry.isGraded || entry.isWithdrawn,
+          )
+          .length;
   int get _gradedCount => _entries.where((entry) => entry.isGraded).length;
   int get _overdueCount => _entries.where((entry) => entry.isOverdue).length;
 
@@ -293,7 +350,7 @@ class _AssignmentSubmissionScreenState
   Widget build(BuildContext context) {
     return VibeScaffold(
       appBar: AppBar(
-        title: const Text('Assessment Submission'),
+        title: const Text('Assessments'),
         backgroundColor: Colors.transparent,
         actions: <Widget>[
           IconButton(
@@ -302,16 +359,6 @@ class _AssignmentSubmissionScreenState
             tooltip: 'Refresh submissions',
           ),
         ],
-      ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: _isUploading ? null : _showManualAssessmentSheet,
-        backgroundColor: AppColors.vibeBlue,
-        foregroundColor: Colors.white,
-        icon: const Icon(Icons.upload_file_rounded),
-        label: const Text(
-          'Upload',
-          style: TextStyle(fontWeight: FontWeight.w900),
-        ),
       ),
       body: _isLoading && _briefs.isEmpty && _submissions.isEmpty
           ? _buildLoadingState()
@@ -348,12 +395,13 @@ class _AssignmentSubmissionScreenState
   }
 
   Widget _buildHero() {
-    final urgent = _entries
-        .where((entry) => !entry.isSubmitted && entry.deadline != null)
-        .toList()
-      ..sort((a, b) => a.deadline!.compareTo(b.deadline!));
+    final urgent =
+        _entries
+            .where((entry) => !entry.isSubmitted && entry.deadline != null)
+            .toList()
+          ..sort((a, b) => a.deadline!.compareTo(b.deadline!));
     final next = urgent.isEmpty ? null : urgent.first;
-    return Padding(
+    final hero = Padding(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
       child: Container(
         padding: const EdgeInsets.all(22),
@@ -487,7 +535,9 @@ class _AssignmentSubmissionScreenState
           ],
         ),
       ),
-    ).animate().fadeIn(duration: 420.ms).slideY(begin: .05, end: 0);
+    );
+    if (MediaQuery.maybeOf(context)?.disableAnimations ?? false) return hero;
+    return hero.animate().fadeIn(duration: 420.ms).slideY(begin: .05, end: 0);
   }
 
   Widget _heroStat(String value, String label, Color color) {
@@ -545,8 +595,7 @@ class _AssignmentSubmissionScreenState
                       : 'All modules • registration not matched',
                   overflow: TextOverflow.ellipsis,
                 ),
-                selectedColor:
-                    AppColors.vibeBlue.withValues(alpha: 0.14),
+                selectedColor: AppColors.vibeBlue.withValues(alpha: 0.14),
                 side: BorderSide.none,
               ),
             ),
@@ -584,11 +633,9 @@ class _AssignmentSubmissionScreenState
             fontWeight: FontWeight.w900,
           ),
           tabs: <Widget>[
-            Tab(text: 'All ${_entries.length}'),
-            Tab(text: 'Due Soon ${_entriesForTab(1).length}'),
+            Tab(text: 'Open ${_entriesForTab(0).length}'),
             Tab(text: 'Submitted $_submittedCount'),
-            Tab(text: 'Graded $_gradedCount'),
-            Tab(text: 'Overdue $_overdueCount'),
+            Tab(text: 'Past due $_overdueCount'),
           ],
         ),
       ),
@@ -601,22 +648,8 @@ class _AssignmentSubmissionScreenState
       onRefresh: _loadDashboard,
       child: LayoutBuilder(
         builder: (context, constraints) {
-          final isWide = constraints.maxWidth >= 820;
-          if (isWide) {
-            return GridView.builder(
-              padding: const EdgeInsets.fromLTRB(16, 2, 16, 110),
-              gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-                maxCrossAxisExtent: 520,
-                mainAxisExtent: 390,
-                crossAxisSpacing: 14,
-                mainAxisSpacing: 14,
-              ),
-              itemCount: entries.length,
-              itemBuilder: (_, index) =>
-                  _buildAssessmentCard(entries[index], index),
-            );
-          }
           return ListView.separated(
+            physics: const AlwaysScrollableScrollPhysics(),
             padding: const EdgeInsets.fromLTRB(16, 2, 16, 110),
             itemCount: entries.length,
             separatorBuilder: (_, _) => const SizedBox(height: 13),
@@ -631,7 +664,7 @@ class _AssignmentSubmissionScreenState
   Widget _buildAssessmentCard(_AssessmentEntry entry, int index) {
     final status = _statusPresentation(entry);
     final deadlinePassed = entry.isOverdue;
-    return _glass(
+    final card = _glass(
       padding: const EdgeInsets.all(17),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -645,10 +678,7 @@ class _AssignmentSubmissionScreenState
                 decoration: BoxDecoration(
                   gradient: deadlinePassed
                       ? const LinearGradient(
-                          colors: <Color>[
-                            AppColors.danger,
-                            Color(0xFFFF7182),
-                          ],
+                          colors: <Color>[AppColors.danger, Color(0xFFFF7182)],
                         )
                       : AppStyles.brandGradient,
                   borderRadius: BorderRadius.circular(15),
@@ -682,7 +712,7 @@ class _AssignmentSubmissionScreenState
                     ),
                     const SizedBox(height: 5),
                     Text(
-                      '${entry.subject} • ${entry.level}',
+                      '${_moduleDisplayName(entry)} • ${entry.level}',
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
@@ -774,27 +804,48 @@ class _AssignmentSubmissionScreenState
             const SizedBox(height: 11),
             _extensionBanner(entry.submission!),
           ],
-          if (entry.isGraded && entry.submission?.feedback.isNotEmpty == true)
-            ...<Widget>[
-              const SizedBox(height: 11),
-              Text(
-                'Feedback: ${entry.submission!.feedback}',
-                maxLines: 2,
+          if (entry.brief?.attachmentStoragePath.isNotEmpty ==
+              true) ...<Widget>[
+            const SizedBox(height: 11),
+            OutlinedButton.icon(
+              onPressed: () => _viewBriefAttachment(entry.brief!),
+              icon: const Icon(Icons.menu_book_rounded),
+              label: Text(
+                entry.brief!.attachmentFileName.isEmpty
+                    ? 'Open assessment brief'
+                    : entry.brief!.attachmentFileName,
                 overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  color: AppColors.textMuted,
-                  fontSize: 12,
-                  height: 1.35,
-                  fontWeight: FontWeight.w600,
-                ),
               ),
-            ],
-          const Spacer(),
+            ),
+            TextButton.icon(
+              onPressed: () =>
+                  _viewBriefAttachment(entry.brief!, download: true),
+              icon: const Icon(Icons.download_rounded),
+              label: const Text('Download assignment document'),
+            ),
+          ],
+          if (entry.isGraded &&
+              entry.submission?.feedback.isNotEmpty == true) ...<Widget>[
+            const SizedBox(height: 11),
+            Text(
+              'Feedback: ${entry.submission!.feedback}',
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                color: AppColors.textMuted,
+                fontSize: 12,
+                height: 1.35,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
           const SizedBox(height: 14),
           _buildCardActions(entry),
         ],
       ),
-    )
+    );
+    if (MediaQuery.maybeOf(context)?.disableAnimations ?? false) return card;
+    return card
         .animate(delay: (45 * index).ms)
         .fadeIn(duration: 350.ms)
         .slideY(begin: .07, end: 0);
@@ -887,25 +938,87 @@ class _AssignmentSubmissionScreenState
       child: FilledButton.icon(
         onPressed: () => _pickAndUpload(entry),
         style: FilledButton.styleFrom(
-          backgroundColor:
-              entry.isOverdue ? AppColors.danger : AppColors.vibeBlue,
+          backgroundColor: entry.isOverdue
+              ? AppColors.danger
+              : AppColors.vibeBlue,
           padding: const EdgeInsets.symmetric(vertical: 14),
         ),
         icon: const Icon(Icons.upload_file_rounded),
         label: Text(
-          entry.isOverdue ? 'Submit late with reason' : 'Upload submission',
+          entry.isOverdue ? 'Submit late with reason' : 'Submit assignment',
           style: const TextStyle(fontWeight: FontWeight.w900),
         ),
       ),
     );
   }
 
+  String _moduleDisplayName(_AssessmentEntry entry) {
+    final module = _modules.cast<_ModuleRef?>().firstWhere(
+      (candidate) => candidate?.id == entry.moduleId,
+      orElse: () => null,
+    );
+    if (module != null && module.displayName.isNotEmpty) return module.displayName;
+    return entry.subject.isEmpty ? 'Module not specified' : entry.subject;
+  }
+
+  Future<void> _viewBriefAttachment(
+    _AssessmentBrief brief, {
+    bool download = false,
+  }) async {
+    try {
+      String signedUrl;
+      try {
+        signedUrl = await Supabase.instance.client.storage
+            .from('assessment-resources')
+            .createSignedUrl(brief.attachmentStoragePath, 600);
+      } on StorageException {
+        // Older admin uploads use the academic library bucket.
+        signedUrl = await Supabase.instance.client.storage
+            .from('academic-content')
+            .createSignedUrl(brief.attachmentStoragePath, 600);
+      }
+      await _openDocument(
+        signedUrl,
+        brief.attachmentFileName.isEmpty
+            ? brief.attachmentStoragePath.split('/').last
+            : brief.attachmentFileName,
+        download: download,
+      );
+    } catch (_) {
+      _showMessage('Unable to open the assessment brief.', isError: true);
+    }
+  }
+
+  Future<void> _openDocument(
+    String url,
+    String name, {
+    bool download = false,
+  }) async {
+    if (!mounted) return;
+    if (!download && name.toLowerCase().endsWith('.pdf')) {
+      await Navigator.of(context).push<void>(
+        MaterialPageRoute(
+          builder: (_) => PdfViewerScreen(url: url, title: name),
+        ),
+      );
+      return;
+    }
+    final saved = await AcademicFileService.download(url, name);
+    if (mounted) {
+      _showMessage(
+        saved
+            ? 'Document saved or sent to your browser downloads.'
+            : 'Download cancelled.',
+      );
+    }
+  }
+
   Widget _extensionBanner(_SubmissionItem submission) {
     final color = submission.extensionStatus == 'approved'
         ? AppColors.success
         : submission.extensionStatus == 'declined'
-            ? AppColors.danger
-            : AppColors.warning;
+        ? AppColors.danger
+        : AppColors.warning;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
       decoration: BoxDecoration(
@@ -993,149 +1106,6 @@ class _AssignmentSubmissionScreenState
     );
   }
 
-  Future<void> _showManualAssessmentSheet() async {
-    final titleController = TextEditingController();
-    final subjectController = TextEditingController();
-    DateTime? dueDate;
-    _ModuleRef? selectedModule = _registeredModules.firstOrNull;
-    final result = await showModalBottomSheet<_ManualAssessment>(
-      context: context,
-      isScrollControlled: true,
-      showDragHandle: true,
-      backgroundColor: const Color(0xFFF8FAFF),
-      builder: (context) => StatefulBuilder(
-        builder: (context, setSheetState) => SafeArea(
-          child: Padding(
-            padding: EdgeInsets.fromLTRB(
-              20,
-              0,
-              20,
-              20 + MediaQuery.viewInsetsOf(context).bottom,
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: <Widget>[
-                const Text(
-                  'Upload an assessment',
-                  style: TextStyle(
-                    color: AppColors.midnightInk,
-                    fontSize: 21,
-                    fontWeight: FontWeight.w900,
-                  ),
-                ),
-                const SizedBox(height: 5),
-                const Text(
-                  'Use this when your lecturer has not published a brief yet.',
-                  style: TextStyle(color: AppColors.textMuted),
-                ),
-                const SizedBox(height: 16),
-                TextField(
-                  controller: titleController,
-                  textCapitalization: TextCapitalization.sentences,
-                  decoration: const InputDecoration(
-                    labelText: 'Assessment title',
-                    prefixIcon: Icon(Icons.assignment_outlined),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: subjectController,
-                  textCapitalization: TextCapitalization.words,
-                  decoration: const InputDecoration(
-                    labelText: 'Subject',
-                    prefixIcon: Icon(Icons.menu_book_rounded),
-                  ),
-                ),
-                if (_registeredModules.isNotEmpty) ...<Widget>[
-                  const SizedBox(height: 12),
-                  DropdownButtonFormField<_ModuleRef>(
-                    initialValue: selectedModule,
-                    isExpanded: true,
-                    decoration: const InputDecoration(
-                      labelText: 'Registered module',
-                    ),
-                    items: _registeredModules
-                        .map(
-                          (module) => DropdownMenuItem<_ModuleRef>(
-                            value: module,
-                            child: Text(module.displayName),
-                          ),
-                        )
-                        .toList(),
-                    onChanged: (value) =>
-                        setSheetState(() => selectedModule = value),
-                  ),
-                ],
-                const SizedBox(height: 12),
-                ListTile(
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(14),
-                    side: const BorderSide(color: AppColors.glassBorder),
-                  ),
-                  leading: const Icon(Icons.event_outlined),
-                  title: Text(
-                    dueDate == null
-                        ? 'Add due date (optional)'
-                        : _formatDate(dueDate!),
-                  ),
-                  trailing: const Icon(Icons.chevron_right_rounded),
-                  onTap: () async {
-                    final selected = await showDatePicker(
-                      context: context,
-                      initialDate:
-                          DateTime.now().add(const Duration(days: 7)),
-                      firstDate:
-                          DateTime.now().subtract(const Duration(days: 365)),
-                      lastDate:
-                          DateTime.now().add(const Duration(days: 730)),
-                    );
-                    if (selected != null) {
-                      setSheetState(() => dueDate = selected);
-                    }
-                  },
-                ),
-                const SizedBox(height: 18),
-                FilledButton.icon(
-                  onPressed: () {
-                    final title = titleController.text.trim();
-                    final subject = subjectController.text.trim();
-                    if (title.isEmpty || subject.isEmpty) return;
-                    Navigator.pop(
-                      context,
-                      _ManualAssessment(
-                        title: title,
-                        subject: subject,
-                        level: selectedModule?.level ?? 'Unspecified',
-                        moduleId: selectedModule?.id ?? '',
-                        deadline: dueDate == null
-                            ? null
-                            : DateTime(
-                                dueDate!.year,
-                                dueDate!.month,
-                                dueDate!.day,
-                                23,
-                                59,
-                                59,
-                              ),
-                      ),
-                    );
-                  },
-                  icon: const Icon(Icons.arrow_forward_rounded),
-                  label: const Text('Choose document'),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-    titleController.dispose();
-    subjectController.dispose();
-    if (result == null) return;
-    await _pickAndUpload(_AssessmentEntry(manual: result));
-  }
-
   Future<void> _pickAndUpload(
     _AssessmentEntry entry, {
     bool replace = false,
@@ -1173,8 +1143,7 @@ class _AssignmentSubmissionScreenState
     }
 
     String? lateReason;
-    if (entry.isOverdue &&
-        entry.submission?.extensionStatus != 'approved') {
+    if (entry.isOverdue && entry.submission?.extensionStatus != 'approved') {
       if (!entry.allowLate) {
         await _requestExtension(entry);
         return;
@@ -1184,13 +1153,13 @@ class _AssignmentSubmissionScreenState
     }
 
     Future<void> task() => _uploadDocument(
-          entry: entry,
-          file: file,
-          bytes: bytes,
-          fingerprint: fingerprint,
-          lateReason: lateReason,
-          replace: replace,
-        );
+      entry: entry,
+      file: file,
+      bytes: bytes,
+      fingerprint: fingerprint,
+      lateReason: lateReason,
+      replace: replace,
+    );
     _retryUpload = task;
     await task();
   }
@@ -1233,8 +1202,15 @@ class _AssignmentSubmissionScreenState
     }
 
     if (extension == 'pdf') return startsWith(<int>[0x25, 0x50, 0x44, 0x46]);
-    if (<String>{'docx', 'xlsx', 'pptx', 'odt', 'ods', 'odp', 'zip'}
-        .contains(extension)) {
+    if (<String>{
+      'docx',
+      'xlsx',
+      'pptx',
+      'odt',
+      'ods',
+      'odp',
+      'zip',
+    }.contains(extension)) {
       return startsWith(<int>[0x50, 0x4B]);
     }
     if (extension == 'png') {
@@ -1267,6 +1243,19 @@ class _AssignmentSubmissionScreenState
       _showMessage('Please sign in before submitting.', isError: true);
       return;
     }
+    if (entry.isGraded || (replace && entry.submission == null)) {
+      _showMessage('This submission can no longer be changed.', isError: true);
+      return;
+    }
+    if (replace &&
+        !_submissions.any((submission) => submission.id == entry.submission!.id)) {
+      _showMessage('You can only replace your own submission.', isError: true);
+      return;
+    }
+    if (entry.isOverdue && entry.submission?.extensionStatus != 'approved') {
+      _showMessage('The deadline has passed. Request an extension first.', isError: true);
+      return;
+    }
 
     setState(() {
       _isUploading = true;
@@ -1276,6 +1265,7 @@ class _AssignmentSubmissionScreenState
     });
 
     String? newStoragePath;
+    var submissionSaved = false;
     try {
       await Future<void>.delayed(const Duration(milliseconds: 180));
       if (!mounted) return;
@@ -1307,8 +1297,7 @@ class _AssignmentSubmissionScreenState
       final row = <String, dynamic>{
         'user_id': user.id,
         'brief_id': entry.brief?.id,
-        'module_id':
-            entry.moduleId.isEmpty ? null : entry.moduleId,
+        'module_id': entry.moduleId.isEmpty ? null : entry.moduleId,
         'level': entry.level,
         'title': entry.title,
         'subject': entry.subject,
@@ -1330,19 +1319,24 @@ class _AssignmentSubmissionScreenState
         await Supabase.instance.client
             .from('assignment_submissions')
             .update(row)
-            .eq('id', entry.submission!.id);
+            .eq('id', entry.submission!.id)
+            .select('id')
+            .single();
       } else if (entry.submission != null &&
           entry.submission!.status == 'withdrawn') {
         await Supabase.instance.client
             .from('assignment_submissions')
             .update(row)
-            .eq('id', entry.submission!.id);
+            .eq('id', entry.submission!.id)
+            .select('id')
+            .single();
       } else {
         await Supabase.instance.client
             .from('assignment_submissions')
             .insert(row);
       }
 
+      submissionSaved = true;
       final oldPath = entry.submission?.storagePath;
       if (replace &&
           oldPath != null &&
@@ -1360,8 +1354,7 @@ class _AssignmentSubmissionScreenState
       if (!mounted) return;
       setState(() {
         _uploadProgress = 1;
-        _uploadStage =
-            replace ? 'Submission replaced' : 'Submission complete';
+        _uploadStage = replace ? 'Submission replaced' : 'Submission complete';
         _retryUpload = null;
       });
       HapticFeedback.heavyImpact();
@@ -1373,7 +1366,13 @@ class _AssignmentSubmissionScreenState
       );
       await Future<void>.delayed(const Duration(milliseconds: 650));
     } catch (error) {
-      if (newStoragePath != null) {
+      unawaited(
+        DiagnosticsService.record(
+          'upload_failed_assignment_submission',
+          metadata: {'error_type': error.runtimeType.toString()},
+        ),
+      );
+      if (newStoragePath != null && !submissionSaved) {
         try {
           await Supabase.instance.client.storage
               .from('assignment_submissions')
@@ -1400,12 +1399,13 @@ class _AssignmentSubmissionScreenState
       HapticFeedback.lightImpact();
       final signedUrl = await Supabase.instance.client.storage
           .from('assignment_submissions')
-          .createSignedUrl(submission.storagePath, 60);
-      final uri = Uri.tryParse(signedUrl);
-      if (uri == null ||
-          !await launchUrl(uri, mode: LaunchMode.externalApplication)) {
-        throw StateError('Unable to open signed document');
-      }
+          .createSignedUrl(submission.storagePath, 600);
+      await _openDocument(
+        signedUrl,
+        submission.fileName.isEmpty
+            ? submission.storagePath.split('/').last
+            : submission.fileName,
+      );
     } catch (_) {
       _showMessage(
         'The secure document link could not be opened. Please try again.',
@@ -1437,6 +1437,14 @@ class _AssignmentSubmissionScreenState
       ),
     );
     if (confirmed != true || entry.submission == null) return;
+    if (entry.isGraded || !entry.canChangeBeforeDeadline) {
+      _showMessage('This submission can no longer be withdrawn.', isError: true);
+      return;
+    }
+    if (!_submissions.any((submission) => submission.id == entry.submission!.id)) {
+      _showMessage('You can only withdraw your own submission.', isError: true);
+      return;
+    }
     try {
       await Supabase.instance.client
           .from('assignment_submissions')
@@ -1464,7 +1472,7 @@ class _AssignmentSubmissionScreenState
       context: context,
       isScrollControlled: true,
       showDragHandle: true,
-      backgroundColor: const Color(0xFFF8FAFF),
+      backgroundColor: AppColors.surfaceSoft,
       builder: (context) => Padding(
         padding: EdgeInsets.fromLTRB(
           20,
@@ -1529,21 +1537,20 @@ class _AssignmentSubmissionScreenState
             .update(values)
             .eq('id', entry.submission!.id);
       } else {
-        await Supabase.instance.client.from('assignment_submissions').insert(
-          <String, dynamic>{
-            ...values,
-            'user_id': user.id,
-            'brief_id': entry.brief?.id,
-            'module_id':
-                entry.moduleId.isEmpty ? null : entry.moduleId,
-            'level': entry.level,
-            'title': entry.title,
-            'subject': entry.subject,
-            'due_date': entry.deadline?.toIso8601String().split('T').first,
-            'storage_path': null,
-            'document_url': null,
-          },
-        );
+        await Supabase.instance.client
+            .from('assignment_submissions')
+            .insert(<String, dynamic>{
+              ...values,
+              'user_id': user.id,
+              'brief_id': entry.brief?.id,
+              'module_id': entry.moduleId.isEmpty ? null : entry.moduleId,
+              'level': entry.level,
+              'title': entry.title,
+              'subject': entry.subject,
+              'due_date': entry.deadline?.toIso8601String().split('T').first,
+              'storage_path': null,
+              'document_url': null,
+            });
       }
       await _loadDashboard(showLoader: false);
       HapticFeedback.mediumImpact();
@@ -1559,7 +1566,7 @@ class _AssignmentSubmissionScreenState
       context: context,
       isScrollControlled: true,
       showDragHandle: true,
-      backgroundColor: const Color(0xFFF8FAFF),
+      backgroundColor: AppColors.surfaceSoft,
       builder: (context) => Padding(
         padding: EdgeInsets.fromLTRB(
           20,
@@ -1671,8 +1678,7 @@ class _AssignmentSubmissionScreenState
               minHeight: 7,
               borderRadius: BorderRadius.circular(999),
               color: failed ? AppColors.danger : AppColors.vibeBlue,
-              backgroundColor:
-                  AppColors.vibeBlue.withValues(alpha: .08),
+              backgroundColor: AppColors.vibeBlue.withValues(alpha: .08),
             ),
           ],
         ),
@@ -1805,21 +1811,15 @@ class _AssignmentSubmissionScreenState
     required Widget child,
     EdgeInsetsGeometry padding = EdgeInsets.zero,
   }) {
-    return ClipRRect(
-      borderRadius: AppStyles.controlRadius,
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
-        child: Container(
-          padding: padding,
-          decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: .80),
-            borderRadius: AppStyles.controlRadius,
-            border: Border.all(color: Colors.white.withValues(alpha: .90)),
-            boxShadow: AppStyles.softShadow,
-          ),
-          child: child,
-        ),
+    return Container(
+      padding: padding,
+      decoration: BoxDecoration(
+        color: AppColors.surfaceElevated,
+        borderRadius: AppStyles.controlRadius,
+        border: Border.all(color: AppColors.outline),
+        boxShadow: AppStyles.softShadow,
       ),
+      child: child,
     );
   }
 
@@ -1827,7 +1827,7 @@ class _AssignmentSubmissionScreenState
     showModalBottomSheet<void>(
       context: context,
       showDragHandle: true,
-      backgroundColor: const Color(0xFFF8FAFF),
+      backgroundColor: AppColors.surfaceSoft,
       builder: (context) => const SafeArea(
         child: Padding(
           padding: EdgeInsets.fromLTRB(22, 0, 22, 26),
@@ -1876,14 +1876,6 @@ class _AssignmentSubmissionScreenState
           content: Text(text),
         ),
       );
-  }
-
-  List<_ModuleRef> get _registeredModules {
-    final values = _modules
-        .where((module) => _registeredModuleIds.contains(module.id))
-        .toList()
-      ..sort((a, b) => a.displayName.compareTo(b.displayName));
-    return values;
   }
 
   String _friendlyUploadError(Object error) {
@@ -1966,20 +1958,15 @@ class _AssignmentSubmissionScreenState
 }
 
 class _AssessmentEntry {
-  const _AssessmentEntry({this.brief, this.submission, this.manual});
+  const _AssessmentEntry({this.brief, this.submission});
 
   final _AssessmentBrief? brief;
   final _SubmissionItem? submission;
-  final _ManualAssessment? manual;
-
-  String get title => brief?.title ?? submission?.title ?? manual?.title ?? '';
-  String get subject =>
-      brief?.subject ?? submission?.subject ?? manual?.subject ?? '';
-  String get level => brief?.level ?? submission?.level ?? manual?.level ?? '';
-  String get moduleId =>
-      brief?.moduleId ?? submission?.moduleId ?? manual?.moduleId ?? '';
-  DateTime? get deadline =>
-      brief?.dueAt ?? submission?.dueDate ?? manual?.deadline;
+  String get title => brief?.title ?? submission?.title ?? '';
+  String get subject => brief?.subject ?? submission?.subject ?? '';
+  String get level => brief?.level ?? submission?.level ?? '';
+  String get moduleId => brief?.moduleId ?? submission?.moduleId ?? '';
+  DateTime? get deadline => brief?.dueAt ?? submission?.dueDate;
   bool get allowLate => brief?.allowLate ?? true;
   int get maxFileSize =>
       brief?.maxFileSizeBytes ??
@@ -2013,6 +2000,8 @@ class _AssessmentBrief {
     required this.dueAt,
     required this.allowLate,
     required this.maxFileSizeBytes,
+    required this.attachmentStoragePath,
+    required this.attachmentFileName,
   });
 
   final String id;
@@ -2023,6 +2012,8 @@ class _AssessmentBrief {
   final DateTime dueAt;
   final bool allowLate;
   final int maxFileSizeBytes;
+  final String attachmentStoragePath;
+  final String attachmentFileName;
 
   factory _AssessmentBrief.fromRow(Map<String, dynamic> row) {
     return _AssessmentBrief(
@@ -2031,14 +2022,21 @@ class _AssessmentBrief {
       level: _AssignmentSubmissionScreenState._text(row['level']),
       title: _AssignmentSubmissionScreenState._text(row['title']),
       subject: _AssignmentSubmissionScreenState._text(row['subject']),
-      dueAt: DateTime.tryParse(
+      dueAt:
+          DateTime.tryParse(
             _AssignmentSubmissionScreenState._text(row['due_at']),
           ) ??
           DateTime.now(),
       allowLate: row['allow_late'] == true,
       maxFileSizeBytes:
           int.tryParse(row['max_file_size_bytes']?.toString() ?? '') ??
-              _AssignmentSubmissionScreenState._absoluteMaxFileSize,
+          _AssignmentSubmissionScreenState._absoluteMaxFileSize,
+      attachmentStoragePath: _AssignmentSubmissionScreenState._text(
+        row['attachment_storage_path'],
+      ),
+      attachmentFileName: _AssignmentSubmissionScreenState._text(
+        row['attachment_file_name'],
+      ),
     );
   }
 }
@@ -2102,14 +2100,16 @@ class _SubmissionItem {
       level: _AssignmentSubmissionScreenState._text(row['level']),
       title: _AssignmentSubmissionScreenState._text(row['title']),
       subject: _AssignmentSubmissionScreenState._text(row['subject']),
-      status: _AssignmentSubmissionScreenState._text(row['status']).toLowerCase(),
-      storagePath:
-          _AssignmentSubmissionScreenState._text(row['storage_path']),
+      status: _AssignmentSubmissionScreenState._text(
+        row['status'],
+      ).toLowerCase(),
+      storagePath: _AssignmentSubmissionScreenState._text(row['storage_path']),
       fileName: _AssignmentSubmissionScreenState._text(row['file_name']),
       fileSizeBytes:
           int.tryParse(row['file_size_bytes']?.toString() ?? '') ?? 0,
-      fileFingerprint:
-          _AssignmentSubmissionScreenState._text(row['file_fingerprint']),
+      fileFingerprint: _AssignmentSubmissionScreenState._text(
+        row['file_fingerprint'],
+      ),
       submittedAt: DateTime.tryParse(
         _AssignmentSubmissionScreenState._text(row['submitted_at']),
       ),
@@ -2126,10 +2126,10 @@ class _SubmissionItem {
       grade: _AssignmentSubmissionScreenState._text(row['grade']),
       feedback: _AssignmentSubmissionScreenState._text(row['feedback']),
       extensionRequested: row['extension_requested'] == true,
-      extensionStatus:
-          _AssignmentSubmissionScreenState._text(row['extension_status']),
-      uploadVersion:
-          int.tryParse(row['upload_version']?.toString() ?? '') ?? 1,
+      extensionStatus: _AssignmentSubmissionScreenState._text(
+        row['extension_status'],
+      ),
+      uploadVersion: int.tryParse(row['upload_version']?.toString() ?? '') ?? 1,
     );
   }
 }
@@ -2154,8 +2154,7 @@ class _ModuleRef {
   factory _ModuleRef.fromRow(Map<String, dynamic> row) {
     return _ModuleRef(
       id: _AssignmentSubmissionScreenState._text(row['id']),
-      programmeId:
-          _AssignmentSubmissionScreenState._text(row['programme_id']),
+      programmeId: _AssignmentSubmissionScreenState._text(row['programme_id']),
       level: _AssignmentSubmissionScreenState._text(row['level']),
       name: _AssignmentSubmissionScreenState._text(row['name']),
       code: _AssignmentSubmissionScreenState._text(row['code']),
@@ -2167,22 +2166,6 @@ class _ModuleRef {
 
   @override
   int get hashCode => id.hashCode;
-}
-
-class _ManualAssessment {
-  const _ManualAssessment({
-    required this.title,
-    required this.subject,
-    required this.level,
-    required this.moduleId,
-    required this.deadline,
-  });
-
-  final String title;
-  final String subject;
-  final String level;
-  final String moduleId;
-  final DateTime? deadline;
 }
 
 class _StatusPresentation {

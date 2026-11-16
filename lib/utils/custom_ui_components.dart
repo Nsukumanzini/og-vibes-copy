@@ -22,12 +22,7 @@ import 'theme_constants.dart';
 /// )
 /// ```
 class BentoCard extends StatelessWidget {
-  const BentoCard({
-    super.key,
-    required this.child,
-    this.padding,
-    this.color,
-  });
+  const BentoCard({super.key, required this.child, this.padding, this.color});
 
   /// The widget displayed inside the card.
   final Widget child;
@@ -132,11 +127,7 @@ class PrimaryHapticButton extends StatelessWidget {
 /// )
 /// ```
 class GlassOverlay extends StatelessWidget {
-  const GlassOverlay({
-    super.key,
-    required this.child,
-    this.blur = 10.0,
-  });
+  const GlassOverlay({super.key, required this.child, this.blur = 10.0});
 
   /// The widget rendered inside the frosted-glass surface.
   final Widget child;
@@ -146,10 +137,15 @@ class GlassOverlay extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final reduceEffects =
+        MediaQuery.maybeOf(context)?.disableAnimations ?? false;
+    final effectiveBlur = reduceEffects
+        ? 0.0
+        : blur.clamp(0, AppStyles.heroBlur).toDouble();
     return ClipRRect(
       borderRadius: AppStyles.bentoRadius,
       child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: blur, sigmaY: blur),
+        filter: ImageFilter.blur(sigmaX: effectiveBlur, sigmaY: effectiveBlur),
         child: Container(
           padding: const EdgeInsets.all(20.0),
           decoration: BoxDecoration(

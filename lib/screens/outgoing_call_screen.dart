@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 
 import '../services/call_service.dart';
 import '../utils/theme_constants.dart';
+import '../widgets/adaptive_scroll_body.dart';
 import 'active_call_screen.dart';
 
 class OutgoingCallScreen extends StatefulWidget {
@@ -13,11 +14,13 @@ class OutgoingCallScreen extends StatefulWidget {
     required this.contactName,
     required this.callType,
     required this.calleeId,
+    this.contactPhotoUrl,
   });
 
   final String contactName;
   final String callType;
   final String calleeId;
+  final String? contactPhotoUrl;
 
   @override
   State<OutgoingCallScreen> createState() => _OutgoingCallScreenState();
@@ -55,17 +58,27 @@ class _OutgoingCallScreenState extends State<OutgoingCallScreen> {
   void _sessionChanged() {
     final session = _session;
     if (!mounted || session == null) return;
-    if (session.status == 'active' && session.remoteStream != null && !_handedOff) {
+    if (session.status == 'active' &&
+        session.remoteStream != null &&
+        !_handedOff) {
       _handedOff = true;
-      Navigator.of(context).pushReplacement(MaterialPageRoute(
-        builder: (_) => ActiveCallScreen(
-          session: session,
-          contactName: widget.contactName,
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(
+          builder: (_) => ActiveCallScreen(
+            session: session,
+            contactName: widget.contactName,
+            contactPhotoUrl: widget.contactPhotoUrl,
+          ),
         ),
-      ));
+      );
       return;
     }
-    if (const {'declined', 'cancelled', 'missed', 'ended'}.contains(session.status)) {
+    if (const {
+      'declined',
+      'cancelled',
+      'missed',
+      'ended',
+    }.contains(session.status)) {
       Navigator.of(context).maybePop();
       return;
     }
@@ -104,7 +117,7 @@ class _OutgoingCallScreenState extends State<OutgoingCallScreen> {
         decoration: const BoxDecoration(gradient: AppStyles.brandGradient),
         child: SafeArea(
           child: Center(
-            child: Padding(
+            child: AdaptiveScrollBody(
               padding: const EdgeInsets.all(24),
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
@@ -116,10 +129,14 @@ class _OutgoingCallScreenState extends State<OutgoingCallScreen> {
                       shape: BoxShape.circle,
                       color: Colors.white.withValues(alpha: .12),
                       border: Border.all(color: Colors.white24),
-                      boxShadow: const [BoxShadow(color: Colors.black26, blurRadius: 32)],
+                      boxShadow: const [
+                        BoxShadow(color: Colors.black26, blurRadius: 32),
+                      ],
                     ),
                     child: Icon(
-                      widget.callType == 'video' ? Icons.videocam_rounded : Icons.person_rounded,
+                      widget.callType == 'video'
+                          ? Icons.videocam_rounded
+                          : Icons.person_rounded,
                       size: 52,
                       color: Colors.white,
                     ),
@@ -128,14 +145,23 @@ class _OutgoingCallScreenState extends State<OutgoingCallScreen> {
                   Text(
                     widget.contactName,
                     textAlign: TextAlign.center,
-                    style: const TextStyle(color: Colors.white, fontSize: 28, fontWeight: FontWeight.w800),
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 28,
+                      fontWeight: FontWeight.w800,
+                    ),
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    _error ?? (_session == null ? 'Preparing secure call…' : 'Ringing…'),
+                    _error ??
+                        (_session == null
+                            ? 'Preparing secure call…'
+                            : 'Ringing…'),
                     textAlign: TextAlign.center,
                     style: TextStyle(
-                      color: _error == null ? Colors.white70 : const Color(0xFFFFB4AB),
+                      color: _error == null
+                          ? Colors.white70
+                          : const Color(0xFFFFB4AB),
                       fontSize: 15,
                     ),
                   ),
@@ -147,10 +173,19 @@ class _OutgoingCallScreenState extends State<OutgoingCallScreen> {
                       child: FilledButton.icon(
                         style: FilledButton.styleFrom(
                           backgroundColor: AppColors.danger,
-                          padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 18),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 30,
+                            vertical: 18,
+                          ),
                         ),
-                        onPressed: _error == null ? _cancel : () => Navigator.pop(context),
-                        icon: Icon(_error == null ? Icons.call_end_rounded : Icons.close_rounded),
+                        onPressed: _error == null
+                            ? _cancel
+                            : () => Navigator.pop(context),
+                        icon: Icon(
+                          _error == null
+                              ? Icons.call_end_rounded
+                              : Icons.close_rounded,
+                        ),
                         label: Text(_error == null ? 'Cancel call' : 'Close'),
                       ),
                     ),

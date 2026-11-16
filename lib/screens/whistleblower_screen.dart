@@ -38,7 +38,7 @@ class _WhistleblowerScreenState extends State<WhistleblowerScreen> {
   @override
   Widget build(BuildContext context) {
     return VibeScaffold(
-      appBar: AppBar(title: const Text('Anonymous Whistleblower')),
+      appBar: AppBar(title: const Text('Report a serious concern')),
       body: Container(
         decoration: const BoxDecoration(
           gradient: LinearGradient(

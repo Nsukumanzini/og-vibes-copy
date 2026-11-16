@@ -7,7 +7,10 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:og_vibes_student/utils/theme_constants.dart';
 import 'package:og_vibes_student/widgets/vibe_scaffold.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:url_launcher/url_launcher.dart';
+import '../services/academic_file_service.dart';
+import '../services/download_history_service.dart';
+import '../services/offline_cache_service.dart';
+import '../widgets/standard_ui.dart';
 
 import 'pdf_viewer_screen.dart';
 
@@ -17,11 +20,17 @@ class PastQuestionPapersScreen extends StatefulWidget {
   const PastQuestionPapersScreen({super.key});
 
   @override
-  State<PastQuestionPapersScreen> createState() => _PastQuestionPapersScreenState();
+  State<PastQuestionPapersScreen> createState() =>
+      _PastQuestionPapersScreenState();
 }
 
 class _PastQuestionPapersScreenState extends State<PastQuestionPapersScreen> {
-  final Map<String, Map<String, Map<String, Map<String, List<Map<String, String>>>>>> _library = {};
+  static const _cacheKey = 'past_papers_modules_v3';
+  final Map<
+    String,
+    Map<String, Map<String, Map<String, List<Map<String, String>>>>>
+  >
+  _library = {};
   final List<Map<String, String>> _allPapers = [];
   final Map<String, int> _viewCounts = {};
   final Set<String> _preparingDownloads = {};
@@ -36,12 +45,16 @@ class _PastQuestionPapersScreenState extends State<PastQuestionPapersScreen> {
   String _globalQuery = '';
   _PaperSort _sort = _PaperSort.newest;
   bool _isLoading = true;
+  bool _loadingMore = false;
+  bool _hasMore = true;
+  DateTime? _oldestCursor;
   String? _errorMessage;
+  static const int _pageSize = 30;
 
   @override
   void initState() {
     super.initState();
-    _loadPapers();
+    _loadPapers(reset: true);
     _listenForPapers();
   }
 
@@ -52,34 +65,78 @@ class _PastQuestionPapersScreenState extends State<PastQuestionPapersScreen> {
     super.dispose();
   }
 
-  Future<void> _loadPapers() async {
+  Future<void> _loadPapers({bool reset = false}) async {
     if (!mounted) return;
-    setState(() {
-      _isLoading = true;
-      _errorMessage = null;
-    });
+    if (reset) {
+      _oldestCursor = null;
+      _hasMore = true;
+      final cached = await OfflineCacheService.readList(_cacheKey);
+      if (cached.isNotEmpty && mounted) {
+        setState(() {
+          _allPapers
+            ..clear()
+            ..addAll(_flattenRows(cached));
+          _library
+            ..clear()
+            ..addAll(_buildLibraryFromRows(cached));
+          _isLoading = false;
+        });
+      } else {
+        setState(() => _isLoading = true);
+      }
+      setState(() => _errorMessage = null);
+    }
 
     try {
-      final raw = await Supabase.instance.client
+      var query = Supabase.instance.client
           .from('past_papers')
-          .select('id, level, subject, year, exam_type, title, url, created_at')
-          .order('level', ascending: true)
-          .order('subject', ascending: true)
-          .order('year', ascending: true)
-          .order('exam_type', ascending: true)
-          .order('title', ascending: true) as List<dynamic>;
+          .select(
+            'id, module_id, modules(name,level), level, subject, year, exam_type, paper_type, title, url, storage_path, created_at',
+          );
+      if (!reset && _oldestCursor != null) {
+        query = query.lt(
+          'created_at',
+          _oldestCursor!.toUtc().toIso8601String(),
+        );
+      }
+      final raw =
+          await query.order('created_at', ascending: false).limit(_pageSize)
+              as List<dynamic>;
 
       if (!mounted) return;
-      final rows = List<Map<String, dynamic>>.from(raw);
+      final rows = List<Map<String, dynamic>>.from(raw).map((row) {
+        final module = row['modules'];
+        return <String, dynamic>{
+          ...row,
+          if (module is Map) 'subject': module['name'],
+          if (module is Map && module['level'] != null)
+            'level': module['level'],
+        };
+      }).toList();
+      final combined = <Map<String, dynamic>>[
+        if (!reset) ..._allPapers.map((row) => Map<String, dynamic>.from(row)),
+        ...rows,
+      ];
+      final byId = <String, Map<String, dynamic>>{
+        for (final row in combined) row['id']?.toString() ?? '': row,
+      }..remove('');
+      final allRows = byId.values.toList();
       setState(() {
         _allPapers
           ..clear()
-          ..addAll(_flattenRows(rows));
+          ..addAll(_flattenRows(allRows));
         _library
           ..clear()
-          ..addAll(_buildLibraryFromRows(rows));
+          ..addAll(_buildLibraryFromRows(allRows));
         _isLoading = false;
+        _hasMore = rows.length == _pageSize;
+        if (rows.isNotEmpty) {
+          _oldestCursor = DateTime.tryParse(
+            rows.last['created_at']?.toString() ?? '',
+          );
+        }
       });
+      unawaited(OfflineCacheService.writeList(_cacheKey, allRows));
     } catch (error) {
       if (!mounted) return;
       setState(() {
@@ -93,58 +150,77 @@ class _PastQuestionPapersScreenState extends State<PastQuestionPapersScreen> {
     _papersSubscription = Supabase.instance.client
         .from('past_papers')
         .stream(primaryKey: ['id'])
-        .listen((rows) {
-          if (!mounted) return;
-          setState(() {
-            _allPapers
-              ..clear()
-              ..addAll(_flattenRows(rows));
-            _library
-              ..clear()
-              ..addAll(_buildLibraryFromRows(List<Map<String, dynamic>>.from(rows)));
-            _isLoading = false;
-            _errorMessage = null;
-          });
-        }, onError: (error) {
-          if (!mounted) return;
-          setState(() {
-            _isLoading = false;
-            _errorMessage = error.toString();
-          });
-        });
+        .listen(
+          (_) {
+            if (!mounted) return;
+            unawaited(_loadPapers(reset: true));
+          },
+          onError: (error) {
+            if (!mounted) return;
+            setState(() {
+              _isLoading = false;
+              _errorMessage = error.toString();
+            });
+          },
+        );
   }
 
   Future<void> _refreshPapers() async {
-    await _loadPapers();
+    await _loadPapers(reset: true);
   }
 
-  Map<String, Map<String, Map<String, Map<String, List<Map<String, String>>>>>> _buildLibraryFromRows(
-    List<Map<String, dynamic>> rows,
-  ) {
-    final grouped = <String, Map<String, Map<String, Map<String, List<Map<String, String>>>>>>{};
+  Future<void> _loadMorePapers() async {
+    if (_loadingMore || !_hasMore) return;
+    setState(() => _loadingMore = true);
+    await _loadPapers();
+    if (mounted) setState(() => _loadingMore = false);
+  }
+
+  Map<String, Map<String, Map<String, Map<String, List<Map<String, String>>>>>>
+  _buildLibraryFromRows(List<Map<String, dynamic>> rows) {
+    final grouped =
+        <
+          String,
+          Map<String, Map<String, Map<String, List<Map<String, String>>>>>
+        >{};
 
     for (final row in rows) {
       final level = _text(row['level'], 'Uncategorized');
       final subject = _text(row['subject'], 'General');
       final year = _text(row['year'], 'Unknown');
       final examType = _text(row['exam_type'], 'Other');
+      final paperType = _paperType(row);
       final title = _text(row['title'], 'Document');
       final url = _text(row['url'], '');
       final id = _text(row['id'], '$level-$subject-$year-$title');
       final createdAt = _text(row['created_at'], '');
 
-      grouped.putIfAbsent(level, () => <String, Map<String, Map<String, List<Map<String, String>>>>>{});
-      grouped[level]!.putIfAbsent(subject, () => <String, Map<String, List<Map<String, String>>>>{});
-      grouped[level]![subject]!.putIfAbsent(year, () => <String, List<Map<String, String>>>{});
-      grouped[level]![subject]![year]!.putIfAbsent(examType, () => <Map<String, String>>[]);
+      grouped.putIfAbsent(
+        level,
+        () => <String, Map<String, Map<String, List<Map<String, String>>>>>{},
+      );
+      grouped[level]!.putIfAbsent(
+        subject,
+        () => <String, Map<String, List<Map<String, String>>>>{},
+      );
+      grouped[level]![subject]!.putIfAbsent(
+        year,
+        () => <String, List<Map<String, String>>>{},
+      );
+      grouped[level]![subject]![year]!.putIfAbsent(
+        examType,
+        () => <Map<String, String>>[],
+      );
       grouped[level]![subject]![year]![examType]!.add({
         'id': id,
         'level': level,
         'subject': subject,
         'year': year,
         'exam_type': examType,
+        'paper_type': paperType,
         'title': title,
         'url': url,
+        'storage_path': _text(row['storage_path'], ''),
         'created_at': createdAt,
       });
     }
@@ -164,8 +240,10 @@ class _PastQuestionPapersScreenState extends State<PastQuestionPapersScreen> {
         'subject': subject,
         'year': year,
         'exam_type': _text(row['exam_type'], 'Other'),
+        'paper_type': _paperType(row),
         'title': title,
         'url': _text(row['url'], ''),
+        'storage_path': _text(row['storage_path'], ''),
         'created_at': _text(row['created_at'], ''),
       };
     }).toList();
@@ -174,6 +252,27 @@ class _PastQuestionPapersScreenState extends State<PastQuestionPapersScreen> {
   String _text(dynamic value, String fallback) {
     final text = value?.toString().trim() ?? '';
     return text.isEmpty ? fallback : text;
+  }
+
+  String _paperType(Map<String, dynamic> paper) {
+    final explicit = paper['paper_type']?.toString().trim() ?? '';
+    if (explicit.isNotEmpty) return explicit;
+    final legacy = [
+      paper['title'],
+      paper['storage_path'],
+    ].whereType<Object>().join(' ').toLowerCase();
+    return RegExp(r'paper[ _-]*2|(?:^|[ _-])p2(?:[ _.\-]|$)').hasMatch(legacy)
+        ? 'Paper 2'
+        : 'Paper 1';
+  }
+
+  String _documentTitle(Map<String, String> paper) {
+    return [
+      paper['subject'],
+      paper['exam_type'],
+      paper['paper_type'],
+      paper['year'],
+    ].where((value) => value?.trim().isNotEmpty == true).join(' · ');
   }
 
   void _resetToLevels() {
@@ -237,15 +336,25 @@ class _PastQuestionPapersScreenState extends State<PastQuestionPapersScreen> {
   }
 
   List<String> _examTypesForSelectedYear() {
-    if (_selectedLevel == null || _selectedSubject == null || _selectedYear == null) return [];
+    if (_selectedLevel == null ||
+        _selectedSubject == null ||
+        _selectedYear == null) {
+      return [];
+    }
     final map = _library[_selectedLevel!]![_selectedSubject!]![_selectedYear!];
     if (map == null) return [];
     return map.keys.toList();
   }
 
   List<Map<String, String>> _filesForSelectedExam() {
-    if (_selectedLevel == null || _selectedSubject == null || _selectedYear == null || _selectedExamType == null) return [];
-    final list = _library[_selectedLevel!]![_selectedSubject!]![_selectedYear!]![_selectedExamType!];
+    if (_selectedLevel == null ||
+        _selectedSubject == null ||
+        _selectedYear == null ||
+        _selectedExamType == null) {
+      return [];
+    }
+    final list =
+        _library[_selectedLevel!]![_selectedSubject!]![_selectedYear!]![_selectedExamType!];
     return _sortPapers(list ?? []);
   }
 
@@ -259,6 +368,7 @@ class _PastQuestionPapersScreenState extends State<PastQuestionPapersScreen> {
           paper['subject'],
           paper['year'],
           paper['exam_type'],
+          paper['paper_type'],
           paper['level'],
         ].join(' ').toLowerCase();
         return searchable.contains(query);
@@ -270,18 +380,21 @@ class _PastQuestionPapersScreenState extends State<PastQuestionPapersScreen> {
     final sorted = List<Map<String, String>>.from(papers);
     int compare(Map<String, String> a, Map<String, String> b) {
       return switch (_sort) {
-        _PaperSort.newest =>
-          (b['created_at'] ?? '').compareTo(a['created_at'] ?? ''),
-        _PaperSort.oldest =>
-          (a['created_at'] ?? '').compareTo(b['created_at'] ?? ''),
-        _PaperSort.title => (a['title'] ?? '')
-            .toLowerCase()
-            .compareTo((b['title'] ?? '').toLowerCase()),
-        _PaperSort.subject => (a['subject'] ?? '')
-            .toLowerCase()
-            .compareTo((b['subject'] ?? '').toLowerCase()),
-        _PaperSort.mostViewed => (_viewCounts[b['id']] ?? 0)
-            .compareTo(_viewCounts[a['id']] ?? 0),
+        _PaperSort.newest => (b['created_at'] ?? '').compareTo(
+          a['created_at'] ?? '',
+        ),
+        _PaperSort.oldest => (a['created_at'] ?? '').compareTo(
+          b['created_at'] ?? '',
+        ),
+        _PaperSort.title => _documentTitle(
+          a,
+        ).toLowerCase().compareTo(_documentTitle(b).toLowerCase()),
+        _PaperSort.subject => (a['subject'] ?? '').toLowerCase().compareTo(
+          (b['subject'] ?? '').toLowerCase(),
+        ),
+        _PaperSort.mostViewed => (_viewCounts[b['id']] ?? 0).compareTo(
+          _viewCounts[a['id']] ?? 0,
+        ),
       };
     }
 
@@ -294,7 +407,7 @@ class _PastQuestionPapersScreenState extends State<PastQuestionPapersScreen> {
       _PaperSort.newest => 'Newest first',
       _PaperSort.oldest => 'Oldest first',
       _PaperSort.title => 'Title A–Z',
-      _PaperSort.subject => 'Subject A–Z',
+      _PaperSort.subject => 'Module A–Z',
       _PaperSort.mostViewed => 'Most viewed',
     };
   }
@@ -309,30 +422,34 @@ class _PastQuestionPapersScreenState extends State<PastQuestionPapersScreen> {
   }
 
   Future<void> _openPaper(Map<String, String> paper) async {
-    final url = paper['url'] ?? '';
+    final url = await _resolvePaperUrl(paper);
+    if (url == null) return;
     if (url.isEmpty) {
-      _showMessage('No URL is available for this paper yet.');
+      _showMessage(
+        'This paper has no file attached. Please contact your lecturer.',
+      );
       return;
     }
     HapticFeedback.lightImpact();
     final id = paper['id'] ?? url;
     setState(() => _viewCounts[id] = (_viewCounts[id] ?? 0) + 1);
+    if (!mounted) return;
     await Navigator.of(context).push(
       MaterialPageRoute<void>(
-        builder: (_) => PdfViewerScreen(
-          url: url,
-          title: paper['title'] ?? 'Document',
-        ),
+        builder: (_) => PdfViewerScreen(url: url, title: _documentTitle(paper)),
       ),
     );
   }
 
   Future<void> _downloadPaper(Map<String, String> paper) async {
-    final url = paper['url'] ?? '';
+    final url = await _resolvePaperUrl(paper);
+    if (url == null) return;
     final id = paper['id'] ?? url;
     if (_preparingDownloads.contains(id)) return;
     if (url.isEmpty) {
-      _showMessage('No download link is available for this paper yet.');
+      _showMessage(
+        'This paper has no file attached. Please contact your lecturer.',
+      );
       return;
     }
     final uri = Uri.tryParse(url);
@@ -343,17 +460,28 @@ class _PastQuestionPapersScreenState extends State<PastQuestionPapersScreen> {
 
     HapticFeedback.mediumImpact();
     setState(() => _preparingDownloads.add(id));
-    _showMessage('Preparing ${paper['title'] ?? 'your paper'}…');
+    _showMessage('Preparing ${_documentTitle(paper)}…');
     try {
-      final launched = await launchUrl(
-        uri,
-        mode: LaunchMode.externalApplication,
+      final launched = await AcademicFileService.download(
+        url,
+        (paper['storage_path'] ?? '').split('/').last.isNotEmpty
+            ? paper['storage_path']!.split('/').last
+            : '${_documentTitle(paper)}.pdf',
       );
+      if (launched) {
+        await DownloadHistoryService.record(
+          sourceType: 'past_paper',
+          sourceId: paper['id'],
+          title: _documentTitle(paper),
+          url: paper['url'],
+          storagePath: paper['storage_path'],
+        );
+      }
       if (!mounted) return;
       _showMessage(
         launched
-            ? 'Download opened in your browser.'
-            : 'Could not start the download. Please try again.',
+            ? 'Document saved or sent to your browser downloads.'
+            : 'Download cancelled.',
       );
     } catch (_) {
       if (mounted) {
@@ -361,6 +489,23 @@ class _PastQuestionPapersScreenState extends State<PastQuestionPapersScreen> {
       }
     } finally {
       if (mounted) setState(() => _preparingDownloads.remove(id));
+    }
+  }
+
+  Future<String?> _resolvePaperUrl(Map<String, String> paper) async {
+    try {
+      final path = paper['storage_path'] ?? '';
+      if (path.isNotEmpty) {
+        return Supabase.instance.client.storage
+            .from('academic-content')
+            .createSignedUrl(path, 600);
+      }
+      return paper['url'] ?? '';
+    } catch (_) {
+      _showMessage(
+        'Could not open this file. Check your connection and try again.',
+      );
+      return null;
     }
   }
 
@@ -375,7 +520,7 @@ class _PastQuestionPapersScreenState extends State<PastQuestionPapersScreen> {
   Widget build(BuildContext context) {
     return VibeScaffold(
       appBar: AppBar(
-        title: const Text('Past Question Papers'),
+        title: const Text('Past papers'),
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
@@ -450,7 +595,10 @@ class _PastQuestionPapersScreenState extends State<PastQuestionPapersScreen> {
   }
 
   Widget _buildHero(BuildContext context) {
-    final viewed = _viewCounts.values.fold<int>(0, (total, value) => total + value);
+    final viewed = _viewCounts.values.fold<int>(
+      0,
+      (total, value) => total + value,
+    );
     return ClipRRect(
       borderRadius: AppStyles.bentoRadius,
       child: BackdropFilter(
@@ -524,7 +672,7 @@ class _PastQuestionPapersScreenState extends State<PastQuestionPapersScreen> {
                   const SizedBox(height: 7),
                   Text(
                     _selectionLabel.isEmpty
-                        ? 'Explore every available level and subject'
+                        ? 'Explore every available level and module'
                         : _selectionLabel,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
@@ -542,7 +690,10 @@ class _PastQuestionPapersScreenState extends State<PastQuestionPapersScreen> {
                         Icons.description_outlined,
                         '${_allPapers.length} papers',
                       ),
-                      _heroMetric(Icons.layers_outlined, '${_levels().length} levels'),
+                      _heroMetric(
+                        Icons.layers_outlined,
+                        '${_levels().length} levels',
+                      ),
                       _heroMetric(Icons.visibility_outlined, '$viewed viewed'),
                     ],
                   ),
@@ -590,7 +741,7 @@ class _PastQuestionPapersScreenState extends State<PastQuestionPapersScreen> {
             controller: _globalSearchController,
             onChanged: (value) => setState(() => _globalQuery = value),
             decoration: InputDecoration(
-              hintText: 'Search every paper, subject or year',
+              hintText: 'Search papers, modules or year',
               prefixIcon: const Icon(Icons.search_rounded),
               suffixIcon: _globalQuery.isEmpty
                   ? null
@@ -634,13 +785,7 @@ class _PastQuestionPapersScreenState extends State<PastQuestionPapersScreen> {
               ],
             );
           }
-          return Column(
-            children: [
-              search,
-              const SizedBox(height: 8),
-              sort,
-            ],
-          );
+          return Column(children: [search, const SizedBox(height: 8), sort]);
         },
       ),
     );
@@ -655,7 +800,9 @@ class _PastQuestionPapersScreenState extends State<PastQuestionPapersScreen> {
       return _buildErrorState(context);
     }
 
-    if (_globalQuery.trim().isNotEmpty) return _buildGlobalSearchResults(context);
+    if (_globalQuery.trim().isNotEmpty) {
+      return _buildGlobalSearchResults(context);
+    }
     if (_selectedLevel == null) return _buildLevelSelector(context);
     if (_selectedSubject == null) return _buildSubjectList(context);
     if (_selectedYear == null) return _buildYearList(context);
@@ -700,18 +847,19 @@ class _PastQuestionPapersScreenState extends State<PastQuestionPapersScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text('Choose your level / semester', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
+        const Text(
+          'Choose your level',
+          style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+        ),
         const SizedBox(height: 12),
         Wrap(
           spacing: 8,
           runSpacing: 8,
           children: levels.map((level) {
-            return ChoiceChip(
-              label: Text(level),
-              selected: _selectedLevel == level,
-              onSelected: (_) => _onLevelSelected(level),
-              selectedColor: Theme.of(context).colorScheme.primary,
-              labelStyle: TextStyle(color: _selectedLevel == level ? Colors.white : Colors.black87),
+            return FilledButton.tonal(
+              style: FilledButton.styleFrom(minimumSize: const Size(130, 52)),
+              onPressed: () => _onLevelSelected(level),
+              child: Text(level),
             );
           }).toList(),
         ),
@@ -720,14 +868,22 @@ class _PastQuestionPapersScreenState extends State<PastQuestionPapersScreen> {
   }
 
   Widget _buildSubjectList(BuildContext context) {
-    final subjects = _subjectsForSelectedLevel().where((s) => s.toLowerCase().contains(_subjectQuery.toLowerCase())).toList();
+    final subjects = _subjectsForSelectedLevel()
+        .where((s) => s.toLowerCase().contains(_subjectQuery.toLowerCase()))
+        .toList();
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Text('Level: $_selectedLevel', style: const TextStyle(fontWeight: FontWeight.w600)),
+        Text(
+          'Level: $_selectedLevel',
+          style: const TextStyle(fontWeight: FontWeight.w600),
+        ),
         const SizedBox(height: 12),
         TextField(
-          decoration: const InputDecoration(prefixIcon: Icon(Icons.search), hintText: 'Search subject...'),
+          decoration: const InputDecoration(
+            prefixIcon: Icon(Icons.search),
+            hintText: 'Search modules...',
+          ),
           onChanged: (v) => setState(() => _subjectQuery = v),
         ),
         const SizedBox(height: 12),
@@ -738,28 +894,31 @@ class _PastQuestionPapersScreenState extends State<PastQuestionPapersScreen> {
             itemBuilder: (context, index) {
               final subj = subjects[index];
               return _glassPanel(
-                child: ListTile(
-                  contentPadding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 5,
-                  ),
-                  leading: Container(
-                    width: 42,
-                    height: 42,
-                    decoration: BoxDecoration(
-                      color: AppColors.vibeBlue.withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(14),
+                    child: ListTile(
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 5,
+                      ),
+                      leading: Container(
+                        width: 42,
+                        height: 42,
+                        decoration: BoxDecoration(
+                          color: AppColors.vibeBlue.withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                        child: const Icon(
+                          Icons.menu_book_rounded,
+                          color: AppColors.vibeBlue,
+                        ),
+                      ),
+                      title: Text(
+                        subj,
+                        style: const TextStyle(fontWeight: FontWeight.w700),
+                      ),
+                      trailing: const Icon(Icons.chevron_right),
+                      onTap: () => _onSubjectSelected(subj),
                     ),
-                    child: const Icon(
-                      Icons.menu_book_rounded,
-                      color: AppColors.vibeBlue,
-                    ),
-                  ),
-                  title: Text(subj, style: const TextStyle(fontWeight: FontWeight.w700)),
-                  trailing: const Icon(Icons.chevron_right),
-                  onTap: () => _onSubjectSelected(subj),
-                ),
-              )
+                  )
                   .animate(delay: (45 * index).ms)
                   .fadeIn(duration: 300.ms)
                   .slideX(begin: 0.03, end: 0);
@@ -775,7 +934,10 @@ class _PastQuestionPapersScreenState extends State<PastQuestionPapersScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Text('$_selectedSubject • Select year', style: const TextStyle(fontWeight: FontWeight.w700)),
+        Text(
+          '$_selectedSubject • Select year',
+          style: const TextStyle(fontWeight: FontWeight.w700),
+        ),
         const SizedBox(height: 12),
         Expanded(
           child: ListView.separated(
@@ -784,29 +946,32 @@ class _PastQuestionPapersScreenState extends State<PastQuestionPapersScreen> {
             itemBuilder: (context, index) {
               final year = years[index];
               return _glassPanel(
-                child: ListTile(
-                  contentPadding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 5,
-                  ),
-                  leading: Container(
-                    width: 42,
-                    height: 42,
-                    decoration: BoxDecoration(
-                      color: AppColors.electricCyan.withValues(alpha: 0.12),
-                      borderRadius: BorderRadius.circular(14),
+                    child: ListTile(
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 5,
+                      ),
+                      leading: Container(
+                        width: 42,
+                        height: 42,
+                        decoration: BoxDecoration(
+                          color: AppColors.electricCyan.withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                        child: const Icon(
+                          Icons.calendar_month_rounded,
+                          color: AppColors.vibeBlue,
+                        ),
+                      ),
+                      title: Text(
+                        year,
+                        style: const TextStyle(fontWeight: FontWeight.w700),
+                      ),
+                      subtitle: const Text('Tap to see available exam types'),
+                      trailing: const Icon(Icons.chevron_right),
+                      onTap: () => _onYearSelected(year),
                     ),
-                    child: const Icon(
-                      Icons.calendar_month_rounded,
-                      color: AppColors.vibeBlue,
-                    ),
-                  ),
-                  title: Text(year, style: const TextStyle(fontWeight: FontWeight.w700)),
-                  subtitle: const Text('Tap to see available exam types'),
-                  trailing: const Icon(Icons.chevron_right),
-                  onTap: () => _onYearSelected(year),
-                ),
-              )
+                  )
                   .animate(delay: (45 * index).ms)
                   .fadeIn(duration: 300.ms)
                   .slideX(begin: 0.03, end: 0);
@@ -822,7 +987,10 @@ class _PastQuestionPapersScreenState extends State<PastQuestionPapersScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Text('$_selectedSubject • $_selectedYear', style: const TextStyle(fontWeight: FontWeight.w700)),
+        Text(
+          '$_selectedSubject • $_selectedYear',
+          style: const TextStyle(fontWeight: FontWeight.w700),
+        ),
         const SizedBox(height: 12),
         Wrap(
           spacing: 8,
@@ -831,8 +999,13 @@ class _PastQuestionPapersScreenState extends State<PastQuestionPapersScreen> {
             return ElevatedButton(
               onPressed: () => _onExamTypeSelected(exam),
               style: ElevatedButton.styleFrom(
-                padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 18,
+                  vertical: 14,
+                ),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14),
+                ),
               ),
               child: Text(exam),
             );
@@ -927,95 +1100,103 @@ class _PastQuestionPapersScreenState extends State<PastQuestionPapersScreen> {
         const SizedBox(height: 12),
         Expanded(
           child: ListView.separated(
-            itemCount: files.length,
+            itemCount: files.length + (_hasMore || _loadingMore ? 1 : 0),
             separatorBuilder: (_, _) => const SizedBox(height: 10),
             itemBuilder: (context, index) {
+              if ((_hasMore || _loadingMore) && index == files.length) {
+                return OgLoadOlderButton(
+                  onPressed: _loadMorePapers,
+                  loading: _loadingMore,
+                  label: 'Load more papers',
+                );
+              }
               final file = files[index];
               final id = file['id'] ?? file['url'] ?? '';
               final preparing = _preparingDownloads.contains(id);
               return _glassPanel(
-                child: ListTile(
-                  contentPadding: const EdgeInsets.all(14),
-                  leading: Container(
-                    width: 48,
-                    height: 48,
-                    decoration: BoxDecoration(
-                      gradient: const LinearGradient(
-                        colors: [AppColors.vibeBlue, Color(0xFF4A82FB)],
-                      ),
-                      borderRadius: BorderRadius.circular(15),
-                      boxShadow: [
-                        BoxShadow(
-                          color: AppColors.vibeBlue.withValues(alpha: 0.22),
-                          blurRadius: 16,
-                          offset: const Offset(0, 7),
-                        ),
-                      ],
-                    ),
-                    child: const Icon(
-                      Icons.picture_as_pdf_rounded,
-                      color: Colors.white,
-                    ),
-                  ),
-                  title: Text(
-                    file['title'] ?? 'Document',
-                    style: const TextStyle(
-                      color: AppColors.midnightInk,
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-                  subtitle: Padding(
-                    padding: const EdgeInsets.only(top: 6),
-                    child: Text(
-                      '${file['subject'] ?? _selectedSubject ?? ''}  •  '
-                      '${file['year'] ?? _selectedYear ?? ''}  •  '
-                      '${file['exam_type'] ?? _selectedExamType ?? ''}\n'
-                      '${_viewCounts[id] ?? 0} views this session',
-                      style: const TextStyle(
-                        color: AppColors.textMuted,
-                        height: 1.45,
-                      ),
-                    ),
-                  ),
-                  trailing: PopupMenuButton<String>(
-                    tooltip: 'Paper actions',
-                    onSelected: (value) {
-                      if (value == 'view') _openPaper(file);
-                      if (value == 'download') _downloadPaper(file);
-                    },
-                    itemBuilder: (_) => [
-                      const PopupMenuItem(
-                        value: 'view',
-                        child: ListTile(
-                          leading: Icon(Icons.visibility_outlined),
-                          title: Text('View paper'),
-                          contentPadding: EdgeInsets.zero,
-                        ),
-                      ),
-                      PopupMenuItem(
-                        value: 'download',
-                        enabled: !preparing,
-                        child: ListTile(
-                          leading: preparing
-                              ? const SizedBox(
-                                  width: 20,
-                                  height: 20,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                  ),
-                                )
-                              : const Icon(Icons.download_rounded),
-                          title: Text(
-                            preparing ? 'Preparing…' : 'Download',
+                    child: ListTile(
+                      contentPadding: const EdgeInsets.all(14),
+                      leading: Container(
+                        width: 48,
+                        height: 48,
+                        decoration: BoxDecoration(
+                          gradient: const LinearGradient(
+                            colors: [AppColors.vibeBlue, Color(0xFF4A82FB)],
                           ),
-                          contentPadding: EdgeInsets.zero,
+                          borderRadius: BorderRadius.circular(15),
+                          boxShadow: [
+                            BoxShadow(
+                              color: AppColors.vibeBlue.withValues(alpha: 0.22),
+                              blurRadius: 16,
+                              offset: const Offset(0, 7),
+                            ),
+                          ],
+                        ),
+                        child: const Icon(
+                          Icons.picture_as_pdf_rounded,
+                          color: Colors.white,
                         ),
                       ),
-                    ],
-                  ),
-                  onTap: () => _openPaper(file),
-                ),
-              )
+                      title: Text(
+                        file['paper_type'] ?? 'Paper 1',
+                        style: const TextStyle(
+                          color: AppColors.midnightInk,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                      subtitle: Padding(
+                        padding: const EdgeInsets.only(top: 6),
+                        child: Text(
+                          '${file['subject'] ?? _selectedSubject ?? ''}  •  '
+                          '${file['year'] ?? _selectedYear ?? ''}  •  '
+                          '${file['exam_type'] ?? _selectedExamType ?? ''}  •  '
+                          '${file['paper_type'] ?? 'Paper 1'}\n'
+                          '${_viewCounts[id] ?? 0} views this session',
+                          style: const TextStyle(
+                            color: AppColors.textMuted,
+                            height: 1.45,
+                          ),
+                        ),
+                      ),
+                      trailing: PopupMenuButton<String>(
+                        tooltip: 'Paper actions',
+                        onSelected: (value) {
+                          if (value == 'view') _openPaper(file);
+                          if (value == 'download') _downloadPaper(file);
+                        },
+                        itemBuilder: (_) => [
+                          const PopupMenuItem(
+                            value: 'view',
+                            child: ListTile(
+                              leading: Icon(Icons.visibility_outlined),
+                              title: Text('View paper'),
+                              contentPadding: EdgeInsets.zero,
+                            ),
+                          ),
+                          PopupMenuItem(
+                            value: 'download',
+                            enabled: !preparing,
+                            child: ListTile(
+                              leading: preparing
+                                  ? const SizedBox(
+                                      width: 20,
+                                      height: 20,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                      ),
+                                    )
+                                  : const Icon(Icons.download_rounded),
+                              title: Text(
+                                preparing ? 'Preparing…' : 'Download',
+                              ),
+                              contentPadding: EdgeInsets.zero,
+                            ),
+                          ),
+                        ],
+                      ),
+                      onTap: () => _openPaper(file),
+                    ),
+                  )
                   .animate(delay: (45 * index).ms)
                   .fadeIn(duration: 320.ms)
                   .slideX(begin: 0.035, end: 0);
@@ -1026,27 +1207,16 @@ class _PastQuestionPapersScreenState extends State<PastQuestionPapersScreen> {
     );
   }
 
-  Widget _glassPanel({
-    required Widget child,
-    EdgeInsetsGeometry? padding,
-  }) {
-    return ClipRRect(
-      borderRadius: AppStyles.bentoRadius,
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15),
-        child: Container(
-          padding: padding,
-          decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: 0.78),
-            borderRadius: AppStyles.bentoRadius,
-            border: Border.all(
-              color: Colors.white.withValues(alpha: 0.86),
-            ),
-            boxShadow: AppStyles.glassShadow,
-          ),
-          child: child,
-        ),
+  Widget _glassPanel({required Widget child, EdgeInsetsGeometry? padding}) {
+    return Container(
+      padding: padding,
+      decoration: BoxDecoration(
+        color: AppColors.surfaceElevated,
+        borderRadius: AppStyles.bentoRadius,
+        border: Border.all(color: AppColors.outline),
+        boxShadow: AppStyles.softShadow,
       ),
+      child: child,
     );
   }
 }

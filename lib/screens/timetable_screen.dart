@@ -8,6 +8,8 @@ import 'package:og_vibes_student/utils/theme_constants.dart';
 import 'package:shimmer/shimmer.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
+import '../services/download_history_service.dart';
+import '../services/academic_file_service.dart';
 
 import 'package:og_vibes_student/widgets/vibe_scaffold.dart';
 
@@ -61,7 +63,7 @@ class _TimetableScreenState extends State<TimetableScreen> {
           .from('timetables')
           .select(
             'id, level, programme, module, group_name, title, url, '
-            'created_at, updated_at',
+            'storage_path, created_at, updated_at',
           )
           .order('level', ascending: true)
           .order('programme', ascending: true)
@@ -93,23 +95,31 @@ class _TimetableScreenState extends State<TimetableScreen> {
     _timetableSubscription = Supabase.instance.client
         .from('timetables')
         .stream(primaryKey: ['id'])
-        .listen((rows) {
-          if (!mounted) return;
-          setState(() {
-            _timetables
-              ..clear()
-              ..addAll(rows.map((row) => _TimetableItem.fromRow(Map<String, dynamic>.from(row))));
-            _rebuildFilterOptions();
-            _isLoading = false;
-            _errorMessage = null;
-          });
-        }, onError: (error) {
-          if (!mounted) return;
-          setState(() {
-            _isLoading = false;
-            _errorMessage = error.toString();
-          });
-        });
+        .listen(
+          (rows) {
+            if (!mounted) return;
+            setState(() {
+              _timetables
+                ..clear()
+                ..addAll(
+                  rows.map(
+                    (row) =>
+                        _TimetableItem.fromRow(Map<String, dynamic>.from(row)),
+                  ),
+                );
+              _rebuildFilterOptions();
+              _isLoading = false;
+              _errorMessage = null;
+            });
+          },
+          onError: (error) {
+            if (!mounted) return;
+            setState(() {
+              _isLoading = false;
+              _errorMessage = error.toString();
+            });
+          },
+        );
   }
 
   Future<void> _refreshTimetables() async {
@@ -117,39 +127,47 @@ class _TimetableScreenState extends State<TimetableScreen> {
   }
 
   void _rebuildFilterOptions() {
-    final levels = _timetables
-        .map((item) => item.level.trim())
-        .where((value) => value.isNotEmpty)
-        .toSet()
-        .toList()
-      ..sort();
-
-    if (_selectedLevel != null && !levels.contains(_selectedLevel)) {
-      _selectedLevel = null;
-    }
-
-    final programmes = _selectedLevel == null
-        ? <String>[]
-        : _timetables
-            .where((item) => item.level == _selectedLevel)
-            .map((item) => item.programme.trim())
+    final levels =
+        _timetables
+            .map((item) => item.level.trim())
             .where((value) => value.isNotEmpty)
             .toSet()
             .toList()
           ..sort();
 
-    if (_selectedProgramme != null && !programmes.contains(_selectedProgramme)) {
+    if (_selectedLevel != null && !levels.contains(_selectedLevel)) {
+      _selectedLevel = null;
+    }
+
+    final programmes =
+        _selectedLevel == null
+              ? <String>[]
+              : _timetables
+                    .where((item) => item.level == _selectedLevel)
+                    .map((item) => item.programme.trim())
+                    .where((value) => value.isNotEmpty)
+                    .toSet()
+                    .toList()
+          ..sort();
+
+    if (_selectedProgramme != null &&
+        !programmes.contains(_selectedProgramme)) {
       _selectedProgramme = null;
     }
 
-    final modules = (_selectedLevel == null || _selectedProgramme == null)
-        ? <String>[]
-        : _timetables
-            .where((item) => item.level == _selectedLevel && item.programme == _selectedProgramme)
-            .map((item) => item.module.trim())
-            .where((value) => value.isNotEmpty)
-            .toSet()
-            .toList()
+    final modules =
+        (_selectedLevel == null || _selectedProgramme == null)
+              ? <String>[]
+              : _timetables
+                    .where(
+                      (item) =>
+                          item.level == _selectedLevel &&
+                          item.programme == _selectedProgramme,
+                    )
+                    .map((item) => item.module.trim())
+                    .where((value) => value.isNotEmpty)
+                    .toSet()
+                    .toList()
           ..sort();
 
     if (_selectedModule != null && !modules.contains(_selectedModule)) {
@@ -163,29 +181,36 @@ class _TimetableScreenState extends State<TimetableScreen> {
 
   List<_TimetableItem> get _filteredTimetables {
     return _timetables.where((item) {
-      final matchesLevel = _selectedLevel == null || item.level == _selectedLevel;
-      final matchesProgramme = _selectedProgramme == null || item.programme == _selectedProgramme;
-      final matchesModule = _selectedModule == null || item.module == _selectedModule;
+      final matchesLevel =
+          _selectedLevel == null || item.level == _selectedLevel;
+      final matchesProgramme =
+          _selectedProgramme == null || item.programme == _selectedProgramme;
+      final matchesModule =
+          _selectedModule == null || item.module == _selectedModule;
       return matchesLevel && matchesProgramme && matchesModule;
     }).toList();
   }
 
   Future<void> _openTimetable(_TimetableItem item) async {
     HapticFeedback.lightImpact();
-    final uri = Uri.tryParse(item.url);
+    final resolvedUrl = await _resolveTimetableUrl(item);
+    final uri = Uri.tryParse(resolvedUrl);
     if (uri == null || uri.toString().isEmpty) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('This timetable does not have a valid link yet.')),
+        const SnackBar(
+          content: Text('This timetable does not have a valid link yet.'),
+        ),
       );
       return;
     }
 
-    if (item.url.toLowerCase().endsWith('.pdf')) {
+    if (item.storagePath.isNotEmpty ||
+        resolvedUrl.toLowerCase().contains('.pdf')) {
       if (!mounted) return;
       await Navigator.of(context).push(
         MaterialPageRoute(
-          builder: (_) => PdfViewerScreen(url: item.url, title: item.title),
+          builder: (_) => PdfViewerScreen(url: resolvedUrl, title: item.title),
         ),
       );
       return;
@@ -213,36 +238,32 @@ class _TimetableScreenState extends State<TimetableScreen> {
     return null;
   }
 
-  Future<void> _openExternalDocument(
-    _TimetableItem item, {
-    required String purpose,
-  }) async {
+  Future<void> _downloadTimetable(_TimetableItem item) async {
     if (_preparingDocuments.contains(item.id)) return;
-    final uri = Uri.tryParse(item.url);
-    if (uri == null || item.url.isEmpty) {
-      _showMessage('This timetable does not have a valid PDF link yet.');
-      return;
-    }
-
     HapticFeedback.mediumImpact();
     setState(() => _preparingDocuments.add(item.id));
-    _showMessage(
-      purpose == 'print'
-          ? 'Preparing the printable timetable…'
-          : 'Preparing the timetable for offline saving…',
-    );
+    _showMessage('Preparing the timetable download…');
     try {
-      final launched = await launchUrl(
-        uri,
-        mode: LaunchMode.externalApplication,
+      final resolvedUrl = await _resolveTimetableUrl(item);
+      if (!mounted) return;
+      final launched = await AcademicFileService.download(
+        resolvedUrl,
+        '${item.title}.pdf',
       );
+      if (launched) {
+        await DownloadHistoryService.record(
+          sourceType: 'timetable',
+          sourceId: item.id,
+          title: item.title,
+          url: item.url,
+          storagePath: item.storagePath,
+        );
+      }
       if (!mounted) return;
       _showMessage(
         launched
-            ? purpose == 'print'
-                ? 'Opened in your browser. Choose Print from the browser menu.'
-                : 'Opened in your browser. Choose Download to save it offline.'
-            : 'Could not open this timetable. Please try again.',
+            ? 'Timetable saved or sent to your browser downloads.'
+            : 'Download cancelled.',
       );
     } catch (_) {
       if (mounted) {
@@ -251,6 +272,15 @@ class _TimetableScreenState extends State<TimetableScreen> {
     } finally {
       if (mounted) setState(() => _preparingDocuments.remove(item.id));
     }
+  }
+
+  Future<String> _resolveTimetableUrl(_TimetableItem item) async {
+    if (item.storagePath.isNotEmpty) {
+      return Supabase.instance.client.storage
+          .from('academic-content')
+          .createSignedUrl(item.storagePath, 600);
+    }
+    return item.url;
   }
 
   void _showMessage(String message) {
@@ -345,8 +375,8 @@ class _TimetableScreenState extends State<TimetableScreen> {
                     final columns = constraints.maxWidth >= 1050
                         ? 3
                         : constraints.maxWidth >= 680
-                            ? 2
-                            : 1;
+                        ? 2
+                        : 1;
                     return GridView.builder(
                       padding: const EdgeInsets.fromLTRB(18, 12, 18, 100),
                       gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
@@ -359,19 +389,12 @@ class _TimetableScreenState extends State<TimetableScreen> {
                       itemBuilder: (context, index) {
                         final item = _filteredTimetables[index];
                         return _TimetableCard(
-                          item: item,
-                          preparing: _preparingDocuments.contains(item.id),
-                          freshness: _freshnessLabel(item),
-                          onView: () => _openTimetable(item),
-                          onDownload: () => _openExternalDocument(
-                            item,
-                            purpose: 'download',
-                          ),
-                          onPrint: () => _openExternalDocument(
-                            item,
-                            purpose: 'print',
-                          ),
-                        )
+                              item: item,
+                              preparing: _preparingDocuments.contains(item.id),
+                              freshness: _freshnessLabel(item),
+                              onView: () => _openTimetable(item),
+                              onDownload: () => _downloadTimetable(item),
+                            )
                             .animate(delay: (45 * index).ms)
                             .fadeIn(duration: 340.ms)
                             .slideY(begin: 0.05, end: 0);
@@ -616,27 +639,16 @@ class _TimetableScreenState extends State<TimetableScreen> {
     );
   }
 
-  Widget _glassPanel({
-    required Widget child,
-    EdgeInsetsGeometry? padding,
-  }) {
-    return ClipRRect(
-      borderRadius: AppStyles.bentoRadius,
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15),
-        child: Container(
-          padding: padding,
-          decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: 0.78),
-            borderRadius: AppStyles.bentoRadius,
-            border: Border.all(
-              color: Colors.white.withValues(alpha: 0.86),
-            ),
-            boxShadow: AppStyles.glassShadow,
-          ),
-          child: child,
-        ),
+  Widget _glassPanel({required Widget child, EdgeInsetsGeometry? padding}) {
+    return Container(
+      padding: padding,
+      decoration: BoxDecoration(
+        color: AppColors.surfaceElevated,
+        borderRadius: AppStyles.bentoRadius,
+        border: Border.all(color: AppColors.outline),
+        boxShadow: AppStyles.softShadow,
       ),
+      child: child,
     );
   }
 
@@ -706,7 +718,6 @@ class _TimetableCard extends StatelessWidget {
     required this.freshness,
     required this.onView,
     required this.onDownload,
-    required this.onPrint,
   });
 
   final _TimetableItem item;
@@ -714,132 +725,118 @@ class _TimetableCard extends StatelessWidget {
   final String? freshness;
   final VoidCallback onView;
   final VoidCallback onDownload;
-  final VoidCallback onPrint;
 
   @override
   Widget build(BuildContext context) {
-    return ClipRRect(
+    return Material(
+      color: AppColors.surfaceElevated,
       borderRadius: AppStyles.bentoRadius,
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15),
-        child: Material(
-          color: Colors.white.withValues(alpha: 0.8),
-          child: InkWell(
-            onTap: onView,
-            child: Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                borderRadius: AppStyles.bentoRadius,
-                border: Border.all(
-                  color: Colors.white.withValues(alpha: 0.88),
-                ),
-                boxShadow: AppStyles.glassShadow,
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+      child: InkWell(
+        onTap: onView,
+        child: Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            borderRadius: AppStyles.bentoRadius,
+            border: Border.all(color: AppColors.outline),
+            boxShadow: AppStyles.glassShadow,
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
                 children: [
-                  Row(
-                    children: [
-                      Container(
-                        width: 46,
-                        height: 46,
-                        decoration: BoxDecoration(
-                          gradient: const LinearGradient(
-                            colors: [
-                              AppColors.vibeBlue,
-                              AppColors.electricCyan,
-                            ],
-                          ),
-                          borderRadius: BorderRadius.circular(15),
-                        ),
-                        child: const Icon(
-                          Icons.calendar_view_week_rounded,
+                  Container(
+                    width: 46,
+                    height: 46,
+                    decoration: BoxDecoration(
+                      gradient: const LinearGradient(
+                        colors: [AppColors.vibeBlue, AppColors.electricCyan],
+                      ),
+                      borderRadius: BorderRadius.circular(15),
+                    ),
+                    child: const Icon(
+                      Icons.calendar_view_week_rounded,
+                      color: Colors.white,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      item.title,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w900,
+                        color: AppColors.midnightInk,
+                      ),
+                    ),
+                  ),
+                  if (freshness != null)
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 7,
+                        vertical: 4,
+                      ),
+                      decoration: BoxDecoration(
+                        color: freshness == 'NEW'
+                            ? AppColors.success
+                            : AppColors.warning,
+                        borderRadius: AppStyles.pillRadius,
+                      ),
+                      child: Text(
+                        freshness!,
+                        style: const TextStyle(
                           color: Colors.white,
+                          fontSize: 8,
+                          fontWeight: FontWeight.w900,
                         ),
                       ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Text(
-                          item.title,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w900,
-                            color: AppColors.midnightInk,
-                          ),
-                        ),
-                      ),
-                      if (freshness != null)
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 7,
-                            vertical: 4,
-                          ),
-                          decoration: BoxDecoration(
-                            color: freshness == 'NEW'
-                                ? AppColors.success
-                                : AppColors.warning,
-                            borderRadius: AppStyles.pillRadius,
-                          ),
-                          child: Text(
-                            freshness!,
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 8,
-                              fontWeight: FontWeight.w900,
-                            ),
-                          ),
-                        ),
-                    ],
+                    ),
+                ],
+              ),
+              const SizedBox(height: 14),
+              Wrap(
+                spacing: 7,
+                runSpacing: 7,
+                children: [
+                  _pill(item.level, AppColors.vibeBlue),
+                  _pill(item.programme, AppColors.success),
+                  _pill(item.module, AppColors.academicAccent),
+                  if (item.groupName.isNotEmpty)
+                    _pill(item.groupName, AppColors.warning),
+                ],
+              ),
+              const Spacer(),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: onView,
+                      icon: const Icon(Icons.visibility_outlined),
+                      label: const Text('View PDF'),
+                    ),
                   ),
-                  const SizedBox(height: 14),
-                  Wrap(
-                    spacing: 7,
-                    runSpacing: 7,
-                    children: [
-                      _pill(item.level, AppColors.vibeBlue),
-                      _pill(item.programme, AppColors.success),
-                      _pill(item.module, const Color(0xFF7A5AF8)),
-                      if (item.groupName.isNotEmpty)
-                        _pill(item.groupName, AppColors.warning),
-                    ],
-                  ),
-                  const Spacer(),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: OutlinedButton.icon(
-                          onPressed: onView,
-                          icon: const Icon(Icons.visibility_outlined),
-                          label: const Text('View PDF'),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      IconButton.filledTonal(
-                        onPressed: preparing ? null : onDownload,
-                        tooltip: 'Save offline',
-                        icon: preparing
-                            ? const SizedBox(
-                                width: 18,
-                                height: 18,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                ),
-                              )
-                            : const Icon(Icons.download_rounded),
-                      ),
-                      const SizedBox(width: 4),
-                      IconButton.filledTonal(
-                        onPressed: preparing ? null : onPrint,
-                        tooltip: 'Print timetable',
-                        icon: const Icon(Icons.print_outlined),
-                      ),
-                    ],
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: FilledButton.icon(
+                      onPressed: preparing ? null : onDownload,
+                      icon: preparing
+                          ? const SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: Colors.white,
+                              ),
+                            )
+                          : const Icon(Icons.download_rounded),
+                      label: Text(preparing ? 'Preparing…' : 'Download PDF'),
+                    ),
                   ),
                 ],
               ),
-            ),
+            ],
           ),
         ),
       ),
@@ -855,7 +852,11 @@ class _TimetableCard extends StatelessWidget {
       ),
       child: Text(
         value,
-        style: TextStyle(color: color, fontWeight: FontWeight.w700, fontSize: 11),
+        style: TextStyle(
+          color: color,
+          fontWeight: FontWeight.w700,
+          fontSize: 11,
+        ),
       ),
     );
   }
@@ -870,6 +871,7 @@ class _TimetableItem {
     required this.groupName,
     required this.title,
     required this.url,
+    required this.storagePath,
     required this.createdAt,
     required this.updatedAt,
   });
@@ -881,6 +883,7 @@ class _TimetableItem {
   final String groupName;
   final String title;
   final String url;
+  final String storagePath;
   final DateTime createdAt;
   final DateTime updatedAt;
 
@@ -893,9 +896,12 @@ class _TimetableItem {
       groupName: (row['group_name'] ?? '').toString().trim(),
       title: (row['title'] ?? '').toString().trim(),
       url: (row['url'] ?? '').toString().trim(),
-      createdAt: DateTime.tryParse((row['created_at'] ?? '').toString()) ??
+      storagePath: (row['storage_path'] ?? '').toString().trim(),
+      createdAt:
+          DateTime.tryParse((row['created_at'] ?? '').toString()) ??
           DateTime.fromMillisecondsSinceEpoch(0),
-      updatedAt: DateTime.tryParse((row['updated_at'] ?? '').toString()) ??
+      updatedAt:
+          DateTime.tryParse((row['updated_at'] ?? '').toString()) ??
           DateTime.tryParse((row['created_at'] ?? '').toString()) ??
           DateTime.fromMillisecondsSinceEpoch(0),
     );

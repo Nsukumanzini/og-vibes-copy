@@ -7,6 +7,8 @@ class LiveSession {
     required this.time,
     required this.isLive,
     required this.lecturer,
+    required this.youtubeUrl,
+    this.recordingUrl,
     this.requiredAttendanceSeconds = 1800,
   });
 
@@ -17,5 +19,7 @@ class LiveSession {
   final String time;
   final bool isLive;
   final String lecturer;
+  final String youtubeUrl;
+  final String? recordingUrl;
   final int requiredAttendanceSeconds;
 }

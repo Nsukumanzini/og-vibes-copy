@@ -1,16 +1,18 @@
-import 'dart:ui';
-
 import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../services/auth_persistence_service.dart';
+
 import '../services/auth_service.dart';
+import '../services/accessibility_preferences.dart';
+import '../services/push_notification_service.dart';
 import '../services/theme_preferences.dart';
 import '../utils/theme_constants.dart';
 import '../widgets/vibe_scaffold.dart';
 import 'blocked_users_screen.dart';
 import 'login_screen.dart';
-import 'privacy_screen.dart';
+import 'legal_document_screen.dart';
 import 'profile_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
@@ -38,7 +40,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     try {
       final row = await Supabase.instance.client
           .from('profiles')
-          .select('name,surname,student_number,campus,department,level,photo_url')
+          .select('nickname,student_number,campus,department,level,photo_url')
           .eq('id', user.id)
           .maybeSingle();
       return _SettingsProfile.from(row, user);
@@ -76,36 +78,32 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 constraints: const BoxConstraints(maxWidth: 1120),
                 child: Padding(
                   padding: EdgeInsets.fromLTRB(padding, 8, padding, 0),
-                  child: Column(
-                    children: [
-                      FutureBuilder<_SettingsProfile>(
-                        future: _profile,
-                        builder: (context, snapshot) => _ProfileHero(
-                          profile: snapshot.data,
-                          loading: snapshot.connectionState != ConnectionState.done,
-                          onEdit: _openProfile,
+                  child: NestedScrollView(
+                    headerSliverBuilder: (context, innerBoxIsScrolled) => [
+                      SliverToBoxAdapter(
+                        child: FutureBuilder<_SettingsProfile>(
+                          future: _profile,
+                          builder: (context, snapshot) => _ProfileHero(
+                            profile: snapshot.data,
+                            loading:
+                                snapshot.connectionState !=
+                                ConnectionState.done,
+                            onEdit: _openProfile,
+                          ),
                         ),
                       ),
-                      const SizedBox(height: 16),
-                      const _SettingsTabs(),
-                      const SizedBox(height: 12),
-                      Expanded(
-                        child: TabBarView(
-                          children: [
-                            _SettingsList(
-                              children: _accountItems(),
-                            ),
-                            const _PreferencesTab(),
-                            _SettingsList(
-                              children: _privacyItems(),
-                            ),
-                            _SettingsList(
-                              children: _securityItems(),
-                            ),
-                          ],
-                        ),
-                      ),
+                      const SliverToBoxAdapter(child: SizedBox(height: 16)),
+                      const SliverToBoxAdapter(child: _SettingsTabs()),
+                      const SliverToBoxAdapter(child: SizedBox(height: 12)),
                     ],
+                    body: TabBarView(
+                      children: [
+                        _SettingsList(children: _accountItems()),
+                        const _PreferencesTab(),
+                        _SettingsList(children: _privacyItems()),
+                        _SettingsList(children: _securityItems()),
+                      ],
+                    ),
                   ),
                 ),
               ),
@@ -117,136 +115,143 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   List<Widget> _accountItems() => [
-        const _SectionIntro(
-          eyebrow: 'YOUR OG VIBES',
-          title: 'Account & app information',
-          description:
-              'Keep your student identity current and find the important product information in one place.',
+    const _SectionIntro(
+      eyebrow: 'YOUR OG VIBES',
+      title: 'Your account and app',
+      description:
+          'Keep your student identity current and find the important product information in one place.',
+    ),
+    _SettingsAction(
+      icon: Icons.manage_accounts_outlined,
+      title: 'Edit profile',
+      subtitle: 'Update your photo and student information.',
+      badge: 'PROFILE',
+      onTap: _openProfile,
+    ),
+    _SettingsAction(
+      icon: Icons.bug_report_outlined,
+      title: 'Report a bug',
+      subtitle: 'Tell the OG Vibes team when something is not working.',
+      onTap: _showBugReportDialog,
+    ),
+    const _SectionLabel('LEGAL & ABOUT'),
+    _SettingsAction(
+      icon: Icons.privacy_tip_outlined,
+      title: 'Privacy policy',
+      subtitle: 'Understand how your information is handled.',
+      onTap: () => Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) =>
+              const LegalDocumentScreen(type: LegalDocumentType.privacy),
         ),
-        _SettingsAction(
-          icon: Icons.manage_accounts_outlined,
-          title: 'Edit profile',
-          subtitle: 'Update your photo and student information.',
-          badge: 'PROFILE',
-          onTap: _openProfile,
-        ),
-        _SettingsAction(
-          icon: Icons.bug_report_outlined,
-          title: 'Report a bug',
-          subtitle: 'Tell the OG Vibes team when something is not working.',
-          onTap: _showBugReportDialog,
-        ),
-        const _SectionLabel('LEGAL & ABOUT'),
-        _SettingsAction(
-          icon: Icons.privacy_tip_outlined,
-          title: 'Privacy policy',
-          subtitle: 'Understand how your information is handled.',
-          onTap: () => Navigator.of(context).push(
-            MaterialPageRoute(builder: (_) => const PrivacyScreen()),
-          ),
-        ),
-        _SettingsAction(
-          icon: Icons.gavel_rounded,
-          title: 'Terms of use',
-          subtitle: 'The rules that apply when using OG Vibes.',
-          onTap: () => _showInformationSheet(
-            title: 'Terms of use',
-            icon: Icons.gavel_rounded,
-            body:
-                'Use OG Vibes responsibly, respect other students, and only upload content you are permitted to share. Campus and institutional rules still apply while using the platform.',
-          ),
-        ),
-        _SettingsAction(
-          icon: Icons.groups_2_outlined,
-          title: 'Community guidelines',
-          subtitle: 'How we keep the student community respectful and safe.',
-          onTap: () => _showInformationSheet(
-            title: 'Community guidelines',
-            icon: Icons.groups_2_outlined,
-            body:
-                'Be respectful, protect private information, avoid harassment or impersonation, report unsafe content, and keep academic collaboration honest.',
-          ),
-        ),
-        _SettingsAction(
-          icon: Icons.info_outline_rounded,
-          title: 'About OG Vibes',
-          subtitle: 'Version 1.0.0 · Built for students.',
-          badge: 'v1.0.0',
-          onTap: _showAbout,
-        ),
-        _SettingsAction(
-          icon: Icons.code_rounded,
-          title: 'Open-source licences',
-          subtitle: 'View licences for packages used by this app.',
-          onTap: () => showLicensePage(
-            context: context,
-            applicationName: 'OG Vibes',
-            applicationVersion: '1.0.0',
-            applicationLegalese: 'Built for Students.',
-          ),
-        ),
-      ];
+      ),
+    ),
+    _SettingsAction(
+      icon: Icons.gavel_rounded,
+      title: 'Terms of use',
+      subtitle: 'The rules that apply when using OG Vibes.',
+      onTap: () => _showInformationSheet(
+        title: 'Terms of use',
+        icon: Icons.gavel_rounded,
+        body:
+            'Use OG Vibes responsibly, respect other students, and only upload content you are permitted to share. Campus and institutional rules still apply while using the platform.',
+      ),
+    ),
+    _SettingsAction(
+      icon: Icons.groups_2_outlined,
+      title: 'Community guidelines',
+      subtitle: 'How we keep the student community respectful and safe.',
+      onTap: () => _showInformationSheet(
+        title: 'Community guidelines',
+        icon: Icons.groups_2_outlined,
+        body:
+            'Be respectful, protect private information, avoid harassment or impersonation, report unsafe content, and keep academic collaboration honest.',
+      ),
+    ),
+    _SettingsAction(
+      icon: Icons.info_outline_rounded,
+      title: 'About OG Vibes',
+      subtitle: 'Version 1.0.0 · Built for students.',
+      badge: 'v1.0.0',
+      onTap: _showAbout,
+    ),
+    _SettingsAction(
+      icon: Icons.code_rounded,
+      title: 'Open-source licences',
+      subtitle: 'View licences for packages used by this app.',
+      onTap: () => showLicensePage(
+        context: context,
+        applicationName: 'OG Vibes',
+        applicationVersion: '1.0.0',
+        applicationLegalese: 'Built for Students.',
+      ),
+    ),
+  ];
 
   List<Widget> _privacyItems() => [
-        const _SectionIntro(
-          eyebrow: 'PRIVACY CENTRE',
-          title: 'You control your boundaries',
-          description:
-              'Review the people you have blocked and learn how your information is protected.',
+    const _SectionIntro(
+      eyebrow: 'PRIVACY CENTRE',
+      title: 'Manage your privacy',
+      description:
+          'Review the people you have blocked and learn how your information is protected.',
+    ),
+    _SettingsAction(
+      icon: Icons.block_rounded,
+      title: 'Blocked users',
+      subtitle: 'Manage people who cannot message or interact with you.',
+      badge: 'MANAGE',
+      onTap: () => Navigator.of(
+        context,
+      ).push(MaterialPageRoute(builder: (_) => const BlockedUsersScreen())),
+    ),
+    _SettingsAction(
+      icon: Icons.shield_outlined,
+      title: 'Privacy policy',
+      subtitle: 'Review collection, storage, and protection of your data.',
+      onTap: () => Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) =>
+              const LegalDocumentScreen(type: LegalDocumentType.privacy),
         ),
-        _SettingsAction(
-          icon: Icons.block_rounded,
-          title: 'Blocked users',
-          subtitle: 'Manage people who cannot message or interact with you.',
-          badge: 'MANAGE',
-          onTap: () => Navigator.of(context).push(
-            MaterialPageRoute(builder: (_) => const BlockedUsersScreen()),
-          ),
-        ),
-        _SettingsAction(
-          icon: Icons.shield_outlined,
-          title: 'Privacy policy',
-          subtitle: 'Review collection, storage, and protection of your data.',
-          onTap: () => Navigator.of(context).push(
-            MaterialPageRoute(builder: (_) => const PrivacyScreen()),
-          ),
-        ),
-        const _PrivacyPromise(),
-      ];
+      ),
+    ),
+    const _PrivacyPromise(),
+  ];
 
   List<Widget> _securityItems() => [
-        const _SectionIntro(
-          eyebrow: 'ACCOUNT SECURITY',
-          title: 'Protect your OG Vibes account',
-          description:
-              'Keep your sign-in secure and review sensitive account actions carefully.',
-        ),
-        _SettingsAction(
-          icon: Icons.password_rounded,
-          title: 'Change password',
-          subtitle: 'Choose a new password for your account.',
-          onTap: _showChangePasswordDialog,
-        ),
-        _SettingsAction(
-          icon: Icons.logout_rounded,
-          title: 'Sign out',
-          subtitle: 'End your OG Vibes session on this device.',
-          onTap: _signOut,
-        ),
-        const _SectionLabel('DANGER ZONE', danger: true),
-        _SettingsAction(
-          icon: Icons.delete_forever_rounded,
-          title: 'Delete account',
-          subtitle: 'Permanently remove your profile and sign out.',
-          danger: true,
-          onTap: _confirmDeleteAccount,
-        ),
-      ];
+    const _SectionIntro(
+      eyebrow: 'ACCOUNT SECURITY',
+      title: 'Keep your account safe',
+      description:
+          'Keep your sign-in secure and review sensitive account actions carefully.',
+    ),
+    _SettingsAction(
+      icon: Icons.password_rounded,
+      title: 'Change password',
+      subtitle: 'Choose a new password for your account.',
+      onTap: _showChangePasswordDialog,
+    ),
+    const _ActiveDevicesCard(),
+    _SettingsAction(
+      icon: Icons.logout_rounded,
+      title: 'Sign out',
+      subtitle: 'End your OG Vibes session on this device.',
+      onTap: _signOut,
+    ),
+    const _SectionLabel('DANGER ZONE', danger: true),
+    _SettingsAction(
+      icon: Icons.delete_forever_rounded,
+      title: 'Delete account',
+      subtitle: 'Permanently remove your profile and sign out.',
+      danger: true,
+      onTap: _confirmDeleteAccount,
+    ),
+  ];
 
   Future<void> _openProfile() async {
-    await Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => const ProfileScreen()),
-    );
+    await Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (_) => const ProfileScreen()));
     if (mounted) setState(() => _profile = _loadProfile());
   }
 
@@ -360,6 +365,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   Future<void> _confirmDeleteAccount() async {
     final controller = TextEditingController();
+    final confirmationController = TextEditingController();
     final confirm = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
@@ -369,7 +375,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           mainAxisSize: MainAxisSize.min,
           children: [
             const Text(
-              'This action is permanent. Enter your password to continue.',
+              'This action is permanent. Enter your password, then type DELETE to continue.',
             ),
             const SizedBox(height: 16),
             TextField(
@@ -378,6 +384,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
               decoration: const InputDecoration(
                 labelText: 'Password',
                 prefixIcon: Icon(Icons.lock_outline_rounded),
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: confirmationController,
+              autocorrect: false,
+              textCapitalization: TextCapitalization.characters,
+              decoration: InputDecoration(
+                labelText: 'Type DELETE',
+                prefixIcon: const Icon(Icons.delete_forever_rounded),
               ),
             ),
           ],
@@ -395,7 +411,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ],
       ),
     );
+    final password = controller.text;
+    final confirmationPhrase = confirmationController.text.trim();
     controller.dispose();
+    confirmationController.dispose();
     if (confirm != true) return;
 
     final user = _user;
@@ -404,9 +423,30 @@ class _SettingsScreenState extends State<SettingsScreen> {
       return;
     }
     try {
+      if (password.isEmpty) {
+        _showSnack('Enter your password to confirm deletion.');
+        return;
+      }
+      if (confirmationPhrase != 'DELETE') {
+        _showSnack('Type DELETE exactly to confirm.');
+        return;
+      }
+      await Supabase.instance.client.auth.signInWithPassword(
+        email: user.email!,
+        password: password,
+      );
+      final response = await Supabase.instance.client.functions.invoke(
+        'delete-account',
+        body: const <String, String>{'confirmation': 'DELETE'},
+      );
+      if (response.status < 200 || response.status >= 300) {
+        final message = response.data is Map
+            ? '${(response.data as Map)['error'] ?? 'Account could not be deleted.'}'
+            : 'Account could not be deleted.';
+        throw Exception(message);
+      }
       await Supabase.instance.client.auth.signOut();
-      await Supabase.instance.client.from('profiles').delete().eq('id', user.id);
-      await _authService.signOut();
+      await AuthPersistenceService.clear();
       if (!mounted) return;
       Navigator.of(context).pushAndRemoveUntil(
         MaterialPageRoute(builder: (_) => const LoginScreen()),
@@ -424,11 +464,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
       applicationIcon: const _BrandMark(size: 54),
       applicationName: 'OG Vibes',
       applicationVersion: '1.0.0',
-      applicationLegalese: 'Built for Students.',
+      applicationLegalese: '© 2026 OG Technologies',
       children: const [
         SizedBox(height: 8),
         Text(
           'A connected student experience for academics, opportunities, community, and campus life.',
+        ),
+        SizedBox(height: 10),
+        Text(
+          'Powered by OG Technologies',
+          style: TextStyle(fontWeight: FontWeight.w800),
         ),
       ],
     );
@@ -444,7 +489,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       showDragHandle: true,
       isScrollControlled: true,
       builder: (context) => SafeArea(
-        child: Padding(
+        child: SingleChildScrollView(
           padding: const EdgeInsets.fromLTRB(24, 8, 24, 32),
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -464,7 +509,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   void _showSnack(String message) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
   }
 }
 
@@ -496,8 +543,9 @@ class _SettingsTabs extends StatelessWidget {
             ],
           ),
           labelColor: Colors.white,
-          unselectedLabelColor:
-              isDark ? const Color(0xFFB8C5D9) : AppColors.textMuted,
+          unselectedLabelColor: isDark
+              ? const Color(0xFFB8C5D9)
+              : AppColors.textMuted,
           tabs: const [
             Tab(icon: Icon(Icons.person_outline_rounded), text: 'Account'),
             Tab(icon: Icon(Icons.tune_rounded), text: 'Preferences'),
@@ -523,7 +571,8 @@ class _ProfileHero extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final reduceMotion = MediaQuery.maybeOf(context)?.disableAnimations ?? false;
+    final reduceMotion =
+        MediaQuery.maybeOf(context)?.disableAnimations ?? false;
     final data = profile ?? const _SettingsProfile.guest();
     return Semantics(
       container: true,
@@ -532,7 +581,9 @@ class _ProfileHero extends StatelessWidget {
           : '${data.name}, ${data.summary}',
       child: TweenAnimationBuilder<double>(
         tween: Tween(begin: 0, end: 1),
-        duration: reduceMotion ? Duration.zero : const Duration(milliseconds: 520),
+        duration: reduceMotion
+            ? Duration.zero
+            : const Duration(milliseconds: 520),
         curve: Curves.easeOutCubic,
         builder: (context, value, child) => Transform.translate(
           offset: Offset(0, 12 * (1 - value)),
@@ -567,14 +618,15 @@ class _ProfileHero extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Row(
-                      mainAxisSize: MainAxisSize.min,
+                    Wrap(
+                      crossAxisAlignment: WrapCrossAlignment.center,
                       children: [
                         const _BrandMark(size: 24),
                         const SizedBox(width: 8),
                         Text(
-                          'OG VIBES ID',
-                          style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                          'Your profile',
+                          style: Theme.of(context).textTheme.labelLarge
+                              ?.copyWith(
                                 color: AppColors.electricCyan,
                                 fontWeight: FontWeight.w800,
                                 letterSpacing: 1.3,
@@ -590,7 +642,8 @@ class _ProfileHero extends StatelessWidget {
                       child: Text(
                         loading ? 'Loading your profile…' : data.name,
                         key: ValueKey('${data.name}$loading'),
-                        style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                        style: Theme.of(context).textTheme.headlineSmall
+                            ?.copyWith(
                               color: Colors.white,
                               fontWeight: FontWeight.w800,
                             ),
@@ -602,6 +655,22 @@ class _ProfileHero extends StatelessWidget {
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(color: Colors.white70),
+                    ),
+                    const SizedBox(height: 10),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        const _HeroStatusPill(
+                          icon: Icons.verified_rounded,
+                          label: 'Signed in',
+                        ),
+                        if (data.email.isNotEmpty)
+                          _HeroStatusPill(
+                            icon: Icons.mail_outline_rounded,
+                            label: data.email,
+                          ),
+                      ],
                     ),
                   ],
                 ),
@@ -632,10 +701,10 @@ class _PreferencesTab extends StatelessWidget {
     return _SettingsList(
       children: [
         const _SectionIntro(
-          eyebrow: 'APPEARANCE',
-          title: 'Choose your atmosphere',
+          eyebrow: 'APP LOOK',
+          title: 'Choose how the app looks',
           description:
-              'Use a bright canvas, a focused dark experience, or follow your device automatically.',
+              'Choose light mode, dark mode or use your phone setting.',
         ),
         _GlassSurface(
           child: ValueListenableBuilder<ThemeMode>(
@@ -702,7 +771,316 @@ class _PreferencesTab extends StatelessWidget {
           ),
         ),
         const _ThemePreview(),
+        const _NotificationReadinessCard(),
         const _MotionNotice(),
+      ],
+    );
+  }
+}
+
+class _NotificationReadinessCard extends StatefulWidget {
+  const _NotificationReadinessCard();
+
+  @override
+  State<_NotificationReadinessCard> createState() =>
+      _NotificationReadinessCardState();
+}
+
+class _NotificationReadinessCardState
+    extends State<_NotificationReadinessCard> {
+  late Future<PushEnrollmentStatus> _status;
+  bool _working = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _status = PushNotificationService.enrollmentStatus();
+  }
+
+  Future<void> _enable() async {
+    if (_working) return;
+    setState(() => _working = true);
+    final enabled =
+        await PushNotificationService.requestAndRegisterCurrentDevice();
+    if (!mounted) return;
+    setState(() {
+      _working = false;
+      _status = PushNotificationService.enrollmentStatus();
+    });
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          enabled
+              ? 'Notifications and incoming call alerts are ready on this device.'
+              : 'Notifications were not enabled. OG Vibes will continue without them.',
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<PushEnrollmentStatus>(
+      future: _status,
+      builder: (context, snapshot) {
+        final status = snapshot.data;
+        final enabled = status == PushEnrollmentStatus.enabled;
+        final unsupported = status == PushEnrollmentStatus.unsupported;
+        final title = enabled
+            ? 'Notifications are ready'
+            : unsupported
+            ? 'Notifications are unavailable'
+            : 'Turn on notifications';
+        final subtitle = enabled
+            ? 'Messages, alerts, assessments and incoming calls can reach this device.'
+            : unsupported
+            ? 'This browser or device does not support push notifications.'
+            : 'Allow alerts so important messages and incoming calls are easier to notice.';
+        return Semantics(
+          container: true,
+          label: '$title. $subtitle',
+          child: _GlassSurface(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _IconBadge(
+                  icon: enabled
+                      ? Icons.notifications_active_rounded
+                      : Icons.notifications_none_rounded,
+                  color: enabled ? AppColors.success : AppColors.vibeBlue,
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        title,
+                        style: Theme.of(context).textTheme.titleMedium,
+                      ),
+                      const SizedBox(height: 4),
+                      Text(subtitle),
+                      if (!enabled && !unsupported) ...[
+                        const SizedBox(height: 14),
+                        FilledButton.icon(
+                          onPressed: _working ? null : _enable,
+                          icon: _working
+                              ? const SizedBox.square(
+                                  dimension: 16,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  ),
+                                )
+                              : const Icon(Icons.notifications_active_outlined),
+                          label: Text(_working ? 'Checking…' : 'Enable alerts'),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _ActiveDevicesCard extends StatefulWidget {
+  const _ActiveDevicesCard();
+
+  @override
+  State<_ActiveDevicesCard> createState() => _ActiveDevicesCardState();
+}
+
+class _ActiveDevicesCardState extends State<_ActiveDevicesCard> {
+  late Future<List<PushDeviceRegistration>> _devices;
+  String? _removingId;
+
+  @override
+  void initState() {
+    super.initState();
+    _devices = PushNotificationService.activeDevices();
+  }
+
+  void _refresh() {
+    setState(() => _devices = PushNotificationService.activeDevices());
+  }
+
+  Future<void> _remove(PushDeviceRegistration device) async {
+    if (_removingId != null) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Remove this device?'),
+        content: Text(
+          device.current
+              ? 'This device will stop receiving OG Vibes notifications until notifications are enabled again.'
+              : 'This device will stop receiving OG Vibes notifications and incoming call alerts.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Keep device'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Remove'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    setState(() => _removingId = device.id);
+    try {
+      await PushNotificationService.removeDevice(device.id);
+      if (!mounted) return;
+      _refresh();
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Device removed from notifications.')),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Could not remove this device. Try again.'),
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _removingId = null);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return _GlassSurface(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const _IconBadge(icon: Icons.devices_rounded),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Active devices',
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                    const SizedBox(height: 3),
+                    const Text(
+                      'Devices currently registered for your alerts and incoming calls.',
+                    ),
+                  ],
+                ),
+              ),
+              IconButton(
+                tooltip: 'Refresh devices',
+                onPressed: _refresh,
+                icon: const Icon(Icons.refresh_rounded),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          FutureBuilder<List<PushDeviceRegistration>>(
+            future: _devices,
+            builder: (context, snapshot) {
+              if (snapshot.connectionState != ConnectionState.done) {
+                return const Center(
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                );
+              }
+              if (snapshot.hasError) {
+                return const Text(
+                  'Active devices could not be loaded. Pull to refresh or try again later.',
+                );
+              }
+              final devices = snapshot.data ?? const [];
+              if (devices.isEmpty) {
+                return const Text(
+                  'No notification-enabled devices are registered yet.',
+                );
+              }
+              return Column(
+                children: [
+                  for (var index = 0; index < devices.length; index++) ...[
+                    _DeviceRow(
+                      device: devices[index],
+                      removing: _removingId == devices[index].id,
+                      onRemove: () => _remove(devices[index]),
+                    ),
+                    if (index != devices.length - 1) const Divider(height: 22),
+                  ],
+                ],
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _DeviceRow extends StatelessWidget {
+  const _DeviceRow({
+    required this.device,
+    required this.removing,
+    required this.onRemove,
+  });
+
+  final PushDeviceRegistration device;
+  final bool removing;
+  final VoidCallback onRemove;
+
+  String get _lastSeen {
+    final value = device.lastSeenAt?.toLocal();
+    if (value == null) return 'Recently active';
+    final now = DateTime.now();
+    final difference = now.difference(value);
+    if (difference.inMinutes < 2) return 'Active now';
+    if (difference.inHours < 1) return 'Active ${difference.inMinutes} min ago';
+    if (difference.inDays < 1) return 'Active ${difference.inHours} hr ago';
+    return 'Active ${difference.inDays} day${difference.inDays == 1 ? '' : 's'} ago';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final web = device.platform == 'web';
+    return Row(
+      children: [
+        Icon(
+          web ? Icons.language_rounded : Icons.phone_android_rounded,
+          color: AppColors.vibeBlue,
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                web ? 'Web or installed PWA' : 'Android app',
+                style: const TextStyle(fontWeight: FontWeight.w700),
+              ),
+              Text(
+                device.current ? 'This device · $_lastSeen' : _lastSeen,
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+            ],
+          ),
+        ),
+        IconButton(
+          tooltip: 'Remove device',
+          onPressed: removing ? null : onRemove,
+          icon: removing
+              ? const SizedBox.square(
+                  dimension: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Icon(Icons.delete_outline_rounded),
+        ),
       ],
     );
   }
@@ -751,13 +1129,16 @@ class _SettingsAction extends StatelessWidget {
         padding: EdgeInsets.zero,
         child: ListTile(
           minVerticalPadding: 15,
-          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 5),
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 16,
+            vertical: 5,
+          ),
           leading: _IconBadge(icon: icon, color: color),
           title: Text(
             title,
             style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                  color: danger ? AppColors.danger : null,
-                ),
+              color: danger ? AppColors.danger : null,
+            ),
           ),
           subtitle: Padding(
             padding: const EdgeInsets.only(top: 4),
@@ -823,17 +1204,17 @@ class _SectionLabel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Padding(
-        padding: const EdgeInsets.fromLTRB(4, 12, 4, 0),
-        child: Text(
-          label,
-          style: TextStyle(
-            color: danger ? AppColors.danger : AppColors.textMuted,
-            fontWeight: FontWeight.w800,
-            fontSize: 11,
-            letterSpacing: 1.15,
-          ),
-        ),
-      );
+    padding: const EdgeInsets.fromLTRB(4, 12, 4, 0),
+    child: Text(
+      label,
+      style: TextStyle(
+        color: danger ? AppColors.danger : AppColors.textMuted,
+        fontWeight: FontWeight.w800,
+        fontSize: 11,
+        letterSpacing: 1.15,
+      ),
+    ),
+  );
 }
 
 class _GlassSurface extends StatelessWidget {
@@ -849,26 +1230,16 @@ class _GlassSurface extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(radius),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
-        child: DecoratedBox(
-          decoration: BoxDecoration(
-            color: isDark
-                ? const Color(0xCC172944)
-                : Colors.white.withValues(alpha: 0.76),
-            borderRadius: BorderRadius.circular(radius),
-            border: Border.all(
-              color: isDark
-                  ? const Color(0xFF304663)
-                  : Colors.white.withValues(alpha: 0.92),
-            ),
-            boxShadow: AppStyles.glassShadow,
-          ),
-          child: Padding(padding: padding, child: child),
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: isDark ? AppColors.surfaceDark : AppColors.surfaceElevated,
+        borderRadius: BorderRadius.circular(radius),
+        border: Border.all(
+          color: isDark ? AppColors.borderDark : AppColors.outline,
         ),
+        boxShadow: AppStyles.softShadow,
       ),
+      child: Padding(padding: padding, child: child),
     );
   }
 }
@@ -880,14 +1251,14 @@ class _IconBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Container(
-        width: 44,
-        height: 44,
-        decoration: BoxDecoration(
-          color: color.withValues(alpha: 0.11),
-          borderRadius: BorderRadius.circular(14),
-        ),
-        child: Icon(icon, color: color),
-      );
+    width: 44,
+    height: 44,
+    decoration: BoxDecoration(
+      color: color.withValues(alpha: 0.11),
+      borderRadius: BorderRadius.circular(14),
+    ),
+    child: Icon(icon, color: color),
+  );
 }
 
 class _Pill extends StatelessWidget {
@@ -922,39 +1293,37 @@ class _ThemePreview extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => _GlassSurface(
-        child: Row(
-          children: [
-            Expanded(
-              child: Container(
-                height: 88,
-                decoration: BoxDecoration(
-                  color: const Color(0xFFF3F7FF),
-                  borderRadius: BorderRadius.circular(18),
-                  border: Border.all(color: AppColors.glassBorder),
-                ),
-                child: const Center(
-                  child: _PreviewMark(label: 'LIGHT', dark: false),
-                ),
-              ),
+    child: Row(
+      children: [
+        Expanded(
+          child: Container(
+            height: 88,
+            decoration: BoxDecoration(
+              color: AppColors.canvas,
+              borderRadius: BorderRadius.circular(18),
+              border: Border.all(color: AppColors.glassBorder),
             ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Container(
-                height: 88,
-                decoration: BoxDecoration(
-                  gradient: const LinearGradient(
-                    colors: [Color(0xFF071323), Color(0xFF142B4B)],
-                  ),
-                  borderRadius: BorderRadius.circular(18),
-                ),
-                child: const Center(
-                  child: _PreviewMark(label: 'DARK', dark: true),
-                ),
-              ),
+            child: const Center(
+              child: _PreviewMark(label: 'LIGHT', dark: false),
             ),
-          ],
+          ),
         ),
-      );
+        const SizedBox(width: 12),
+        Expanded(
+          child: Container(
+            height: 88,
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                colors: [AppColors.canvasDark, AppColors.surfaceDark],
+              ),
+              borderRadius: BorderRadius.circular(18),
+            ),
+            child: const Center(child: _PreviewMark(label: 'DARK', dark: true)),
+          ),
+        ),
+      ],
+    ),
+  );
 }
 
 class _PreviewMark extends StatelessWidget {
@@ -963,21 +1332,21 @@ class _PreviewMark extends StatelessWidget {
   final bool dark;
   @override
   Widget build(BuildContext context) => Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const _BrandMark(size: 28),
-          const SizedBox(height: 6),
-          Text(
-            label,
-            style: TextStyle(
-              color: dark ? Colors.white : AppColors.midnightInk,
-              fontWeight: FontWeight.w800,
-              fontSize: 10,
-              letterSpacing: 1,
-            ),
-          ),
-        ],
-      );
+    mainAxisSize: MainAxisSize.min,
+    children: [
+      const _BrandMark(size: 28),
+      const SizedBox(height: 6),
+      Text(
+        label,
+        style: TextStyle(
+          color: dark ? Colors.white : AppColors.midnightInk,
+          fontWeight: FontWeight.w800,
+          fontSize: 10,
+          letterSpacing: 1,
+        ),
+      ),
+    ],
+  );
 }
 
 class _MotionNotice extends StatelessWidget {
@@ -985,33 +1354,39 @@ class _MotionNotice extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final reduced = MediaQuery.maybeOf(context)?.disableAnimations ?? false;
-    return _GlassSurface(
-      child: Row(
-        children: [
-          _IconBadge(
-            icon: reduced ? Icons.motion_photos_off : Icons.animation_rounded,
-            color: AppColors.success,
-          ),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  reduced ? 'Reduced motion is active' : 'Motion follows your device',
-                  style: Theme.of(context).textTheme.titleMedium,
-                ),
-                const SizedBox(height: 3),
-                Text(
-                  reduced
-                      ? 'Ambient and transition animations are minimised.'
-                      : 'OG Vibes automatically respects reduced-motion preferences.',
-                ),
-              ],
+    return ValueListenableBuilder<bool>(
+      valueListenable: AccessibilityPreferences.reduceMotion,
+      builder: (context, reduced, _) => _GlassSurface(
+        child: Row(
+          children: [
+            _IconBadge(
+              icon: reduced ? Icons.motion_photos_off : Icons.animation_rounded,
+              color: AppColors.success,
             ),
-          ),
-        ],
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Reduce motion',
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    reduced
+                        ? 'Extra movement and transitions are minimised.'
+                        : 'Turn this on for calmer transitions across OG Vibes.',
+                  ),
+                ],
+              ),
+            ),
+            Switch.adaptive(
+              value: reduced,
+              onChanged: AccessibilityPreferences.setReduceMotion,
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -1022,30 +1397,30 @@ class _PrivacyPromise extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Container(
-        padding: const EdgeInsets.all(20),
-        decoration: BoxDecoration(
-          borderRadius: AppStyles.bentoRadius,
-          gradient: LinearGradient(
-            colors: [
-              AppColors.vibeBlue.withValues(alpha: 0.13),
-              AppColors.electricCyan.withValues(alpha: 0.10),
-            ],
+    padding: const EdgeInsets.all(20),
+    decoration: BoxDecoration(
+      borderRadius: AppStyles.bentoRadius,
+      gradient: LinearGradient(
+        colors: [
+          AppColors.vibeBlue.withValues(alpha: 0.13),
+          AppColors.electricCyan.withValues(alpha: 0.10),
+        ],
+      ),
+      border: Border.all(color: AppColors.vibeBlue.withValues(alpha: 0.18)),
+    ),
+    child: const Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(Icons.verified_user_outlined, color: AppColors.vibeBlue),
+        SizedBox(width: 14),
+        Expanded(
+          child: Text(
+            'Your private conversations and account controls remain protected by authenticated database policies.',
           ),
-          border: Border.all(color: AppColors.vibeBlue.withValues(alpha: 0.18)),
         ),
-        child: const Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Icon(Icons.verified_user_outlined, color: AppColors.vibeBlue),
-            SizedBox(width: 14),
-            Expanded(
-              child: Text(
-                'Your private conversations and account controls remain protected by authenticated database policies.',
-              ),
-            ),
-          ],
-        ),
-      );
+      ],
+    ),
+  );
 }
 
 class _ProfileAvatar extends StatelessWidget {
@@ -1055,46 +1430,36 @@ class _ProfileAvatar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Container(
-        width: 78,
-        height: 78,
-        padding: const EdgeInsets.all(3),
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          border: Border.all(color: AppColors.electricCyan, width: 2),
-          color: Colors.white.withValues(alpha: 0.12),
-        ),
-        child: ClipOval(
-          child: loading
-              ? const Center(
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                )
-              : profile.photoUrl.isNotEmpty
-                  ? Image.network(
-                      profile.photoUrl,
-                      fit: BoxFit.cover,
-                      errorBuilder: (_, _, _) => _Initials(profile.initials),
-                    )
-                  : _Initials(profile.initials),
-        ),
-      );
+    width: 78,
+    height: 78,
+    padding: const EdgeInsets.all(3),
+    decoration: BoxDecoration(
+      shape: BoxShape.circle,
+      border: Border.all(color: AppColors.electricCyan, width: 2),
+      color: Colors.white.withValues(alpha: 0.12),
+    ),
+    child: ClipOval(
+      child: loading
+          ? const Center(child: CircularProgressIndicator(strokeWidth: 2))
+          : profile.photoUrl.isNotEmpty
+          ? Image.network(
+              profile.photoUrl,
+              fit: BoxFit.cover,
+              errorBuilder: (_, _, _) => const _Initials(),
+            )
+          : const _Initials(),
+    ),
+  );
 }
 
 class _Initials extends StatelessWidget {
-  const _Initials(this.value);
-  final String value;
+  const _Initials();
   @override
   Widget build(BuildContext context) => Container(
-        color: Colors.white.withValues(alpha: 0.12),
-        alignment: Alignment.center,
-        child: Text(
-          value,
-          style: const TextStyle(
-            color: Colors.white,
-            fontSize: 22,
-            fontWeight: FontWeight.w800,
-          ),
-        ),
-      );
+    color: Colors.white.withValues(alpha: 0.12),
+    alignment: Alignment.center,
+    child: const Icon(Icons.person_rounded, color: Colors.white, size: 34),
+  );
 }
 
 class _BrandMark extends StatelessWidget {
@@ -1103,16 +1468,53 @@ class _BrandMark extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Container(
-        width: size,
-        height: size,
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          gradient: const LinearGradient(
-            colors: [AppColors.electricCyan, AppColors.vibeBlue],
+    width: size,
+    height: size,
+    decoration: BoxDecoration(
+      shape: BoxShape.circle,
+      gradient: const LinearGradient(
+        colors: [AppColors.electricCyan, AppColors.vibeBlue],
+      ),
+    ),
+    child: Icon(Icons.bolt_rounded, size: size * 0.62, color: Colors.white),
+  );
+}
+
+class _HeroStatusPill extends StatelessWidget {
+  const _HeroStatusPill({required this.icon, required this.label});
+
+  final IconData icon;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    constraints: const BoxConstraints(maxWidth: 290),
+    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+    decoration: BoxDecoration(
+      color: Colors.white.withValues(alpha: 0.12),
+      borderRadius: BorderRadius.circular(999),
+      border: Border.all(color: Colors.white24),
+    ),
+    child: Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, size: 14, color: AppColors.electricCyan),
+        const SizedBox(width: 6),
+        Flexible(
+          child: Text(
+            label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+            ),
           ),
         ),
-        child: Icon(Icons.bolt_rounded, size: size * 0.62, color: Colors.white),
-      );
+      ],
+    ),
+  );
 }
 
 class _SettingsProfile {
@@ -1123,33 +1525,35 @@ class _SettingsProfile {
     required this.department,
     required this.level,
     required this.photoUrl,
+    required this.email,
   });
 
   const _SettingsProfile.guest()
-      : name = 'OG Vibes Student',
-        studentNumber = '',
-        campus = 'Student community',
-        department = '',
-        level = '',
-        photoUrl = '';
+    : name = 'OG Vibes Student',
+      studentNumber = '',
+      campus = 'Student community',
+      department = '',
+      level = '',
+      photoUrl = '',
+      email = '';
 
   factory _SettingsProfile.from(Map<String, dynamic>? row, User user) {
     String value(String key) => row?[key]?.toString().trim() ?? '';
-    final first = value('name');
-    final last = value('surname');
-    final combined = [first, last].where((part) => part.isNotEmpty).join(' ');
-    final metadataName = user.userMetadata?['full_name']?.toString().trim() ?? '';
+    final nickname = value('nickname');
+    final metadataNickname =
+        user.userMetadata?['nickname']?.toString().trim() ?? '';
     return _SettingsProfile(
-      name: combined.isNotEmpty
-          ? combined
-          : metadataName.isNotEmpty
-              ? metadataName
-              : user.email?.split('@').first ?? 'Student',
+      name: nickname.isNotEmpty
+          ? nickname
+          : metadataNickname.isNotEmpty
+          ? metadataNickname
+          : 'OG Vibester',
       studentNumber: value('student_number'),
       campus: value('campus'),
       department: value('department'),
       level: value('level'),
       photoUrl: value('photo_url'),
+      email: user.email?.trim() ?? '',
     );
   }
 
@@ -1159,6 +1563,7 @@ class _SettingsProfile {
   final String department;
   final String level;
   final String photoUrl;
+  final String email;
 
   String get initials {
     final parts = name.split(RegExp(r'\s+')).where((part) => part.isNotEmpty);
