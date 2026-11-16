@@ -1,13 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
-
-import '../services/push_notification_service.dart';
-import '../services/auth_persistence_service.dart';
-
 import '../screens/call_history_screen.dart';
 import '../screens/helpful_contacts_screen.dart';
 import '../screens/download_history_screen.dart';
-import '../screens/login_screen.dart';
+import '../screens/landing_screen.dart';
 import '../screens/my_modules_screen.dart';
 import '../screens/my_posts_screen.dart';
 import '../screens/profile_screen.dart';
@@ -24,61 +19,10 @@ class AppDrawer extends StatefulWidget {
 }
 
 class _AppDrawerState extends State<AppDrawer> {
-  String? _userNickname;
   String _userName = 'OG Vibester';
   String _userCampus = 'Campus Unknown';
   String _userCourse = 'General Studies';
   String? _photoUrl;
-
-  @override
-  void initState() {
-    super.initState();
-    _loadUserProfile();
-  }
-
-  Future<void> _loadUserProfile() async {
-    final user = Supabase.instance.client.auth.currentUser;
-    if (user == null) {
-      return;
-    }
-
-    try {
-      final data = await Supabase.instance.client
-          .from('profiles')
-          .select('nickname, name, campus, department, photo_url')
-          .eq('id', user.id)
-          .single();
-      if (!mounted) return;
-      final map = data as Map<String, dynamic>?;
-      setState(() {
-        _userNickname = (map?['nickname'] as String?)?.trim();
-        _userName = (_userNickname?.isNotEmpty == true)
-            ? _userNickname!
-            : 'OG Vibester';
-        _userCampus = (map?['campus'] as String?)?.trim().isNotEmpty == true
-            ? map!['campus'] as String
-            : 'Campus Unknown';
-        final department = (map?['department'] as String?)?.trim();
-        _userCourse = (department?.isNotEmpty == true)
-            ? department!
-            : 'General Studies';
-        _photoUrl = (map?['photo_url'] as String?)?.trim().isNotEmpty == true
-            ? map!['photo_url'] as String
-            : user.userMetadata?['avatar_url'] as String?;
-      });
-    } catch (_) {
-      if (!mounted) return;
-      setState(() {
-        _userName =
-            user.userMetadata?['nickname']?.toString().trim().isNotEmpty == true
-            ? user.userMetadata!['nickname'].toString().trim()
-            : 'OG Vibester';
-        _userCampus = 'Campus Unknown';
-        _userCourse = 'General Studies';
-        _photoUrl = user.userMetadata?['avatar_url'] as String?;
-      });
-    }
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -393,22 +337,10 @@ class _AppDrawerState extends State<AppDrawer> {
   }
 
   Future<void> _logOut(BuildContext context) async {
-    final navigator = Navigator.of(context);
-    final messenger = ScaffoldMessenger.of(context);
-    try {
-      await PushNotificationService.unregisterCurrentDevice();
-      await AuthPersistenceService.clear();
-      await Supabase.instance.client.auth.signOut();
-      if (!mounted) return;
-      navigator.pushAndRemoveUntil(
-        MaterialPageRoute(builder: (_) => const LoginScreen()),
-        (route) => false,
-      );
-    } catch (error) {
-      if (!mounted) return;
-      messenger.showSnackBar(
-        SnackBar(content: Text('Failed to log out: $error')),
-      );
-    }
+    if (!mounted) return;
+    Navigator.of(context).pushAndRemoveUntil(
+      MaterialPageRoute<void>(builder: (_) => const LandingScreen()),
+      (route) => false,
+    );
   }
 }

@@ -26,7 +26,7 @@ class MessagesScreen extends StatefulWidget {
 }
 
 class _MessagesScreenState extends State<MessagesScreen> {
-  final _client = Supabase.instance.client;
+  SupabaseClient get _client => Supabase.instance.client;
   final _searchController = TextEditingController();
 
   RealtimeChannel? _channel;
@@ -41,7 +41,7 @@ class _MessagesScreenState extends State<MessagesScreen> {
   String? _error;
 
   String get _cacheKey =>
-      'chat_inbox_cache_v2_${_client.auth.currentUser?.id ?? 'signed_out'}';
+      'chat_inbox_cache_v2_signed_out';
 
   @override
   void initState() {
@@ -67,8 +67,11 @@ class _MessagesScreenState extends State<MessagesScreen> {
 
   Future<void> _bootstrap() async {
     await _loadCache();
-    await _loadInbox();
-    _subscribeToChanges();
+    if (!mounted) return;
+    setState(() {
+      _loading = false;
+      _offline = true;
+    });
   }
 
   Future<void> _loadCache() async {

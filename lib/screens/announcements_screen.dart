@@ -35,7 +35,7 @@ class AnnouncementsScreen extends StatefulWidget {
 
 class _AnnouncementsScreenState extends State<AnnouncementsScreen> {
   final _searchController = TextEditingController();
-  final _db = Supabase.instance.client;
+  SupabaseClient get _db => Supabase.instance.client;
 
   StreamSubscription<List<Map<String, dynamic>>>? _alertsSubscription;
   StreamSubscription<List<Map<String, dynamic>>>? _readsSubscription;
@@ -72,22 +72,13 @@ class _AnnouncementsScreenState extends State<AnnouncementsScreen> {
   }
 
   Future<void> _start() async {
-    final preferences = await SharedPreferences.getInstance();
-    await preferences.remove(_legacyCacheKey);
-    final connection = await Connectivity().checkConnectivity();
-    _offline = connection.contains(ConnectivityResult.none);
-    if (_offline) await _loadCache();
-    _connectivitySubscription = Connectivity().onConnectivityChanged.listen((
-      results,
-    ) {
-      final offline = results.contains(ConnectivityResult.none);
-      if (!mounted) return;
-      final cameOnline = _offline && !offline;
-      setState(() => _offline = offline);
-      if (cameOnline) unawaited(_refresh());
-    });
-    await _load();
-    _listenForChanges();
+    await _loadCache();
+    if (mounted) {
+      setState(() {
+        _loading = false;
+        _offline = true;
+      });
+    }
   }
 
   Future<void> _load({bool showLoader = true}) async {

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import 'screens/splash_screen.dart';
@@ -7,11 +9,19 @@ import 'utils/app_theme.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await Future.wait([
-    ThemePreferences.initialise(),
-    AccessibilityPreferences.initialise(),
-  ]);
   runApp(const MyApp());
+  unawaited(_initialiseLocalPreferences());
+}
+
+Future<void> _initialiseLocalPreferences() async {
+  try {
+    await Future.wait([
+      ThemePreferences.initialise(),
+      AccessibilityPreferences.initialise(),
+    ]);
+  } catch (error) {
+    debugPrint('Local preferences could not be loaded: $error');
+  }
 }
 
 class MyApp extends StatelessWidget {
