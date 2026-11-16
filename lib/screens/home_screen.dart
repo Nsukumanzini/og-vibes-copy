@@ -7,11 +7,9 @@ import 'dart:ui' show PlatformDispatcher;
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_staggered_animations/flutter_staggered_animations.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:og_vibes_student/screens/home/widgets/home_bottom_navigation_bar.dart';
 import 'package:shimmer/shimmer.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import '../services/notification_badge_service.dart';
 import '../utils/theme_constants.dart';
 
 import '../../widgets/app_drawer.dart';
@@ -75,77 +73,25 @@ class _HomeScreenState extends State<HomeScreen> {
     _scrollController = ScrollController();
     _scrollController.addListener(_handleScroll);
     _initialiseFeed();
-    unawaited(_loadNickname());
-    unawaited(NotificationBadgeService.instance.start());
-  }
-
-  Future<void> _loadNickname() async {
-    final user = Supabase.instance.client.auth.currentUser;
-    if (user == null) return;
-    var nickname = user.userMetadata?['nickname']?.toString().trim() ?? '';
-    var profilePhoto = user.userMetadata?['photo_url']?.toString().trim() ?? '';
-    try {
-      final row = await Supabase.instance.client
-          .from('profiles')
-          .select('nickname, photo_url')
-          .eq('id', user.id)
-          .maybeSingle();
-      final savedNickname = row?['nickname']?.toString().trim() ?? '';
-      final savedPhoto = row?['photo_url']?.toString().trim() ?? '';
-      if (savedNickname.isNotEmpty) nickname = savedNickname;
-      if (savedPhoto.isNotEmpty) profilePhoto = savedPhoto;
-    } catch (_) {
-      // The signed-in nickname remains available when the device is offline.
-    }
-    if (!mounted) return;
-    setState(() {
-      if (nickname.isNotEmpty) _nickname = nickname;
-      if (profilePhoto.isNotEmpty) _profilePhotoUrl = profilePhoto;
-    });
   }
 
   Future<void> _initialiseFeed() async {
     await _loadSeenPosts();
     await _loadCachedPosts();
-    await _loadPosts(reset: true);
-    _listenForPosts();
+    if (mounted) setState(() => _isLoadingPosts = false);
   }
 
   String? get _feedCacheKey {
-    final userId = Supabase.instance.client.auth.currentUser?.id;
-    return userId == null ? null : 'og_vibes_feed_cache_$userId';
+    return 'og_vibes_feed_cache_guest';
   }
 
-  String get _seenPostsCacheKey {
-    final userId = Supabase.instance.client.auth.currentUser?.id ?? 'guest';
-    return 'og_vibes_seen_posts_$userId';
-  }
+  String get _seenPostsCacheKey => 'og_vibes_seen_posts_guest';
 
   Future<void> _loadSeenPosts() async {
     final preferences = await SharedPreferences.getInstance();
     _seenPostIds.addAll(
       preferences.getStringList(_seenPostsCacheKey) ?? const <String>[],
     );
-    final user = Supabase.instance.client.auth.currentUser;
-    if (user == null) return;
-    try {
-      final rows = List<Map<String, dynamic>>.from(
-        await Supabase.instance.client
-                .from('post_views')
-                .select('post_id')
-                .eq('user_id', user.id)
-            as List<dynamic>,
-      );
-      _seenPostIds.addAll(
-        rows.map((row) => row['post_id']?.toString()).whereType<String>(),
-      );
-      await preferences.setStringList(
-        _seenPostsCacheKey,
-        _seenPostIds.toList(),
-      );
-    } catch (error) {
-      debugPrint('Seen posts sync error: $error');
-    }
   }
 
   List<Map<String, dynamic>> _personaliseFeed(
@@ -175,17 +121,6 @@ class _HomeScreenState extends State<HomeScreen> {
     if (postId.isEmpty || !_seenPostIds.add(postId)) return;
     final preferences = await SharedPreferences.getInstance();
     await preferences.setStringList(_seenPostsCacheKey, _seenPostIds.toList());
-    final user = Supabase.instance.client.auth.currentUser;
-    if (user == null) return;
-    try {
-      await Supabase.instance.client.from('post_views').upsert({
-        'user_id': user.id,
-        'post_id': postId,
-        'last_seen_at': DateTime.now().toUtc().toIso8601String(),
-      }, onConflict: 'user_id,post_id');
-    } catch (error) {
-      debugPrint('Post view sync error: $error');
-    }
   }
 
   Future<void> _loadCachedPosts() async {
@@ -238,122 +173,20 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _loadPosts({bool reset = false, bool showLoading = true}) async {
-    if (reset) {
-      _oldestPostCursor = null;
-      _hasMorePosts = true;
-      if (showLoading) {
-        setState(() {
-          _isLoadingPosts = true;
-          _feedError = null;
-        });
-      } else {
-        setState(() => _feedError = null);
-      }
-    } else {
+    if (reset && showLoading && mounted) {
       setState(() {
+        _isLoadingPosts = true;
         _feedError = null;
       });
     }
-
-    try {
-      var query = Supabase.instance.client
-          .from('posts')
-          .select(
-            '*, profiles!posts_author_id_fkey(name, surname, nickname, photo_url, campus, department)',
-          )
-          .eq('is_deleted', false);
-      final cursor = _oldestPostCursor;
-      if (!reset && cursor != null) {
-        query = query.lt('created_at', cursor.toUtc().toIso8601String());
-      }
-      final response = await query
-          .order('created_at', ascending: false)
-          .limit(_pageSize);
-
-      final rows = <Map<String, dynamic>>[];
-      for (final item in response) {
-        rows.add(Map<String, dynamic>.from(item));
-      }
-      final freshRows = await Future.wait(rows.map(_withFreshMediaUrls));
-      final combined = reset
-          ? freshRows
-          : <Map<String, dynamic>>[
-              ..._posts,
-              ...freshRows.where(
-                (candidate) =>
-                    !_posts.any((current) => current['id'] == candidate['id']),
-              ),
-            ];
-      final displayRows = _personaliseFeed(combined);
-      final lastCreatedAt = rows.isEmpty
-          ? null
-          : DateTime.tryParse(rows.last['created_at']?.toString() ?? '');
-
-      if (!mounted) return;
-
-      setState(() {
-        _posts = displayRows;
-        _isLoadingPosts = false;
-        _newPostsWaiting = false;
-        _hasMorePosts = rows.length == _pageSize;
-        if (lastCreatedAt != null) _oldestPostCursor = lastCreatedAt;
-      });
-      unawaited(_cachePosts(displayRows));
-    } catch (e, st) {
-      debugPrint('Feed load error: $e');
-      debugPrint('$st');
-      if (!mounted) return;
+    await _loadCachedPosts();
+    if (mounted) {
       setState(() {
         _isLoadingPosts = false;
-        _feedError = _posts.isEmpty ? e.toString() : null;
+        _hasMorePosts = false;
+        _feedError = null;
       });
     }
-  }
-
-  Future<Map<String, dynamic>> _withFreshMediaUrls(
-    Map<String, dynamic> post,
-  ) async {
-    final result = Map<String, dynamic>.from(post);
-    for (final field in const ['images', 'videos', 'documents']) {
-      final values = post[field];
-      if (values is! List) continue;
-      result[field] = await Future.wait(
-        values.map((value) => _freshPostMediaUrl(value?.toString() ?? '')),
-      );
-    }
-    return result;
-  }
-
-  Future<String> _freshPostMediaUrl(String storedValue) async {
-    if (storedValue.trim().isEmpty) return storedValue;
-    final objectPath = _postObjectPath(storedValue);
-    if (objectPath == null || objectPath.isEmpty) return storedValue;
-    try {
-      return await Supabase.instance.client.storage
-          .from('posts')
-          .createSignedUrl(objectPath, 60 * 60 * 6);
-    } catch (error) {
-      debugPrint('Unable to sign post media $objectPath: $error');
-      return storedValue;
-    }
-  }
-
-  String? _postObjectPath(String storedValue) {
-    final value = storedValue.trim();
-    final uri = Uri.tryParse(value);
-    if (uri == null || !uri.hasScheme) {
-      return value.replaceFirst(RegExp(r'^/+'), '');
-    }
-
-    final segments = uri.pathSegments;
-    final objectIndex = segments.indexOf('object');
-    if (objectIndex < 0 || objectIndex + 3 >= segments.length) return null;
-    final access = segments[objectIndex + 1];
-    if (!const {'public', 'sign', 'authenticated'}.contains(access) ||
-        segments[objectIndex + 2] != 'posts') {
-      return null;
-    }
-    return segments.sublist(objectIndex + 3).join('/');
   }
 
   @override
@@ -368,45 +201,6 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<void> _refreshFeed() async {
     await _loadPosts(reset: true);
-  }
-
-  void _listenForPosts() {
-    _postSubscription = Supabase.instance.client
-        .from('posts')
-        .stream(primaryKey: ['id'])
-        .listen(
-          (_) {
-            if (!mounted) return;
-            if (_scrollController.hasClients &&
-                _scrollController.offset > 180) {
-              setState(() => _newPostsWaiting = true);
-              return;
-            }
-            unawaited(_loadPosts(reset: true, showLoading: false));
-          },
-          onError: (_) {
-            if (!mounted) return;
-            setState(() {
-              _isLoadingPosts = false;
-            });
-          },
-        );
-
-    _likesSubscription = Supabase.instance.client
-        .from('post_likes')
-        .stream(primaryKey: ['id'])
-        .listen((_) {
-          if (!mounted) return;
-          unawaited(_loadPosts(reset: true, showLoading: false));
-        });
-
-    _commentsSubscription = Supabase.instance.client
-        .from('comments')
-        .stream(primaryKey: ['id'])
-        .listen((_) {
-          if (!mounted) return;
-          unawaited(_loadPosts(reset: true, showLoading: false));
-        });
   }
 
   Future<void> _handleScroll() async {
