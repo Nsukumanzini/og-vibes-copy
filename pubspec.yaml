@@ -103,6 +103,7 @@ flutter:
 
   assets:
     - assets/images/
+    - assets/images/cafeteria/
 
   fonts:
     - family: Poppins
