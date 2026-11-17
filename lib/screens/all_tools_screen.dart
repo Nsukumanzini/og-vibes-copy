@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 
 import 'academic_escalation_screen.dart';
 import 'bursary_screen.dart';
-import 'cafeteria_screen.dart';
 import 'campus_events_screen.dart';
 import 'campus_map_screen.dart';
 import 'checklist_screen.dart';
@@ -26,9 +25,7 @@ import 'offline_downloader_screen.dart';
 import 'privacy_screen.dart';
 import 'product_details_screen.dart';
 import 'rewards_screen.dart';
-import 'safety_screen.dart';
 import 'src_help_desk_screen.dart';
-import 'src_voting_screen.dart';
 import 'student_analytics_dashboard.dart';
 import 'study_group_finder_screen.dart';
 import 'study_resources_screen.dart';
@@ -47,7 +44,6 @@ class AllToolsScreen extends StatelessWidget {
       const AcademicEscalationScreen(),
     ),
     _ToolLink('Bursaries', Icons.account_balance, const BursaryScreen()),
-    _ToolLink('Cafeteria', Icons.restaurant, const CafeteriaScreen()),
     _ToolLink('Campus events', Icons.event, const CampusEventsScreen()),
     _ToolLink('Campus map', Icons.map, const CampusMapScreen()),
     _ToolLink('Student checklist', Icons.checklist, const ChecklistScreen()),
@@ -107,9 +103,7 @@ class AllToolsScreen extends StatelessWidget {
       const ProductDetailsScreen(),
     ),
     _ToolLink('Campus rewards', Icons.card_giftcard, const RewardsScreen()),
-    _ToolLink('Safety hub', Icons.emergency, const SafetyScreen()),
     _ToolLink('SRC help desk', Icons.forum, const SrcHelpDeskScreen()),
-    _ToolLink('SRC voting', Icons.how_to_vote, const SrcVotingScreen()),
     _ToolLink(
       'Student analytics',
       Icons.insights,
@@ -137,7 +131,7 @@ class AllToolsScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: const Text('More campus tools')),
+    appBar: AppBar(title: const Text('Campus features')),
     body: GridView.builder(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 28),
       gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(

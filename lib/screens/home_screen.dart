@@ -36,10 +36,6 @@ import 'career_screen.dart';
 import 'market_screen.dart';
 import 'accredited_accommodation_screen.dart';
 import 'donation_screen.dart';
-import 'all_tools_screen.dart';
-import 'cafeteria_screen.dart';
-import 'safety_screen.dart';
-import 'src_voting_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -736,34 +732,6 @@ class _HomeScreenState extends State<HomeScreen> {
 
   List<_HubCardInfo> _getStudyTabCards() {
     return [
-      _HubCardInfo(
-        title: 'Panic button',
-        icon: Icons.emergency_rounded,
-        onTap: (context) => Navigator.of(
-          context,
-        ).push(MaterialPageRoute(builder: (_) => const SafetyScreen())),
-      ),
-      _HubCardInfo(
-        title: 'Cafeteria',
-        icon: Icons.restaurant_rounded,
-        onTap: (context) => Navigator.of(
-          context,
-        ).push(MaterialPageRoute(builder: (_) => const CafeteriaScreen())),
-      ),
-      _HubCardInfo(
-        title: 'SRC voting',
-        icon: Icons.how_to_vote_rounded,
-        onTap: (context) => Navigator.of(
-          context,
-        ).push(MaterialPageRoute(builder: (_) => const SrcVotingScreen())),
-      ),
-      _HubCardInfo(
-        title: 'More campus tools',
-        icon: Icons.apps_rounded,
-        onTap: (context) => Navigator.of(
-          context,
-        ).push(MaterialPageRoute(builder: (_) => const AllToolsScreen())),
-      ),
       _HubCardInfo(
         title: 'Campus events',
         icon: Icons.event,
