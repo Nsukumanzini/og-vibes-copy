@@ -36,6 +36,7 @@ import 'career_screen.dart';
 import 'market_screen.dart';
 import 'accredited_accommodation_screen.dart';
 import 'donation_screen.dart';
+import 'src_voting_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -732,6 +733,13 @@ class _HomeScreenState extends State<HomeScreen> {
 
   List<_HubCardInfo> _getStudyTabCards() {
     return [
+      _HubCardInfo(
+        title: 'SRC election',
+        icon: Icons.how_to_vote_rounded,
+        onTap: (context) => Navigator.of(
+          context,
+        ).push(MaterialPageRoute(builder: (_) => const SrcVotingScreen())),
+      ),
       _HubCardInfo(
         title: 'Campus events',
         icon: Icons.event,
