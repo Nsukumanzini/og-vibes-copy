@@ -7,6 +7,7 @@ import '../screens/my_modules_screen.dart';
 import '../screens/my_posts_screen.dart';
 import '../screens/profile_screen.dart';
 import '../screens/settings_screen.dart';
+import '../screens/safety_screen.dart';
 import '../screens/suggestion_box_screen.dart';
 import '../screens/whistleblower_screen.dart';
 import '../screens/whats_new_screen.dart';
@@ -195,6 +196,26 @@ class _AppDrawerState extends State<AppDrawer> {
                       MaterialPageRoute(
                         builder: (_) => const HelpfulContactsScreen(),
                       ),
+                    );
+                  },
+                ),
+                ListTile(
+                  leading: const Icon(
+                    Icons.shield_outlined,
+                    color: Color(0xFFFF9189),
+                  ),
+                  title: const Text(
+                    'Safety setup',
+                    style: TextStyle(color: Colors.white),
+                  ),
+                  subtitle: const Text(
+                    'Edit emergency contacts and safety details',
+                    style: TextStyle(color: Colors.white60),
+                  ),
+                  onTap: () {
+                    Navigator.of(context).pop();
+                    Navigator.of(context).push(
+                      MaterialPageRoute(builder: (_) => const SafetyScreen()),
                     );
                   },
                 ),

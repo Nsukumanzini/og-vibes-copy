@@ -4,8 +4,12 @@ import 'package:flutter/material.dart';
 
 import 'screens/splash_screen.dart';
 import 'services/accessibility_preferences.dart';
+import 'services/safety_ui_state.dart';
 import 'services/theme_preferences.dart';
 import 'utils/app_theme.dart';
+import 'widgets/panic_button.dart';
+
+final _rootNavigatorKey = GlobalKey<NavigatorState>();
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -34,6 +38,7 @@ class MyApp extends StatelessWidget {
       builder: (context, themeMode, _) => ValueListenableBuilder<bool>(
         valueListenable: AccessibilityPreferences.reduceMotion,
         builder: (context, reduceMotion, _) => MaterialApp(
+          navigatorKey: _rootNavigatorKey,
           title: 'OG Vibes',
           debugShowCheckedModeBanner: false,
           theme: AppTheme.light,
@@ -47,7 +52,25 @@ class MyApp extends StatelessWidget {
                 disableAnimations:
                     platformMedia.disableAnimations || reduceMotion,
               ),
-              child: child ?? const SizedBox.shrink(),
+              child: ValueListenableBuilder<bool>(
+                valueListenable: SafetyUiState.showFloatingAction,
+                builder: (context, showFloatingAction, _) => Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    child ?? const SizedBox.shrink(),
+                    if (showFloatingAction)
+                      Positioned(
+                        right: 14,
+                        bottom:
+                            (platformMedia.viewInsets.bottom > 0
+                                ? platformMedia.viewInsets.bottom
+                                : platformMedia.viewPadding.bottom) +
+                            94,
+                        child: PanicButton(navigatorKey: _rootNavigatorKey),
+                      ),
+                  ],
+                ),
+              ),
             );
           },
         ),
