@@ -54,21 +54,10 @@ class MyApp extends StatelessWidget {
               ),
               child: ValueListenableBuilder<bool>(
                 valueListenable: SafetyUiState.showFloatingAction,
-                builder: (context, showFloatingAction, _) => Stack(
-                  fit: StackFit.expand,
-                  children: [
-                    child ?? const SizedBox.shrink(),
-                    if (showFloatingAction)
-                      Positioned(
-                        right: 14,
-                        bottom:
-                            (platformMedia.viewInsets.bottom > 0
-                                ? platformMedia.viewInsets.bottom
-                                : platformMedia.viewPadding.bottom) +
-                            94,
-                        child: PanicButton(navigatorKey: _rootNavigatorKey),
-                      ),
-                  ],
+                builder: (context, showFloatingAction, _) => PanicButtonDock(
+                  visible: showFloatingAction,
+                  navigatorKey: _rootNavigatorKey,
+                  child: child ?? const SizedBox.shrink(),
                 ),
               ),
             );

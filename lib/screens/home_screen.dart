@@ -37,7 +37,6 @@ import 'market_screen.dart';
 import 'accredited_accommodation_screen.dart';
 import 'donation_screen.dart';
 import 'cafeteria_screen.dart';
-import 'safety_screen.dart';
 import 'src_voting_screen.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -741,13 +740,6 @@ class _HomeScreenState extends State<HomeScreen> {
         onTap: (context) => Navigator.of(
           context,
         ).push(MaterialPageRoute(builder: (_) => const CafeteriaScreen())),
-      ),
-      _HubCardInfo(
-        title: 'Safety setup',
-        icon: Icons.shield_outlined,
-        onTap: (context) => Navigator.of(
-          context,
-        ).push(MaterialPageRoute(builder: (_) => const SafetyScreen())),
       ),
       _HubCardInfo(
         title: 'SRC election',

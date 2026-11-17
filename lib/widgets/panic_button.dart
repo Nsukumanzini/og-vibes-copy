@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -20,6 +21,160 @@ class PanicButton extends StatefulWidget {
 
   @override
   State<PanicButton> createState() => _PanicButtonState();
+}
+
+/// Keeps the SOS control above every route and lets the user drag it out of
+/// the way. Its position is remembered locally on this device.
+class PanicButtonDock extends StatefulWidget {
+  const PanicButtonDock({
+    super.key,
+    required this.child,
+    required this.visible,
+    required this.navigatorKey,
+  });
+
+  final Widget child;
+  final bool visible;
+  final GlobalKey<NavigatorState> navigatorKey;
+
+  @override
+  State<PanicButtonDock> createState() => _PanicButtonDockState();
+}
+
+class _PanicButtonDockState extends State<PanicButtonDock> {
+  static const _buttonSize = 72.0;
+  static const _horizontalPadding = 12.0;
+  static const _verticalPadding = 12.0;
+  static const _xPreference = 'safety_sos_position_x';
+  static const _yPreference = 'safety_sos_position_y';
+
+  Offset? _normalizedPosition;
+  Offset? _dragPosition;
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_restorePosition());
+  }
+
+  Future<void> _restorePosition() async {
+    try {
+      final preferences = await SharedPreferences.getInstance();
+      final x = preferences.getDouble(_xPreference);
+      final y = preferences.getDouble(_yPreference);
+      if (!mounted || x == null || y == null) return;
+      setState(() {
+        _normalizedPosition = Offset(
+          x.clamp(0.0, 1.0).toDouble(),
+          y.clamp(0.0, 1.0).toDouble(),
+        );
+      });
+    } catch (_) {
+      // The default position still works if local storage is unavailable.
+    }
+  }
+
+  Future<void> _savePosition(Offset position) async {
+    try {
+      final preferences = await SharedPreferences.getInstance();
+      await preferences.setDouble(_xPreference, position.dx);
+      await preferences.setDouble(_yPreference, position.dy);
+    } catch (_) {
+      // Dragging remains usable for this session if preferences fail.
+    }
+  }
+
+  double _clamp(double value, double minimum, double maximum) =>
+      value.clamp(minimum, maximum).toDouble();
+
+  @override
+  Widget build(BuildContext context) => LayoutBuilder(
+    builder: (context, constraints) {
+      final media = MediaQuery.of(context);
+      final minX = math
+          .max(_horizontalPadding, media.padding.left + 8)
+          .toDouble();
+      final maxX = math
+          .max(
+            minX,
+            constraints.maxWidth -
+                _buttonSize -
+                math.max(_horizontalPadding, media.padding.right + 8),
+          )
+          .toDouble();
+      final minY = math.max(_verticalPadding, media.padding.top + 8).toDouble();
+      final bottomInset = math
+          .max(media.viewInsets.bottom, media.padding.bottom)
+          .toDouble();
+      final maxY = math
+          .max(
+            minY,
+            constraints.maxHeight -
+                _buttonSize -
+                bottomInset -
+                _verticalPadding,
+          )
+          .toDouble();
+      final defaultPosition = Offset(
+        maxX,
+        _clamp(
+          constraints.maxHeight - _buttonSize - bottomInset - 94,
+          minY,
+          maxY,
+        ),
+      );
+      final normalized = _normalizedPosition;
+      final savedPosition = normalized == null
+          ? defaultPosition
+          : Offset(
+              minX + normalized.dx * (maxX - minX),
+              minY + normalized.dy * (maxY - minY),
+            );
+      final position = _dragPosition ?? savedPosition;
+
+      return Stack(
+        fit: StackFit.expand,
+        children: [
+          widget.child,
+          if (widget.visible)
+            Positioned(
+              left: position.dx,
+              top: position.dy,
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onPanStart: (_) => setState(() => _dragPosition = position),
+                onPanUpdate: (details) {
+                  final current = _dragPosition ?? position;
+                  setState(() {
+                    _dragPosition = Offset(
+                      _clamp(current.dx + details.delta.dx, minX, maxX),
+                      _clamp(current.dy + details.delta.dy, minY, maxY),
+                    );
+                  });
+                },
+                onPanEnd: (_) => _finishDrag(minX, maxX, minY, maxY),
+                onPanCancel: () => _finishDrag(minX, maxX, minY, maxY),
+                child: PanicButton(navigatorKey: widget.navigatorKey),
+              ),
+            ),
+        ],
+      );
+    },
+  );
+
+  void _finishDrag(double minX, double maxX, double minY, double maxY) {
+    final position = _dragPosition;
+    if (position == null) return;
+    final normalized = Offset(
+      maxX == minX ? 0 : (position.dx - minX) / (maxX - minX),
+      maxY == minY ? 0 : (position.dy - minY) / (maxY - minY),
+    );
+    setState(() {
+      _normalizedPosition = normalized;
+      _dragPosition = null;
+    });
+    unawaited(_savePosition(normalized));
+  }
 }
 
 class _PanicButtonState extends State<PanicButton>
