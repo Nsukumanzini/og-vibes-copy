@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/material.dart';
 import 'package:og_vibes_student/services/safety_ui_state.dart';
+import 'package:og_vibes_student/utils/theme_constants.dart';
 import 'package:og_vibes_student/widgets/vibe_scaffold.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -132,14 +133,13 @@ class _SafetyScreenState extends State<SafetyScreen> {
     return VibeScaffold(
       appBar: AppBar(
         title: const Text('Safety setup'),
-        backgroundColor: const Color(0xFF191C20),
-        foregroundColor: Colors.white,
+        foregroundColor: AppColors.midnightInk,
       ),
       body: ColoredBox(
-        color: const Color(0xFF191C20),
+        color: AppColors.auroraCanvas,
         child: _isLoading
             ? const Center(
-                child: CircularProgressIndicator(color: Color(0xFFFF786F)),
+                child: CircularProgressIndicator(color: AppColors.vibeBlue),
               )
             : ListView(
                 padding: const EdgeInsets.fromLTRB(16, 12, 16, 120),
@@ -191,8 +191,8 @@ class _SafetyScreenState extends State<SafetyScreen> {
                     child: FilledButton.icon(
                       onPressed: _isSaving ? null : _saveDetails,
                       style: FilledButton.styleFrom(
-                        backgroundColor: const Color(0xFFB42318),
-                        foregroundColor: Colors.white,
+                        backgroundColor: AppColors.vibeBlue,
+                        foregroundColor: AppColors.textOnBrand,
                         textStyle: const TextStyle(fontWeight: FontWeight.w800),
                       ),
                       icon: _isSaving
@@ -213,7 +213,7 @@ class _SafetyScreenState extends State<SafetyScreen> {
                   const Text(
                     'Your information is stored in this app on this device. This setup screen does not activate SOS, place calls, send alerts, or share your location.',
                     style: TextStyle(
-                      color: Color(0xFFD4D7DC),
+                      color: AppColors.textMuted,
                       fontSize: 13,
                       height: 1.45,
                     ),
@@ -239,22 +239,22 @@ class _SafetyNotice extends StatelessWidget {
   Widget build(BuildContext context) => Container(
     padding: const EdgeInsets.all(16),
     decoration: BoxDecoration(
-      color: const Color(0xFF262A30),
+      color: AppColors.blueTint,
       borderRadius: BorderRadius.circular(18),
-      border: Border.all(color: const Color(0xFFFF786F), width: 1.5),
+      border: Border.all(color: AppColors.vibeBlue, width: 1.5),
     ),
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const Row(
           children: [
-            Icon(Icons.shield_outlined, color: Color(0xFFFF9189)),
+            Icon(Icons.shield_outlined, color: AppColors.vibeBlue),
             SizedBox(width: 10),
             Expanded(
               child: Text(
                 'Safety Hub setup',
                 style: TextStyle(
-                  color: Colors.white,
+                  color: AppColors.midnightInk,
                   fontSize: 19,
                   fontWeight: FontWeight.w900,
                 ),
@@ -265,7 +265,7 @@ class _SafetyNotice extends StatelessWidget {
         const SizedBox(height: 8),
         const Text(
           'Add contact and personal details here. To open emergency call choices, use the floating SOS button and hold it for 3 seconds.',
-          style: TextStyle(color: Color(0xFFF1F2F4), height: 1.45),
+          style: TextStyle(color: AppColors.midnightInk, height: 1.45),
         ),
         const SizedBox(height: 12),
         Row(
@@ -273,15 +273,13 @@ class _SafetyNotice extends StatelessWidget {
             Icon(
               isOnline ? Icons.wifi_rounded : Icons.wifi_off_rounded,
               size: 18,
-              color: isOnline
-                  ? const Color(0xFF8DE0A9)
-                  : const Color(0xFFFF9189),
+              color: isOnline ? AppColors.success : AppColors.warning,
             ),
             const SizedBox(width: 8),
             Text(
               'Network ${isOnline ? 'connected' : 'offline'}',
               style: const TextStyle(
-                color: Colors.white,
+                color: AppColors.midnightInk,
                 fontWeight: FontWeight.w700,
               ),
             ),
@@ -309,9 +307,9 @@ class _SafetySection extends StatelessWidget {
   Widget build(BuildContext context) => Container(
     padding: const EdgeInsets.all(16),
     decoration: BoxDecoration(
-      color: const Color(0xFF262A30),
+      color: AppColors.surface,
       borderRadius: BorderRadius.circular(18),
-      border: Border.all(color: const Color(0xFF565C64)),
+      border: Border.all(color: AppColors.glassBorder),
     ),
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -319,7 +317,7 @@ class _SafetySection extends StatelessWidget {
         Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Icon(icon, color: const Color(0xFFFF9189)),
+            Icon(icon, color: AppColors.vibeBlue),
             const SizedBox(width: 10),
             Expanded(
               child: Column(
@@ -328,7 +326,7 @@ class _SafetySection extends StatelessWidget {
                   Text(
                     title,
                     style: const TextStyle(
-                      color: Colors.white,
+                      color: AppColors.midnightInk,
                       fontSize: 17,
                       fontWeight: FontWeight.w900,
                     ),
@@ -337,7 +335,7 @@ class _SafetySection extends StatelessWidget {
                   Text(
                     subtitle,
                     style: const TextStyle(
-                      color: Color(0xFFD4D7DC),
+                      color: AppColors.textMuted,
                       height: 1.35,
                     ),
                   ),
@@ -405,21 +403,21 @@ class _SafetyField extends StatelessWidget {
     keyboardType: keyboardType,
     textCapitalization: textCapitalization,
     maxLines: maxLines,
-    style: const TextStyle(color: Colors.white, fontSize: 16),
-    cursorColor: const Color(0xFFFF9189),
+    style: const TextStyle(color: AppColors.midnightInk, fontSize: 16),
+    cursorColor: AppColors.vibeBlue,
     decoration: InputDecoration(
       labelText: label,
-      labelStyle: const TextStyle(color: Color(0xFFE0E2E5)),
-      prefixIcon: Icon(icon, color: const Color(0xFFFF9189)),
+      labelStyle: const TextStyle(color: AppColors.textMuted),
+      prefixIcon: Icon(icon, color: AppColors.vibeBlue),
       filled: true,
-      fillColor: const Color(0xFF17191D),
+      fillColor: AppColors.surfaceSoft,
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(13),
-        borderSide: const BorderSide(color: Color(0xFF686E77)),
+        borderSide: const BorderSide(color: AppColors.glassBorder),
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(13),
-        borderSide: const BorderSide(color: Color(0xFFFF9189), width: 2),
+        borderSide: const BorderSide(color: AppColors.vibeBlue, width: 2),
       ),
     ),
   );
@@ -434,15 +432,15 @@ class _NetworkStatusCard extends StatelessWidget {
   Widget build(BuildContext context) => Container(
     padding: const EdgeInsets.all(16),
     decoration: BoxDecoration(
-      color: const Color(0xFF262A30),
+      color: AppColors.cyanTint,
       borderRadius: BorderRadius.circular(18),
-      border: Border.all(color: const Color(0xFF565C64)),
+      border: Border.all(color: AppColors.glassBorder),
     ),
     child: Row(
       children: [
         Icon(
           isOnline ? Icons.wifi_rounded : Icons.wifi_off_rounded,
-          color: isOnline ? const Color(0xFF8DE0A9) : const Color(0xFFFF9189),
+          color: isOnline ? AppColors.success : AppColors.warning,
         ),
         const SizedBox(width: 12),
         Expanded(
@@ -452,14 +450,14 @@ class _NetworkStatusCard extends StatelessWidget {
               const Text(
                 'Network status',
                 style: TextStyle(
-                  color: Colors.white,
+                  color: AppColors.midnightInk,
                   fontWeight: FontWeight.w800,
                 ),
               ),
               const SizedBox(height: 3),
               Text(
                 isOnline ? 'Connected' : 'Offline',
-                style: const TextStyle(color: Color(0xFFE0E2E5)),
+                style: const TextStyle(color: AppColors.textMuted),
               ),
             ],
           ),
@@ -467,7 +465,7 @@ class _NetworkStatusCard extends StatelessWidget {
         Icon(
           Icons.circle,
           size: 10,
-          color: isOnline ? const Color(0xFF8DE0A9) : const Color(0xFFFF9189),
+          color: isOnline ? AppColors.success : AppColors.warning,
         ),
       ],
     ),

@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:shimmer/shimmer.dart';
 
+import 'package:og_vibes_student/utils/theme_constants.dart';
 import 'package:og_vibes_student/widgets/vibe_scaffold.dart';
 
 class CafeteriaScreen extends StatefulWidget {
@@ -150,7 +151,7 @@ class _CafeteriaScreenState extends State<CafeteriaScreen> {
               padding: const EdgeInsets.only(bottom: 12),
               child: FloatingActionButton.extended(
                 onPressed: _openCartSheet,
-                backgroundColor: const Color(0xFF1749B7),
+                backgroundColor: AppColors.vibeBlue,
                 foregroundColor: Colors.white,
                 icon: Badge(
                   label: Text('$_cartCount'),
@@ -219,7 +220,7 @@ class _CafeteriaScreenState extends State<CafeteriaScreen> {
                                 ? 'Popular with students'
                                 : _selectedCategory,
                             style: const TextStyle(
-                              color: Color(0xFF18243B),
+                              color: AppColors.midnightInk,
                               fontSize: 19,
                               fontWeight: FontWeight.w900,
                             ),
@@ -228,7 +229,7 @@ class _CafeteriaScreenState extends State<CafeteriaScreen> {
                         Text(
                           '${meals.length} ${meals.length == 1 ? 'item' : 'items'}',
                           style: const TextStyle(
-                            color: Color(0xFF627089),
+                            color: AppColors.textMuted,
                             fontWeight: FontWeight.w700,
                           ),
                         ),
@@ -264,7 +265,7 @@ class _CafeteriaScreenState extends State<CafeteriaScreen> {
     return SliverAppBar(
       pinned: true,
       expandedHeight: 236,
-      backgroundColor: const Color(0xFF1749B7),
+      backgroundColor: AppColors.vibeBlue,
       foregroundColor: Colors.white,
       title: const Text('Campus cafeteria'),
       flexibleSpace: FlexibleSpaceBar(
@@ -276,7 +277,7 @@ class _CafeteriaScreenState extends State<CafeteriaScreen> {
               fit: BoxFit.cover,
               alignment: Alignment.center,
               errorBuilder: (_, _, _) => const ColoredBox(
-                color: Color(0xFF34527E),
+                color: AppColors.deepBlue,
                 child: Icon(
                   Icons.restaurant_rounded,
                   color: Colors.white,
@@ -361,11 +362,11 @@ class _CafeteriaScreenState extends State<CafeteriaScreen> {
         contentPadding: const EdgeInsets.symmetric(vertical: 14),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(16),
-          borderSide: const BorderSide(color: Color(0xFFD9E1EE)),
+          borderSide: const BorderSide(color: AppColors.glassBorder),
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(16),
-          borderSide: const BorderSide(color: Color(0xFFD9E1EE)),
+          borderSide: const BorderSide(color: AppColors.glassBorder),
         ),
       ),
     ),
@@ -386,17 +387,15 @@ class _CafeteriaScreenState extends State<CafeteriaScreen> {
           selected: selected,
           onSelected: (_) => setState(() => _selectedCategory = category),
           showCheckmark: false,
-          selectedColor: const Color(0xFF1749B7),
+          selectedColor: AppColors.vibeBlue,
           backgroundColor: Colors.white,
           labelStyle: TextStyle(
-            color: selected ? Colors.white : const Color(0xFF27344C),
+            color: selected ? Colors.white : AppColors.midnightInk,
             fontWeight: FontWeight.w800,
           ),
           shape: StadiumBorder(
             side: BorderSide(
-              color: selected
-                  ? const Color(0xFF1749B7)
-                  : const Color(0xFFD9E1EE),
+              color: selected ? AppColors.vibeBlue : AppColors.glassBorder,
             ),
           ),
         );
@@ -413,12 +412,12 @@ class _CafeteriaScreenState extends State<CafeteriaScreen> {
           padding: EdgeInsets.fromLTRB(18, 4, 18, 12),
           child: Row(
             children: [
-              Icon(Icons.auto_awesome_rounded, color: Color(0xFFE58A22)),
+              Icon(Icons.auto_awesome_rounded, color: AppColors.ogGold),
               SizedBox(width: 8),
               Text(
                 'Student favourites',
                 style: TextStyle(
-                  color: Color(0xFF18243B),
+                  color: AppColors.midnightInk,
                   fontSize: 18,
                   fontWeight: FontWeight.w900,
                 ),
@@ -451,7 +450,7 @@ class _CafeteriaScreenState extends State<CafeteriaScreen> {
         const Icon(
           Icons.search_off_rounded,
           size: 54,
-          color: Color(0xFF75839A),
+          color: AppColors.textMuted,
         ),
         const SizedBox(height: 14),
         Text(
@@ -460,7 +459,7 @@ class _CafeteriaScreenState extends State<CafeteriaScreen> {
               : 'No menu matches found',
           textAlign: TextAlign.center,
           style: const TextStyle(
-            color: Color(0xFF18243B),
+            color: AppColors.midnightInk,
             fontSize: 19,
             fontWeight: FontWeight.w900,
           ),
@@ -469,7 +468,7 @@ class _CafeteriaScreenState extends State<CafeteriaScreen> {
         const Text(
           'Try another category or clear your search.',
           textAlign: TextAlign.center,
-          style: TextStyle(color: Color(0xFF627089)),
+          style: TextStyle(color: AppColors.textMuted),
         ),
         if (_query.isNotEmpty) ...[
           const SizedBox(height: 14),
@@ -495,14 +494,14 @@ class _CafeteriaScreenState extends State<CafeteriaScreen> {
           const Icon(
             Icons.cloud_off_rounded,
             size: 58,
-            color: Color(0xFF697994),
+            color: AppColors.textMuted,
           ),
           const SizedBox(height: 14),
           const Text(
             'The sample menu could not be loaded',
             textAlign: TextAlign.center,
             style: TextStyle(
-              color: Color(0xFF18243B),
+              color: AppColors.midnightInk,
               fontSize: 18,
               fontWeight: FontWeight.w900,
             ),
@@ -511,7 +510,7 @@ class _CafeteriaScreenState extends State<CafeteriaScreen> {
           const Text(
             'Check your connection and try again.',
             textAlign: TextAlign.center,
-            style: TextStyle(color: Color(0xFF627089)),
+            style: TextStyle(color: AppColors.textMuted),
           ),
           const SizedBox(height: 16),
           FilledButton.icon(
@@ -525,7 +524,7 @@ class _CafeteriaScreenState extends State<CafeteriaScreen> {
   );
 
   Widget _buildLoadingState() => Shimmer.fromColors(
-    baseColor: const Color(0xFFE1E7EF),
+    baseColor: AppColors.glassBorder,
     highlightColor: Colors.white,
     child: CustomScrollView(
       slivers: [
@@ -622,7 +621,7 @@ class _CafeteriaScreenState extends State<CafeteriaScreen> {
                       width: 46,
                       height: 5,
                       decoration: BoxDecoration(
-                        color: const Color(0xFFD7DDE6),
+                        color: AppColors.glassBorder,
                         borderRadius: BorderRadius.circular(999),
                       ),
                     ),
@@ -634,7 +633,7 @@ class _CafeteriaScreenState extends State<CafeteriaScreen> {
                         child: Text(
                           'Your sample cart',
                           style: TextStyle(
-                            color: Color(0xFF18243B),
+                            color: AppColors.midnightInk,
                             fontSize: 22,
                             fontWeight: FontWeight.w900,
                           ),
@@ -648,7 +647,7 @@ class _CafeteriaScreenState extends State<CafeteriaScreen> {
                   const SizedBox(height: 6),
                   const Text(
                     'Review your items and change quantities before checkout.',
-                    style: TextStyle(color: Color(0xFF627089)),
+                    style: TextStyle(color: AppColors.textMuted),
                   ),
                   const SizedBox(height: 12),
                   Expanded(
@@ -684,7 +683,7 @@ class _CafeteriaScreenState extends State<CafeteriaScreen> {
                                           Text(
                                             meal.name,
                                             style: const TextStyle(
-                                              color: Color(0xFF18243B),
+                                              color: AppColors.midnightInk,
                                               fontWeight: FontWeight.w800,
                                             ),
                                           ),
@@ -717,7 +716,7 @@ class _CafeteriaScreenState extends State<CafeteriaScreen> {
                         child: Text(
                           'Sample total',
                           style: TextStyle(
-                            color: Color(0xFF18243B),
+                            color: AppColors.midnightInk,
                             fontWeight: FontWeight.w800,
                           ),
                         ),
@@ -725,7 +724,7 @@ class _CafeteriaScreenState extends State<CafeteriaScreen> {
                       Text(
                         _price(_cartTotal),
                         style: const TextStyle(
-                          color: Color(0xFF1749B7),
+                          color: AppColors.vibeBlue,
                           fontWeight: FontWeight.w900,
                           fontSize: 18,
                         ),
@@ -779,7 +778,7 @@ class _CafeteriaScreenState extends State<CafeteriaScreen> {
                   width: 46,
                   height: 5,
                   decoration: BoxDecoration(
-                    color: const Color(0xFFD7DDE6),
+                    color: AppColors.glassBorder,
                     borderRadius: BorderRadius.circular(999),
                   ),
                 ),
@@ -788,7 +787,7 @@ class _CafeteriaScreenState extends State<CafeteriaScreen> {
               const Text(
                 'Pickup preview',
                 style: TextStyle(
-                  color: Color(0xFF18243B),
+                  color: AppColors.midnightInk,
                   fontSize: 22,
                   fontWeight: FontWeight.w900,
                 ),
@@ -796,7 +795,7 @@ class _CafeteriaScreenState extends State<CafeteriaScreen> {
               const SizedBox(height: 6),
               const Text(
                 'Choose a sample collection window. This will not send an order.',
-                style: TextStyle(color: Color(0xFF627089)),
+                style: TextStyle(color: AppColors.textMuted),
               ),
               const SizedBox(height: 14),
               ..._pickupTimes.map(
@@ -824,7 +823,7 @@ class _CafeteriaScreenState extends State<CafeteriaScreen> {
                   Text(
                     _price(_cartTotal),
                     style: const TextStyle(
-                      color: Color(0xFF1749B7),
+                      color: AppColors.vibeBlue,
                       fontWeight: FontWeight.w900,
                       fontSize: 18,
                     ),
@@ -846,7 +845,7 @@ class _CafeteriaScreenState extends State<CafeteriaScreen> {
                 child: Text(
                   'Demo only · No order or payment will be sent',
                   style: TextStyle(
-                    color: Color(0xFF627089),
+                    color: AppColors.textMuted,
                     fontSize: 12,
                     fontWeight: FontWeight.w700,
                   ),
@@ -879,7 +878,7 @@ class _OpenStatusBadge extends StatelessWidget {
   Widget build(BuildContext context) => Container(
     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
     decoration: BoxDecoration(
-      color: isOpen ? const Color(0xFFE3F8EA) : const Color(0xFFFFE5E2),
+      color: isOpen ? AppColors.successSurface : AppColors.dangerSurface,
       borderRadius: BorderRadius.circular(999),
     ),
     child: Row(
@@ -888,13 +887,13 @@ class _OpenStatusBadge extends StatelessWidget {
         Icon(
           Icons.circle,
           size: 9,
-          color: isOpen ? const Color(0xFF22824A) : const Color(0xFFB42318),
+          color: isOpen ? AppColors.success : AppColors.danger,
         ),
         const SizedBox(width: 6),
         Text(
           isOpen ? 'Open now' : 'Closed now',
           style: TextStyle(
-            color: isOpen ? const Color(0xFF176437) : const Color(0xFF8F231A),
+            color: isOpen ? AppColors.success : AppColors.danger,
             fontSize: 12,
             fontWeight: FontWeight.w900,
           ),
@@ -947,7 +946,7 @@ class _RecommendedCard extends StatelessWidget {
                       Icon(
                         Icons.star_rounded,
                         size: 15,
-                        color: Color(0xFFE58A22),
+                        color: AppColors.ogGold,
                       ),
                       SizedBox(width: 3),
                       Text(
@@ -974,7 +973,7 @@ class _RecommendedCard extends StatelessWidget {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
-                      color: Color(0xFF18243B),
+                      color: AppColors.midnightInk,
                       fontWeight: FontWeight.w900,
                     ),
                   ),
@@ -983,13 +982,13 @@ class _RecommendedCard extends StatelessWidget {
                     children: [
                       const Icon(
                         Icons.star_rounded,
-                        color: Color(0xFFE58A22),
+                        color: AppColors.ogGold,
                         size: 15,
                       ),
                       Text(
                         ' ${meal.rating.toStringAsFixed(1)}  ·  ${meal.prepMinutes} min',
                         style: const TextStyle(
-                          color: Color(0xFF627089),
+                          color: AppColors.textMuted,
                           fontSize: 11,
                           fontWeight: FontWeight.w700,
                         ),
@@ -1003,7 +1002,7 @@ class _RecommendedCard extends StatelessWidget {
                         child: Text(
                           'R ${meal.price.toStringAsFixed(0)}',
                           style: const TextStyle(
-                            color: Color(0xFF1749B7),
+                            color: AppColors.vibeBlue,
                             fontWeight: FontWeight.w900,
                           ),
                         ),
@@ -1069,7 +1068,7 @@ class _MealCard extends StatelessWidget {
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(
-                          color: Color(0xFF18243B),
+                          color: AppColors.midnightInk,
                           fontWeight: FontWeight.w900,
                           fontSize: 16,
                         ),
@@ -1080,7 +1079,7 @@ class _MealCard extends StatelessWidget {
                         padding: EdgeInsets.only(left: 4),
                         child: Icon(
                           Icons.star_rounded,
-                          color: Color(0xFFE58A22),
+                          color: AppColors.ogGold,
                           size: 18,
                         ),
                       ),
@@ -1092,7 +1091,7 @@ class _MealCard extends StatelessWidget {
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
-                    color: Color(0xFF627089),
+                    color: AppColors.textMuted,
                     fontSize: 12,
                     height: 1.3,
                   ),
@@ -1102,13 +1101,13 @@ class _MealCard extends StatelessWidget {
                   children: [
                     const Icon(
                       Icons.star_rounded,
-                      color: Color(0xFFE58A22),
+                      color: AppColors.ogGold,
                       size: 15,
                     ),
                     Text(
                       ' ${meal.rating.toStringAsFixed(1)}',
                       style: const TextStyle(
-                        color: Color(0xFF45536A),
+                        color: AppColors.textMuted,
                         fontSize: 12,
                         fontWeight: FontWeight.w800,
                       ),
@@ -1116,13 +1115,13 @@ class _MealCard extends StatelessWidget {
                     const SizedBox(width: 8),
                     const Icon(
                       Icons.schedule_rounded,
-                      color: Color(0xFF627089),
+                      color: AppColors.textMuted,
                       size: 14,
                     ),
                     Text(
                       ' ${meal.prepMinutes} min',
                       style: const TextStyle(
-                        color: Color(0xFF627089),
+                        color: AppColors.textMuted,
                         fontSize: 12,
                         fontWeight: FontWeight.w700,
                       ),
@@ -1136,7 +1135,7 @@ class _MealCard extends StatelessWidget {
                       child: Text(
                         'R ${meal.price.toStringAsFixed(2)}',
                         style: const TextStyle(
-                          color: Color(0xFF1749B7),
+                          color: AppColors.vibeBlue,
                           fontSize: 15,
                           fontWeight: FontWeight.w900,
                         ),
@@ -1151,7 +1150,7 @@ class _MealCard extends StatelessWidget {
                                 icon: const Icon(Icons.add_rounded, size: 18),
                                 label: const Text('Add'),
                                 style: FilledButton.styleFrom(
-                                  foregroundColor: const Color(0xFF1749B7),
+                                  foregroundColor: AppColors.vibeBlue,
                                   padding: const EdgeInsets.symmetric(
                                     horizontal: 10,
                                   ),
@@ -1224,7 +1223,7 @@ class _QuantityStepper extends StatelessWidget {
   Widget build(BuildContext context) => Container(
     height: 36,
     decoration: BoxDecoration(
-      color: const Color(0xFFEAF0FB),
+      color: AppColors.blueTint,
       borderRadius: BorderRadius.circular(12),
     ),
     child: Row(
@@ -1255,13 +1254,13 @@ class _UnavailableBadge extends StatelessWidget {
   Widget build(BuildContext context) => Container(
     padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 7),
     decoration: BoxDecoration(
-      color: const Color(0xFFFFECEA),
+      color: AppColors.dangerSurface,
       borderRadius: BorderRadius.circular(10),
     ),
     child: const Text(
       'Sold out',
       style: TextStyle(
-        color: Color(0xFF9E2B21),
+        color: AppColors.danger,
         fontSize: 11,
         fontWeight: FontWeight.w800,
       ),
