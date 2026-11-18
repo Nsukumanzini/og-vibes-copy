@@ -22,7 +22,32 @@ class _HelpfulContactsScreenState extends State<HelpfulContactsScreen> {
 
   Future<List<Map<String, dynamic>>> _load() => ContentService.loadSection(
     'helpful_contacts',
-    fallback: const <Map<String, dynamic>>[],
+    fallback: const <Map<String, dynamic>>[
+      <String, dynamic>{
+        'title': 'Student Support Office',
+        'subtitle': 'Campus information and general student support.',
+        'display_value': 'Example campus support page',
+        'value': 'https://example.org/campus-support',
+        'action': 'web',
+        'category': 'Campus',
+      },
+      <String, dynamic>{
+        'title': 'Academic Support Centre',
+        'subtitle': 'Study skills, tutoring, and learning resources.',
+        'display_value': 'Example academic support page',
+        'value': 'https://example.org/academic-support',
+        'action': 'web',
+        'category': 'Academics',
+      },
+      <String, dynamic>{
+        'title': 'Student Life Office',
+        'subtitle': 'Clubs, events, and campus activities.',
+        'display_value': 'Example student life page',
+        'value': 'https://example.org/student-life',
+        'action': 'web',
+        'category': 'Campus',
+      },
+    ],
   );
 
   Future<void> _open(Map<String, dynamic> contact) async {

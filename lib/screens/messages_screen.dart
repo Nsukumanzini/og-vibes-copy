@@ -40,8 +40,7 @@ class _MessagesScreenState extends State<MessagesScreen> {
   bool _showingGroups = false;
   String? _error;
 
-  String get _cacheKey =>
-      'chat_inbox_cache_v2_signed_out';
+  String get _cacheKey => 'chat_inbox_cache_v2_signed_out';
 
   @override
   void initState() {
@@ -67,6 +66,7 @@ class _MessagesScreenState extends State<MessagesScreen> {
 
   Future<void> _bootstrap() async {
     await _loadCache();
+    await _loadInbox();
     if (!mounted) return;
     setState(() {
       _loading = false;

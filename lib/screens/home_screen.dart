@@ -10,6 +10,7 @@ import 'package:flutter_staggered_animations/flutter_staggered_animations.dart';
 import 'package:og_vibes_student/screens/home/widgets/home_bottom_navigation_bar.dart';
 import 'package:shimmer/shimmer.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../services/offline_data_adapter.dart';
 import '../utils/theme_constants.dart';
 
 import '../../widgets/app_drawer.dart';
@@ -80,6 +81,7 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> _initialiseFeed() async {
     await _loadSeenPosts();
     await _loadCachedPosts();
+    await _loadPosts(reset: true, showLoading: false);
     if (mounted) setState(() => _isLoadingPosts = false);
   }
 
@@ -182,6 +184,29 @@ class _HomeScreenState extends State<HomeScreen> {
       });
     }
     await _loadCachedPosts();
+    try {
+      final mockPosts = List<Map<String, dynamic>>.from(
+        await OfflineData.instance.client
+                .from('posts')
+                .select()
+                .eq('is_deleted', false)
+                .order('created_at', ascending: false)
+                .limit(_pageSize)
+            as List<dynamic>,
+      );
+      if (!mounted) return;
+      final posts = _personaliseFeed(mockPosts);
+      setState(() {
+        _posts = posts;
+        _isLoadingPosts = false;
+        _hasMorePosts = false;
+        _feedError = null;
+      });
+      await _cachePosts(posts);
+      return;
+    } catch (_) {
+      // An unavailable mock table falls back to the local post cache.
+    }
     if (mounted) {
       setState(() {
         _isLoadingPosts = false;

@@ -1,3 +1,6 @@
+import 'dart:convert';
+import 'dart:typed_data';
+
 import 'package:dio/dio.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
@@ -6,14 +9,19 @@ import 'package:flutter/foundation.dart';
 class AcademicFileService {
   static Future<bool> download(String url, String fileName) async {
     final uri = Uri.tryParse(url);
-    if (uri == null || !['https', 'http'].contains(uri.scheme)) {
+    if (uri == null || !['https', 'http', 'mock'].contains(uri.scheme)) {
       throw const FormatException('Invalid file link');
     }
-    final response = await Dio().get<List<int>>(
-      url,
-      options: Options(responseType: ResponseType.bytes),
-    );
-    final bytes = response.data;
+    final bytes = uri.scheme == 'mock'
+        ? Uint8List.fromList(
+            utf8.encode(
+              'OG Vibes mock document\\n\\nThis sample file is available locally.',
+            ),
+          )
+        : (await Dio().get<List<int>>(
+            url,
+            options: Options(responseType: ResponseType.bytes),
+          )).data;
     if (bytes == null || bytes.isEmpty) throw StateError('Empty document');
     final name = fileName.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_');
     final saved = await FilePicker.platform.saveFile(

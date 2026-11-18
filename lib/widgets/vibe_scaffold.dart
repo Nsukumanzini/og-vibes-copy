@@ -31,6 +31,7 @@ class _VibeScaffoldState extends State<VibeScaffold>
     with SingleTickerProviderStateMixin {
   late final AnimationController _ambientController;
   bool _reduceMotion = false;
+  bool _hasScrolled = false;
 
   @override
   void initState() {
@@ -112,15 +113,70 @@ class _VibeScaffoldState extends State<VibeScaffold>
               : SystemUiOverlayStyle.dark,
           child: Scaffold(
             backgroundColor: Colors.transparent,
-            appBar: widget.appBar,
+            appBar: _scrollAwareAppBar,
             drawer: widget.drawer,
-            body: SafeArea(child: widget.body),
+            body: SafeArea(
+              child: NotificationListener<ScrollNotification>(
+                onNotification: _handleScrollNotification,
+                child: widget.body,
+              ),
+            ),
             floatingActionButton: widget.floatingActionButton,
             bottomNavigationBar: widget.bottomNavigationBar,
           ),
         ),
       ),
     );
+  }
+
+  PreferredSizeWidget? get _scrollAwareAppBar {
+    final appBar = widget.appBar;
+    if (!_hasScrolled || appBar is! AppBar) return appBar;
+    return AppBar(
+      key: appBar.key,
+      leading: appBar.leading,
+      automaticallyImplyLeading: appBar.automaticallyImplyLeading,
+      title: appBar.title,
+      actions: appBar.actions,
+      automaticallyImplyActions: appBar.automaticallyImplyActions,
+      flexibleSpace: appBar.flexibleSpace,
+      bottom: appBar.bottom,
+      elevation: appBar.elevation,
+      scrolledUnderElevation: 0,
+      notificationPredicate: appBar.notificationPredicate,
+      shadowColor: appBar.shadowColor,
+      shape: appBar.shape,
+      backgroundColor: AppColors.vibeBlue,
+      foregroundColor: Colors.white,
+      surfaceTintColor: Colors.transparent,
+      iconTheme: appBar.iconTheme,
+      actionsIconTheme: appBar.actionsIconTheme,
+      primary: appBar.primary,
+      centerTitle: appBar.centerTitle,
+      excludeHeaderSemantics: appBar.excludeHeaderSemantics,
+      titleSpacing: appBar.titleSpacing,
+      toolbarOpacity: appBar.toolbarOpacity,
+      bottomOpacity: appBar.bottomOpacity,
+      toolbarHeight: appBar.toolbarHeight,
+      leadingWidth: appBar.leadingWidth,
+      toolbarTextStyle: appBar.toolbarTextStyle,
+      titleTextStyle: appBar.titleTextStyle,
+      systemOverlayStyle: appBar.systemOverlayStyle,
+      forceMaterialTransparency: appBar.forceMaterialTransparency,
+      useDefaultSemanticsOrder: appBar.useDefaultSemanticsOrder,
+      clipBehavior: appBar.clipBehavior,
+      actionsPadding: appBar.actionsPadding,
+      animateColor: true,
+    );
+  }
+
+  bool _handleScrollNotification(ScrollNotification notification) {
+    if (notification.metrics.axis != Axis.vertical) return false;
+    final isScrolled = notification.metrics.pixels > 24;
+    if (isScrolled != _hasScrolled && mounted) {
+      setState(() => _hasScrolled = isScrolled);
+    }
+    return false;
   }
 }
 
@@ -138,9 +194,7 @@ class _AmbientOrb extends StatelessWidget {
         height: size,
         decoration: BoxDecoration(
           shape: BoxShape.circle,
-          gradient: RadialGradient(
-            colors: [color, color.withValues(alpha: 0)],
-          ),
+          gradient: RadialGradient(colors: [color, color.withValues(alpha: 0)]),
         ),
       ),
     );
