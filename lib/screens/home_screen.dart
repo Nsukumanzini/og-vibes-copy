@@ -574,9 +574,6 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
           itemBuilder: (context, index) {
             final card = cards[index];
-            final rainbowGradient =
-                AppStyles.academicRainbowGradients[index %
-                    AppStyles.academicRainbowGradients.length];
 
             return Semantics(
               button: true,
@@ -587,17 +584,13 @@ class _HomeScreenState extends State<HomeScreen> {
                 clipBehavior: Clip.antiAlias,
                 child: Ink(
                   decoration: BoxDecoration(
-                    gradient: rainbowGradient,
+                    color: AppColors.surface,
                     borderRadius: BorderRadius.circular(18),
-                    border: Border.all(
-                      color: Colors.white.withValues(alpha: .24),
-                    ),
+                    border: Border.all(color: AppColors.glassBorder),
                     boxShadow: <BoxShadow>[
                       BoxShadow(
-                        color: rainbowGradient.colors.first.withValues(
-                          alpha: .20,
-                        ),
-                        blurRadius: 12,
+                        color: AppColors.deepBlue.withValues(alpha: .07),
+                        blurRadius: 14,
                         offset: const Offset(0, 5),
                       ),
                     ],
@@ -616,12 +609,12 @@ class _HomeScreenState extends State<HomeScreen> {
                             width: 42,
                             height: 42,
                             decoration: BoxDecoration(
-                              color: Colors.white.withValues(alpha: .18),
+                              color: AppColors.blueTint,
                               borderRadius: BorderRadius.circular(13),
                             ),
                             child: Icon(
                               card.icon,
-                              color: Colors.white,
+                              color: AppColors.vibeBlue,
                               size: 22,
                             ),
                           ),
@@ -636,7 +629,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                   maxLines: 2,
                                   overflow: TextOverflow.ellipsis,
                                   style: const TextStyle(
-                                    color: Colors.white,
+                                    color: AppColors.midnightInk,
                                     fontWeight: FontWeight.w900,
                                     fontSize: 14,
                                     height: 1.18,
@@ -646,7 +639,7 @@ class _HomeScreenState extends State<HomeScreen> {
                               const SizedBox(width: 8),
                               const Icon(
                                 Icons.arrow_outward_rounded,
-                                color: Colors.white,
+                                color: AppColors.vibeBlue,
                                 size: 20,
                               ),
                             ],
