@@ -99,16 +99,22 @@ class _LandingScreenState extends State<LandingScreen>
           SafeArea(
             child: Center(
               child: SingleChildScrollView(
-                padding: const EdgeInsets.fromLTRB(24, 28, 24, 32),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    _buildHeroCard(theme),
-                    const SizedBox(height: 28),
-                    _buildCtas(context),
-                    const SizedBox(height: 16),
-                    _buildApplyOnlineCard(theme),
-                  ],
+                padding: const EdgeInsets.fromLTRB(24, 28, 24, 112),
+                child: Align(
+                  alignment: Alignment.center,
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 560),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        _buildHeroCard(theme),
+                        const SizedBox(height: 28),
+                        _buildCtas(context),
+                        const SizedBox(height: 16),
+                        _buildApplyOnlineCard(theme),
+                      ],
+                    ),
+                  ),
                 ),
               ),
             ),
@@ -214,15 +220,13 @@ class _LandingScreenState extends State<LandingScreen>
       children: [
         SizedBox(
           width: double.infinity,
-          child: ElevatedButton.icon(
+          child: ElevatedButton(
             onPressed: () {
               Navigator.of(context).pushAndRemoveUntil(
                 MaterialPageRoute(builder: (_) => const HomeScreen()),
                 (route) => false,
               );
             },
-            icon: const Icon(Icons.login),
-            label: const Text('Login'),
             style: ElevatedButton.styleFrom(
               padding: const EdgeInsets.symmetric(vertical: 18),
               textStyle: const TextStyle(fontWeight: FontWeight.bold),
@@ -230,19 +234,28 @@ class _LandingScreenState extends State<LandingScreen>
                 borderRadius: BorderRadius.circular(18),
               ),
             ),
+            child: const Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.login),
+                SizedBox(width: 12),
+                Text(
+                  'Login',
+                  style: TextStyle(color: Colors.white, fontSize: 16),
+                ),
+              ],
+            ),
           ),
         ),
         const SizedBox(height: 12),
         SizedBox(
           width: double.infinity,
-          child: OutlinedButton.icon(
+          child: OutlinedButton(
             onPressed: () {
               Navigator.of(
                 context,
               ).push(MaterialPageRoute(builder: (_) => const SignupScreen()));
             },
-            icon: const Icon(Icons.person_add_alt_1),
-            label: const Text('Create Account'),
             style: OutlinedButton.styleFrom(
               padding: const EdgeInsets.symmetric(vertical: 16),
               textStyle: const TextStyle(fontWeight: FontWeight.w600),
@@ -250,26 +263,46 @@ class _LandingScreenState extends State<LandingScreen>
                 borderRadius: BorderRadius.circular(18),
               ),
             ),
+            child: const Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.person_add_alt_1),
+                SizedBox(width: 12),
+                Text(
+                  'Create Account',
+                  style: TextStyle(color: Color(0xFF2962FF), fontSize: 16),
+                ),
+              ],
+            ),
           ),
         ),
         const SizedBox(height: 12),
         SizedBox(
           width: double.infinity,
-          child: OutlinedButton.icon(
+          child: OutlinedButton(
             onPressed: () {
               Navigator.of(context).pushAndRemoveUntil(
                 MaterialPageRoute(builder: (_) => const HomeScreen()),
                 (route) => false,
               );
             },
-            icon: const Icon(Icons.person_outline),
-            label: const Text('Continue as Guest'),
             style: OutlinedButton.styleFrom(
               padding: const EdgeInsets.symmetric(vertical: 16),
               textStyle: const TextStyle(fontWeight: FontWeight.w600),
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(18),
               ),
+            ),
+            child: const Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.person_outline),
+                SizedBox(width: 12),
+                Text(
+                  'Continue as Guest',
+                  style: TextStyle(color: Color(0xFF2962FF), fontSize: 16),
+                ),
+              ],
             ),
           ),
         ),

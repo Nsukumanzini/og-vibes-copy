@@ -113,7 +113,7 @@ class HomeBottomNavigationBar extends StatelessWidget {
                                         : const Color(0xFF00A67E),
                                     child: Icon(
                                       selected ? item.active : item.icon,
-                                      size: alerts ? 30 : 23,
+                                      size: 23,
                                       color: alerts
                                           ? hasUnreadAlerts
                                                 ? AppColors.danger

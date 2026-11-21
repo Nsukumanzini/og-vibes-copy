@@ -46,19 +46,77 @@
     }
 
     #flutter_loading {
+      position: fixed;
+      z-index: 10;
+      inset: 0;
       display: flex;
       align-items: center;
       justify-content: center;
-      min-height: 100vh;
-      text-align: center;
       padding: 24px;
+      text-align: center;
+      background: linear-gradient(135deg, #0D47A1 0%, #448AFF 55%, #E3F2FD 100%);
+      transition: opacity 220ms ease, visibility 220ms ease;
+    }
+
+    #flutter_loading.ready {
+      opacity: 0;
+      visibility: hidden;
+      pointer-events: none;
+    }
+
+    .loading-card {
+      width: min(100%, 340px);
+      padding: 30px 24px;
+      border: 1px solid rgba(255, 255, 255, .45);
+      border-radius: 24px;
+      background: rgba(255, 255, 255, .12);
+      box-shadow: 0 18px 48px rgba(4, 24, 61, .2);
+      backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(14px);
+    }
+
+    .loading-spinner {
+      width: 34px;
+      height: 34px;
+      margin: 0 auto 16px;
+      border: 3px solid rgba(255, 255, 255, .35);
+      border-top-color: #fff;
+      border-radius: 50%;
+      animation: og-loading-spin .9s linear infinite;
     }
 
     #flutter_loading h1 {
       margin: 0;
-      font-size: 1.25rem;
-      letter-spacing: 0.05em;
+      font-size: 1.2rem;
+      letter-spacing: .02em;
     }
+
+    #flutter_loading p {
+      margin: 8px 0 0;
+      color: rgba(255, 255, 255, .86);
+      font-size: .9rem;
+      line-height: 1.45;
+    }
+
+    #flutter_retry {
+      min-height: 44px;
+      margin-top: 18px;
+      padding: 0 18px;
+      border: 0;
+      border-radius: 13px;
+      color: #1249a5;
+      background: #fff;
+      font: inherit;
+      font-weight: 800;
+      cursor: pointer;
+    }
+
+    #flutter_retry:focus-visible {
+      outline: 3px solid #fff;
+      outline-offset: 3px;
+    }
+
+    @keyframes og-loading-spin { to { transform: rotate(360deg); } }
 
     #app_install_prompt {
       position: fixed;
@@ -101,6 +159,7 @@
     }
     @media (prefers-reduced-motion: reduce) {
       #app_install_prompt.visible { animation: none; }
+      #flutter_loading, .loading-spinner { animation: none; transition: none; }
     }
   </style>
 
@@ -117,14 +176,37 @@
     </div>
     <button id="app_install_action" type="button">Install OG Vibes</button>
   </aside>
-  <div id="flutter_loading">
-    <div>
-      <h1>OG Vibes is waking up...</h1>
+  <div id="flutter_loading" role="status" aria-live="polite" aria-busy="true">
+    <div class="loading-card">
+      <div class="loading-spinner" aria-hidden="true"></div>
+      <h1>Loading OG Vibes</h1>
+      <p id="flutter_loading_message">Getting your campus space ready…</p>
+      <button id="flutter_retry" type="button" hidden>Reload app</button>
     </div>
   </div>
-  <!-- Passkeys Web SDK (required by passkeys_web plugin) -->
-  <!-- If you prefer to vendor this file, download the bundle and serve it locally. -->
-  <script src="https://github.com/corbado/flutter-passkeys/releases/download/2.4.0/bundle.js"></script>
+  <script>
+    (function () {
+      var loader = document.getElementById('flutter_loading');
+      var message = document.getElementById('flutter_loading_message');
+      var retry = document.getElementById('flutter_retry');
+      var firstFrameRendered = false;
+
+      window.addEventListener('flutter-first-frame', function () {
+        firstFrameRendered = true;
+        loader.setAttribute('aria-busy', 'false');
+        loader.classList.add('ready');
+        window.setTimeout(function () { loader.remove(); }, 260);
+      }, { once: true });
+
+      window.setTimeout(function () {
+        if (firstFrameRendered) return;
+        message.textContent = 'This is taking longer than expected. Check your connection and try again.';
+        retry.hidden = false;
+      }, 15000);
+
+      retry.addEventListener('click', function () { window.location.reload(); });
+    }());
+  </script>
   <script>
     (function () {
       var deferredInstallPrompt = null;

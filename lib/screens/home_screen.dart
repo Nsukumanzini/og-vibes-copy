@@ -292,19 +292,32 @@ class _HomeScreenState extends State<HomeScreen> {
           setState(() => _currentTab = index);
         },
       ),
-      body: Stack(
-        children: [
-          IndexedStack(
-            index: _currentTab,
-            children: [
-              _buildFeedTab(),
-              _buildStudyHubTab(),
-              const AnnouncementsScreen(),
-              _buildStudyTab(),
-              const MessagesScreen(),
-            ],
-          ),
-        ],
+      body: LayoutBuilder(
+        builder: (context, constraints) {
+          final contentWidth = constraints.maxWidth < 1100
+              ? constraints.maxWidth
+              : 1100.0;
+          return Center(
+            child: SizedBox(
+              width: contentWidth,
+              height: constraints.maxHeight,
+              child: Stack(
+                children: [
+                  IndexedStack(
+                    index: _currentTab,
+                    children: [
+                      _buildFeedTab(),
+                      _buildStudyHubTab(),
+                      const AnnouncementsScreen(),
+                      _buildStudyTab(),
+                      const MessagesScreen(),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
       ),
     );
   }

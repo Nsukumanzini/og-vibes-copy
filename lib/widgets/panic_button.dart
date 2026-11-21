@@ -120,7 +120,7 @@ class _PanicButtonDockState extends State<PanicButtonDock> {
       final defaultPosition = Offset(
         maxX,
         _clamp(
-          constraints.maxHeight - _buttonSize - bottomInset - 94,
+          constraints.maxHeight - _buttonSize - bottomInset - 170,
           minY,
           maxY,
         ),

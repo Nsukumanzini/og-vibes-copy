@@ -304,66 +304,74 @@ class _SignupScreenState extends State<SignupScreen>
 
           // 3. Main Content
           SafeArea(
-            child: Column(
-              children: [
-                // Header
-                Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 24,
-                    vertical: 16,
-                  ),
-                  child: Row(
-                    children: [
-                      IconButton(
-                        icon: const Icon(Icons.arrow_back_ios_new, size: 20),
-                        onPressed: _prevStep,
-                        color: Colors.black87,
+            child: Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 760),
+                child: Column(
+                  children: [
+                    // Header
+                    Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 24,
+                        vertical: 16,
                       ),
-                      Expanded(
-                        child: Column(
-                          children: [
-                            Text(
-                              _getHeaderTitle(),
-                              style: theme.textTheme.titleLarge?.copyWith(
-                                fontWeight: FontWeight.bold,
-                                color: const Color(0xFF0D47A1),
-                              ),
+                      child: Row(
+                        children: [
+                          IconButton(
+                            icon: const Icon(
+                              Icons.arrow_back_ios_new,
+                              size: 20,
                             ),
-                            const SizedBox(height: 8),
-                            // Progress Bar
-                            ClipRRect(
-                              borderRadius: BorderRadius.circular(4),
-                              child: LinearProgressIndicator(
-                                value: (_currentStep + 1) / _totalSteps,
-                                backgroundColor: Colors.grey[200],
-                                valueColor: AlwaysStoppedAnimation(
-                                  primaryColor,
+                            onPressed: _prevStep,
+                            color: Colors.black87,
+                          ),
+                          Expanded(
+                            child: Column(
+                              children: [
+                                Text(
+                                  _getHeaderTitle(),
+                                  style: theme.textTheme.titleLarge?.copyWith(
+                                    fontWeight: FontWeight.bold,
+                                    color: const Color(0xFF0D47A1),
+                                  ),
                                 ),
-                                minHeight: 6,
-                              ),
+                                const SizedBox(height: 8),
+                                // Progress Bar
+                                ClipRRect(
+                                  borderRadius: BorderRadius.circular(4),
+                                  child: LinearProgressIndicator(
+                                    value: (_currentStep + 1) / _totalSteps,
+                                    backgroundColor: Colors.grey[200],
+                                    valueColor: AlwaysStoppedAnimation(
+                                      primaryColor,
+                                    ),
+                                    minHeight: 6,
+                                  ),
+                                ),
+                              ],
                             ),
-                          ],
-                        ),
+                          ),
+                          const SizedBox(width: 40), // Balance the back button
+                        ],
                       ),
-                      const SizedBox(width: 40), // Balance the back button
-                    ],
-                  ),
-                ),
+                    ),
 
-                // Wizard Pages
-                Expanded(
-                  child: PageView(
-                    controller: _pageController,
-                    physics:
-                        const NeverScrollableScrollPhysics(), // Prevent swiping
-                    children: [
-                      _buildStep1Personal(),
-                      _buildStep2Academic(),
-                      _buildStep3Security(),
-                    ],
-                  ),
+                    // Wizard Pages
+                    Expanded(
+                      child: PageView(
+                        controller: _pageController,
+                        physics:
+                            const NeverScrollableScrollPhysics(), // Prevent swiping
+                        children: [
+                          _buildStep1Personal(),
+                          _buildStep2Academic(),
+                          _buildStep3Security(),
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
-              ],
+              ),
             ),
           ),
 

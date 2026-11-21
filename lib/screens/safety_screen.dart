@@ -1,6 +1,3 @@
-import 'dart:async';
-
-import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/material.dart';
 import 'package:og_vibes_student/services/safety_ui_state.dart';
 import 'package:og_vibes_student/utils/theme_constants.dart';
@@ -22,31 +19,19 @@ class _SafetyScreenState extends State<SafetyScreen> {
   final _medicalNotesController = TextEditingController();
   final _contacts = List.generate(_maximumContacts, (_) => _ContactFields());
 
-  bool _isOnline = false;
   bool _isLoading = true;
   bool _isSaving = false;
-  StreamSubscription<List<ConnectivityResult>>? _connectivitySub;
 
   @override
   void initState() {
     super.initState();
     SafetyUiState.showFloatingAction.value = false;
     _loadSavedDetails();
-    _primeStatus();
-    _connectivitySub = Connectivity().onConnectivityChanged.listen((results) {
-      final nextOnline = results.any(
-        (result) => result != ConnectivityResult.none,
-      );
-      if (mounted && nextOnline != _isOnline) {
-        setState(() => _isOnline = nextOnline);
-      }
-    });
   }
 
   @override
   void dispose() {
     SafetyUiState.showFloatingAction.value = true;
-    _connectivitySub?.cancel();
     _campusController.dispose();
     _locationController.dispose();
     _medicalNotesController.dispose();
@@ -75,16 +60,6 @@ class _SafetyScreenState extends State<SafetyScreen> {
       // The screen remains usable if local preferences cannot be read.
     } finally {
       if (mounted) setState(() => _isLoading = false);
-    }
-  }
-
-  Future<void> _primeStatus() async {
-    try {
-      final results = await Connectivity().checkConnectivity();
-      final online = results.any((result) => result != ConnectivityResult.none);
-      if (mounted) setState(() => _isOnline = online);
-    } catch (_) {
-      if (mounted) setState(() => _isOnline = false);
     }
   }
 
@@ -144,7 +119,7 @@ class _SafetyScreenState extends State<SafetyScreen> {
             : ListView(
                 padding: const EdgeInsets.fromLTRB(16, 12, 16, 120),
                 children: [
-                  _SafetyNotice(isOnline: _isOnline),
+                  const _SafetyNotice(),
                   const SizedBox(height: 16),
                   _SafetySection(
                     title: 'Emergency contacts',
@@ -184,7 +159,7 @@ class _SafetyScreenState extends State<SafetyScreen> {
                     ],
                   ),
                   const SizedBox(height: 14),
-                  _NetworkStatusCard(isOnline: _isOnline),
+                  const _LocalStorageCard(),
                   const SizedBox(height: 16),
                   SizedBox(
                     height: 54,
@@ -231,10 +206,7 @@ class _ContactFields {
 }
 
 class _SafetyNotice extends StatelessWidget {
-  const _SafetyNotice({required this.isOnline});
-
-  final bool isOnline;
-
+  const _SafetyNotice();
   @override
   Widget build(BuildContext context) => Container(
     padding: const EdgeInsets.all(16),
@@ -270,14 +242,14 @@ class _SafetyNotice extends StatelessWidget {
         const SizedBox(height: 12),
         Row(
           children: [
-            Icon(
-              isOnline ? Icons.wifi_rounded : Icons.wifi_off_rounded,
+            const Icon(
+              Icons.phone_android_rounded,
               size: 18,
-              color: isOnline ? AppColors.success : AppColors.warning,
+              color: AppColors.success,
             ),
             const SizedBox(width: 8),
             Text(
-              'Network ${isOnline ? 'connected' : 'offline'}',
+              'Local setup only',
               style: const TextStyle(
                 color: AppColors.midnightInk,
                 fontWeight: FontWeight.w700,
@@ -423,10 +395,8 @@ class _SafetyField extends StatelessWidget {
   );
 }
 
-class _NetworkStatusCard extends StatelessWidget {
-  const _NetworkStatusCard({required this.isOnline});
-
-  final bool isOnline;
+class _LocalStorageCard extends StatelessWidget {
+  const _LocalStorageCard();
 
   @override
   Widget build(BuildContext context) => Container(
@@ -438,17 +408,14 @@ class _NetworkStatusCard extends StatelessWidget {
     ),
     child: Row(
       children: [
-        Icon(
-          isOnline ? Icons.wifi_rounded : Icons.wifi_off_rounded,
-          color: isOnline ? AppColors.success : AppColors.warning,
-        ),
+        Icon(Icons.phone_android_rounded, color: AppColors.success),
         const SizedBox(width: 12),
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const Text(
-                'Network status',
+                'Local storage',
                 style: TextStyle(
                   color: AppColors.midnightInk,
                   fontWeight: FontWeight.w800,
@@ -456,17 +423,13 @@ class _NetworkStatusCard extends StatelessWidget {
               ),
               const SizedBox(height: 3),
               Text(
-                isOnline ? 'Connected' : 'Offline',
+                'Safety details save on this device.',
                 style: const TextStyle(color: AppColors.textMuted),
               ),
             ],
           ),
         ),
-        Icon(
-          Icons.circle,
-          size: 10,
-          color: isOnline ? AppColors.success : AppColors.warning,
-        ),
+        Icon(Icons.circle, size: 10, color: AppColors.success),
       ],
     ),
   );
