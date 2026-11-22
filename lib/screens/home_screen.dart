@@ -55,7 +55,6 @@ class _HomeScreenState extends State<HomeScreen> {
   // Pagination & Scroll State
   late final ScrollController _scrollController;
   static const int _pageSize = 25;
-  DateTime? _oldestPostCursor;
   bool _hasMorePosts = true;
   bool _isFetchingMore = false;
   bool _isFabVisible = true;
@@ -593,13 +592,19 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget _buildHubGrid(List<_HubCardInfo> cards) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        final columns = constraints.maxWidth >= 760 ? 3 : 2;
+        final columns = constraints.maxWidth >= 760
+            ? 3
+            : constraints.maxWidth < 340
+            ? 1
+            : 2;
         final tileWidth =
             (constraints.maxWidth - ((columns - 1) * 12)) / columns;
         final textScale = MediaQuery.textScalerOf(
           context,
         ).scale(1).clamp(1.0, 1.6);
-        final tileHeight = 146.0 + ((textScale - 1) * 42);
+        final tileHeight =
+            (columns == 2 ? 124.0 : 88.0) + ((textScale - 1) * 40);
+
         return GridView.builder(
           shrinkWrap: true,
           physics: const NeverScrollableScrollPhysics(),
@@ -612,7 +617,40 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
           itemBuilder: (context, index) {
             final card = cards[index];
-
+            final stacked = columns == 2;
+            final iconBadge = Container(
+              width: 38,
+              height: 38,
+              decoration: BoxDecoration(
+                color: AppColors.blueTint,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Icon(card.icon, color: AppColors.vibeBlue, size: 21),
+            );
+            final title = Text(
+              card.title,
+              maxLines: stacked ? 2 : 3,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                color: AppColors.midnightInk,
+                fontWeight: FontWeight.w800,
+                fontSize: stacked ? 12.5 : 13,
+                height: 1.18,
+              ),
+            );
+            final arrowBadge = Container(
+              width: 28,
+              height: 28,
+              decoration: const BoxDecoration(
+                color: AppColors.blueTint,
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(
+                Icons.arrow_outward_rounded,
+                color: AppColors.vibeBlue,
+                size: 16,
+              ),
+            );
             return Semantics(
               button: true,
               label: 'Open ${card.title}',
@@ -637,53 +675,33 @@ class _HomeScreenState extends State<HomeScreen> {
                     onTap: () => card.onTap(context),
                     child: Padding(
                       padding: const EdgeInsets.symmetric(
-                        horizontal: 13,
-                        vertical: 12,
+                        horizontal: 10,
+                        vertical: 10,
                       ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Container(
-                            width: 42,
-                            height: 42,
-                            decoration: BoxDecoration(
-                              color: AppColors.blueTint,
-                              borderRadius: BorderRadius.circular(13),
-                            ),
-                            child: Icon(
-                              card.icon,
-                              color: AppColors.vibeBlue,
-                              size: 22,
-                            ),
-                          ),
-                          const Spacer(),
-                          const SizedBox(height: 10),
-                          Row(
-                            crossAxisAlignment: CrossAxisAlignment.end,
-                            children: [
-                              Expanded(
-                                child: Text(
-                                  card.title,
-                                  maxLines: 2,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: const TextStyle(
-                                    color: AppColors.midnightInk,
-                                    fontWeight: FontWeight.w900,
-                                    fontSize: 14,
-                                    height: 1.18,
-                                  ),
+                      child: stacked
+                          ? Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                iconBadge,
+                                const Spacer(),
+                                Row(
+                                  children: [
+                                    Expanded(child: title),
+                                    const SizedBox(width: 5),
+                                    arrowBadge,
+                                  ],
                                 ),
-                              ),
-                              const SizedBox(width: 8),
-                              const Icon(
-                                Icons.arrow_outward_rounded,
-                                color: AppColors.vibeBlue,
-                                size: 20,
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
+                              ],
+                            )
+                          : Row(
+                              children: [
+                                iconBadge,
+                                const SizedBox(width: 9),
+                                Expanded(child: title),
+                                const SizedBox(width: 5),
+                                arrowBadge,
+                              ],
+                            ),
                     ),
                   ),
                 ),

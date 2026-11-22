@@ -50,7 +50,6 @@ class _AnnouncementsScreenState extends State<AnnouncementsScreen> {
 
   // Version 3 intentionally drops older development/demo cache entries.
   static const _cacheKey = 'og_vibes_cached_campus_alerts_v3';
-  static const _legacyCacheKey = 'og_vibes_cached_campus_alerts_v2';
 
   String? get _userId => _db.auth.currentUser?.id;
   List<_CampusAlert> get _alerts => _contentAlerts;

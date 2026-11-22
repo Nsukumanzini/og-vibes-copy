@@ -392,7 +392,7 @@ class _SlidesScreenState extends State<SlidesScreen> {
     try {
     final path = slide['storage_path'] ?? '';
     if (path.isNotEmpty) {
-      return OfflineData.instance.client.storage
+      return await OfflineData.instance.client.storage
           .from('academic-content')
           .createSignedUrl(path, 600);
     }

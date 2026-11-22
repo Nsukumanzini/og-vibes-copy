@@ -87,8 +87,6 @@ class _SignupScreenState extends State<SignupScreen>
   static const _ncvLevels = ['Level 2', 'Level 3', 'Level 4'];
 
   String? _timeZoneName;
-  String? _timeZoneOffset;
-  String? _deviceLocale;
 
   final ConfettiController _confettiController = ConfettiController(
     duration: const Duration(seconds: 3),
@@ -128,9 +126,6 @@ class _SignupScreenState extends State<SignupScreen>
   void _populateDeviceContext() {
     final now = DateTime.now();
     _timeZoneName = now.timeZoneName;
-    _timeZoneOffset = now.timeZoneOffset.toString();
-    _deviceLocale = WidgetsBinding.instance.platformDispatcher.locale
-        .toLanguageTag();
   }
 
   void _validateEmail() {
