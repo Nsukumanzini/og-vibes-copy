@@ -622,10 +622,17 @@ class _HomeScreenState extends State<HomeScreen> {
               width: 38,
               height: 38,
               decoration: BoxDecoration(
-                color: AppColors.blueTint,
+                gradient: const LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: <Color>[AppColors.blueTint, AppColors.goldTint],
+                ),
                 borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: AppColors.ogGold.withValues(alpha: .28),
+                ),
               ),
-              child: Icon(card.icon, color: AppColors.vibeBlue, size: 21),
+              child: Icon(card.icon, color: AppColors.deepBlue, size: 21),
             );
             final title = Text(
               card.title,
@@ -641,13 +648,23 @@ class _HomeScreenState extends State<HomeScreen> {
             final arrowBadge = Container(
               width: 28,
               height: 28,
-              decoration: const BoxDecoration(
-                color: AppColors.blueTint,
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: <Color>[
+                    Color(0xFFFFE29A),
+                    Color(0xFFFFF5D8),
+                  ],
+                ),
                 shape: BoxShape.circle,
+                border: Border.all(
+                  color: AppColors.ogGold.withValues(alpha: .42),
+                ),
               ),
               child: const Icon(
                 Icons.arrow_outward_rounded,
-                color: AppColors.vibeBlue,
+                color: AppColors.deepBlue,
                 size: 16,
               ),
             );
@@ -660,14 +677,31 @@ class _HomeScreenState extends State<HomeScreen> {
                 clipBehavior: Clip.antiAlias,
                 child: Ink(
                   decoration: BoxDecoration(
-                    color: AppColors.surface,
+                    gradient: const LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: <Color>[
+                        Color(0xFFFFFFFF),
+                        Color(0xFFF2F6FF),
+                        Color(0xFFFFFCF2),
+                      ],
+                      stops: <double>[0, .66, 1],
+                    ),
                     borderRadius: BorderRadius.circular(18),
-                    border: Border.all(color: AppColors.glassBorder),
+                    border: Border.all(
+                      color: const Color(0xFFE8D9A9),
+                      width: 1.1,
+                    ),
                     boxShadow: <BoxShadow>[
                       BoxShadow(
                         color: AppColors.deepBlue.withValues(alpha: .07),
                         blurRadius: 14,
                         offset: const Offset(0, 5),
+                      ),
+                      BoxShadow(
+                        color: AppColors.ogGold.withValues(alpha: .07),
+                        blurRadius: 18,
+                        offset: const Offset(0, 7),
                       ),
                     ],
                   ),
