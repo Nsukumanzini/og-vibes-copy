@@ -1,16 +1,18 @@
 import 'package:flutter/material.dart';
+
 import '../screens/call_history_screen.dart';
-import '../screens/helpful_contacts_screen.dart';
 import '../screens/download_history_screen.dart';
+import '../screens/helpful_contacts_screen.dart';
 import '../screens/landing_screen.dart';
 import '../screens/my_modules_screen.dart';
 import '../screens/my_posts_screen.dart';
 import '../screens/profile_screen.dart';
-import '../screens/settings_screen.dart';
 import '../screens/safety_screen.dart';
+import '../screens/settings_screen.dart';
 import '../screens/suggestion_box_screen.dart';
-import '../screens/whistleblower_screen.dart';
 import '../screens/whats_new_screen.dart';
+import '../screens/whistleblower_screen.dart';
+import '../utils/theme_constants.dart';
 
 class AppDrawer extends StatefulWidget {
   const AppDrawer({super.key});
@@ -20,94 +22,427 @@ class AppDrawer extends StatefulWidget {
 }
 
 class _AppDrawerState extends State<AppDrawer> {
-  String _userName = 'OG Vibester';
-  String _userCampus = 'Campus Unknown';
-  String _userCourse = 'General Studies';
+  final String _userName = 'OG Vibester';
+  final String _userCampus = 'Campus Unknown';
+  final String _userCourse = 'General Studies';
   String? _photoUrl;
 
   @override
   Widget build(BuildContext context) {
     return Drawer(
-      backgroundColor: const Color(0xFF0A0E21),
+      backgroundColor: AppColors.auroraCanvas,
+      child: SafeArea(
+        child: Column(
+          children: [
+            _buildProfileHeader(context),
+            Expanded(
+              child: ListView(
+                padding: const EdgeInsets.fromLTRB(14, 18, 14, 16),
+                children: [
+                  _buildSection('MY SPACE', [
+                    _buildItem(
+                      icon: Icons.person_rounded,
+                      title: 'My profile',
+                      onTap: () => _openScreen(context, const ProfileScreen()),
+                    ),
+                    _buildItem(
+                      icon: Icons.dynamic_feed_rounded,
+                      title: 'My posts',
+                      subtitle: 'View and manage your posts',
+                      onTap: () => _openScreen(context, const MyPostsScreen()),
+                    ),
+                    _buildItem(
+                      icon: Icons.menu_book_rounded,
+                      title: 'My modules',
+                      subtitle: 'Modules and invitations',
+                      onTap: () =>
+                          _openScreen(context, const MyModulesScreen()),
+                    ),
+                  ]),
+                  _buildSection('CAMPUS SUPPORT', [
+                    _buildItem(
+                      icon: Icons.support_agent_rounded,
+                      title: 'Helpful contacts',
+                      onTap: () =>
+                          _openScreen(context, const HelpfulContactsScreen()),
+                    ),
+                    _buildItem(
+                      icon: Icons.shield_rounded,
+                      title: 'Safety setup',
+                      subtitle: 'Emergency contacts and details',
+                      goldAccent: true,
+                      onTap: () => _openScreen(context, const SafetyScreen()),
+                    ),
+                    _buildItem(
+                      icon: Icons.history_rounded,
+                      title: 'Call history',
+                      onTap: () =>
+                          _openScreen(context, const CallHistoryScreen()),
+                    ),
+                  ]),
+                  _buildSection('HELP & FEEDBACK', [
+                    _buildItem(
+                      icon: Icons.bug_report_rounded,
+                      title: 'Report a problem',
+                      onTap: () =>
+                          _openScreen(context, const WhistleblowerScreen()),
+                    ),
+                    _buildItem(
+                      icon: Icons.lightbulb_rounded,
+                      title: 'Suggest an idea',
+                      onTap: () =>
+                          _openScreen(context, const SuggestionBoxScreen()),
+                    ),
+                  ]),
+                  _buildSection('YOUR APP', [
+                    _buildItem(
+                      icon: Icons.download_rounded,
+                      title: 'Downloads',
+                      onTap: () =>
+                          _openScreen(context, const DownloadHistoryScreen()),
+                    ),
+                    _buildItem(
+                      icon: Icons.tune_rounded,
+                      title: 'Settings',
+                      onTap: () => _openScreen(context, const SettingsScreen()),
+                    ),
+                    _buildItem(
+                      icon: Icons.new_releases_rounded,
+                      title: 'Version updates',
+                      onTap: () => _openScreen(context, const WhatsNewScreen()),
+                    ),
+                  ]),
+                ],
+              ),
+            ),
+            _buildFooter(context),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildProfileHeader(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(20, 18, 20, 22),
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            AppColors.midnightInk,
+            AppColors.deepBlue,
+            AppColors.vibeBlue,
+          ],
+        ),
+        borderRadius: BorderRadius.vertical(bottom: Radius.circular(26)),
+      ),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 24, 16, 12),
-            child: Material(
-              color: Colors.white.withOpacity(0.08),
-              borderRadius: BorderRadius.circular(20),
-              child: InkWell(
-                borderRadius: BorderRadius.circular(20),
-                onTap: () {
-                  Navigator.of(context).pop();
-                  Navigator.of(context).push(
-                    MaterialPageRoute(builder: (_) => const ProfileScreen()),
-                  );
-                },
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 14,
+          Row(
+            children: [
+              Container(
+                width: 34,
+                height: 34,
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: .12),
+                  borderRadius: BorderRadius.circular(11),
+                  border: Border.all(
+                    color: Colors.white.withValues(alpha: .18),
                   ),
-                  child: Row(
-                    children: [
-                      CircleAvatar(
-                        radius: 30,
-                        backgroundColor: Colors.white24,
+                ),
+                child: const Icon(
+                  Icons.school_rounded,
+                  size: 19,
+                  color: Color(0xFFFFD46A),
+                ),
+              ),
+              const SizedBox(width: 10),
+              const Text(
+                'OG VIBES',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: 1.6,
+                ),
+              ),
+              const Spacer(),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 6,
+                ),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: .1),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(
+                    color: Colors.white.withValues(alpha: .16),
+                  ),
+                ),
+                child: const Text(
+                  'STUDENT',
+                  style: TextStyle(
+                    color: Color(0xFFFFE7A3),
+                    fontSize: 9,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 1,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 22),
+          Material(
+            color: Colors.transparent,
+            child: InkWell(
+              borderRadius: BorderRadius.circular(18),
+              onTap: () => _openScreen(context, const ProfileScreen()),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 2),
+                child: Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(2),
+                      decoration: const BoxDecoration(
+                        shape: BoxShape.circle,
+                        gradient: LinearGradient(
+                          colors: [Color(0xFFFFE7A3), Color(0xFFFFC943)],
+                        ),
+                      ),
+                      child: CircleAvatar(
+                        radius: 27,
+                        backgroundColor: const Color(0xFFE8F0FF),
                         backgroundImage: _photoUrl != null
                             ? NetworkImage(_photoUrl!)
                             : null,
                         child: _photoUrl == null
                             ? const Icon(
                                 Icons.person_rounded,
-                                color: Colors.white,
+                                color: AppColors.deepBlue,
                                 size: 30,
                               )
                             : null,
                       ),
-                      const SizedBox(width: 14),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              _userName,
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 18,
-                                fontWeight: FontWeight.w700,
-                              ),
+                    ),
+                    const SizedBox(width: 13),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            _userName,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 17,
+                              fontWeight: FontWeight.w800,
                             ),
-                            const SizedBox(height: 4),
-                            Row(
-                              children: [
-                                Expanded(
-                                  child: Text(
-                                    _userCourse,
-                                    style: const TextStyle(
-                                      color: Colors.white70,
-                                      fontSize: 13,
-                                    ),
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                ),
-                              ],
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            '$_userCourse · $_userCampus',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              color: Colors.white.withValues(alpha: .72),
+                              fontSize: 11,
+                              fontWeight: FontWeight.w500,
                             ),
-                            const SizedBox(height: 4),
-                            Text(
-                              _userCampus,
-                              style: const TextStyle(
-                                color: Colors.white54,
-                                fontSize: 12,
-                              ),
+                          ),
+                          const SizedBox(height: 7),
+                          const Text(
+                            'View your profile',
+                            style: TextStyle(
+                              color: Color(0xFFFFE7A3),
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700,
                             ),
-                          ],
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Icon(
+                      Icons.arrow_forward_ios_rounded,
+                      color: Colors.white.withValues(alpha: .82),
+                      size: 15,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSection(String title, List<Widget> items) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(7, 0, 7, 8),
+            child: Text(
+              title,
+              style: const TextStyle(
+                color: AppColors.textMuted,
+                fontSize: 10,
+                fontWeight: FontWeight.w800,
+                letterSpacing: 1.15,
+              ),
+            ),
+          ),
+          Container(
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(18),
+              border: Border.all(color: AppColors.glassBorder),
+              boxShadow: [
+                BoxShadow(
+                  color: AppColors.deepBlue.withValues(alpha: .045),
+                  blurRadius: 14,
+                  offset: const Offset(0, 5),
+                ),
+              ],
+            ),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(18),
+              child: Column(
+                children: [
+                  for (var index = 0; index < items.length; index++) ...[
+                    items[index],
+                    if (index != items.length - 1)
+                      const Padding(
+                        padding: EdgeInsets.only(left: 65),
+                        child: Divider(height: 1, thickness: 1, indent: 0),
+                      ),
+                  ],
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildItem({
+    required IconData icon,
+    required String title,
+    String? subtitle,
+    required VoidCallback onTap,
+    bool goldAccent = false,
+  }) {
+    final iconColor = goldAccent ? const Color(0xFF8A6500) : AppColors.deepBlue;
+    final iconBackground = goldAccent ? AppColors.goldTint : AppColors.blueTint;
+
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+          child: Row(
+            children: [
+              Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  color: iconBackground,
+                  borderRadius: BorderRadius.circular(13),
+                ),
+                child: Icon(icon, color: iconColor, size: 20),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      title,
+                      style: const TextStyle(
+                        color: AppColors.midnightInk,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    if (subtitle != null) ...[
+                      const SizedBox(height: 2),
+                      Text(
+                        subtitle,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: AppColors.textMuted,
+                          fontSize: 10.5,
+                          fontWeight: FontWeight.w500,
                         ),
                       ),
-                      const Icon(
-                        Icons.arrow_forward_ios,
-                        color: Colors.white70,
-                        size: 18,
+                    ],
+                  ],
+                ),
+              ),
+              const SizedBox(width: 6),
+              const Icon(
+                Icons.chevron_right_rounded,
+                color: Color(0xFF9AA9BF),
+                size: 20,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFooter(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(14, 0, 14, 12),
+      child: Column(
+        children: [
+          Container(
+            decoration: BoxDecoration(
+              color: const Color(0xFFFFF2F1),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: const Color(0xFFF4D5D2)),
+            ),
+            child: Material(
+              color: Colors.transparent,
+              child: InkWell(
+                borderRadius: BorderRadius.circular(16),
+                onTap: () => _logOut(context),
+                child: const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+                  child: Row(
+                    children: [
+                      Icon(
+                        Icons.logout_rounded,
+                        color: Color(0xFFC64343),
+                        size: 19,
+                      ),
+                      SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          'Log out',
+                          style: TextStyle(
+                            color: Color(0xFFAF3030),
+                            fontSize: 13,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                      ),
+                      Icon(
+                        Icons.chevron_right_rounded,
+                        color: Color(0xFFD47B76),
+                        size: 20,
                       ),
                     ],
                   ),
@@ -115,246 +450,44 @@ class _AppDrawerState extends State<AppDrawer> {
               ),
             ),
           ),
-          Expanded(
-            child: ListView(
-              padding: EdgeInsets.zero,
-              children: [
-                ListTile(
-                  leading: const Icon(
-                    Icons.person_outline,
-                    color: Colors.white70,
-                  ),
-                  title: const Text(
-                    'My profile',
-                    style: TextStyle(color: Colors.white),
-                  ),
-                  onTap: () {
-                    Navigator.of(context).pop();
-                    Navigator.of(context).push(
-                      MaterialPageRoute(builder: (_) => const ProfileScreen()),
-                    );
-                  },
+          const SizedBox(height: 10),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Container(
+                width: 5,
+                height: 5,
+                decoration: const BoxDecoration(
+                  color: AppColors.ogGold,
+                  shape: BoxShape.circle,
                 ),
-                ListTile(
-                  leading: const Icon(
-                    Icons.dynamic_feed_rounded,
-                    color: Colors.cyanAccent,
-                  ),
-                  title: const Text(
-                    'My posts',
-                    style: TextStyle(color: Colors.white),
-                  ),
-                  subtitle: const Text(
-                    'View, edit or delete your posts',
-                    style: TextStyle(color: Colors.white60),
-                  ),
-                  onTap: () {
-                    Navigator.of(context).pop();
-                    Navigator.of(context).push(
-                      MaterialPageRoute(builder: (_) => const MyPostsScreen()),
-                    );
-                  },
+              ),
+              const SizedBox(width: 7),
+              const Text(
+                'Powered by OG Technologies',
+                style: TextStyle(
+                  color: AppColors.textMuted,
+                  fontSize: 10,
+                  fontWeight: FontWeight.w700,
                 ),
-                ListTile(
-                  leading: const Icon(
-                    Icons.menu_book_rounded,
-                    color: Colors.cyanAccent,
-                  ),
-                  title: const Text(
-                    'My modules',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  subtitle: const Text(
-                    'Invitations and modules you joined',
-                    style: TextStyle(color: Colors.white60),
-                  ),
-                  onTap: () {
-                    Navigator.of(context).pop();
-                    Navigator.of(context).push(
-                      MaterialPageRoute(
-                        builder: (_) => const MyModulesScreen(),
-                      ),
-                    );
-                  },
-                ),
-                const Divider(color: Colors.white24),
-                ListTile(
-                  leading: const Icon(
-                    Icons.phone_in_talk,
-                    color: Colors.white70,
-                  ),
-                  title: const Text(
-                    'Helpful contacts',
-                    style: TextStyle(color: Colors.white),
-                  ),
-                  onTap: () {
-                    Navigator.of(context).pop();
-                    Navigator.of(context).push(
-                      MaterialPageRoute(
-                        builder: (_) => const HelpfulContactsScreen(),
-                      ),
-                    );
-                  },
-                ),
-                ListTile(
-                  leading: const Icon(
-                    Icons.shield_outlined,
-                    color: Color(0xFFFF9189),
-                  ),
-                  title: const Text(
-                    'Safety setup',
-                    style: TextStyle(color: Colors.white),
-                  ),
-                  subtitle: const Text(
-                    'Edit emergency contacts and safety details',
-                    style: TextStyle(color: Colors.white60),
-                  ),
-                  onTap: () {
-                    Navigator.of(context).pop();
-                    Navigator.of(context).push(
-                      MaterialPageRoute(builder: (_) => const SafetyScreen()),
-                    );
-                  },
-                ),
-                ListTile(
-                  leading: const Icon(
-                    Icons.history_rounded,
-                    color: Colors.white70,
-                  ),
-                  title: const Text(
-                    'Call history',
-                    style: TextStyle(color: Colors.white),
-                  ),
-                  onTap: () {
-                    Navigator.of(context).pop();
-                    Navigator.of(context).push(
-                      MaterialPageRoute(
-                        builder: (_) => const CallHistoryScreen(),
-                      ),
-                    );
-                  },
-                ),
-                ListTile(
-                  leading: const Icon(
-                    Icons.bug_report_outlined,
-                    color: Colors.white70,
-                  ),
-                  title: const Text(
-                    'Report a problem',
-                    style: TextStyle(color: Colors.white),
-                  ),
-                  onTap: () {
-                    Navigator.of(context).pop();
-                    Navigator.of(context).push(
-                      MaterialPageRoute(
-                        builder: (_) => const WhistleblowerScreen(),
-                      ),
-                    );
-                  },
-                ),
-                ListTile(
-                  leading: const Icon(
-                    Icons.lightbulb_outline,
-                    color: Colors.white70,
-                  ),
-                  title: const Text(
-                    'Suggest an idea',
-                    style: TextStyle(color: Colors.white),
-                  ),
-                  onTap: () {
-                    Navigator.of(context).pop();
-                    Navigator.of(context).push(
-                      MaterialPageRoute(
-                        builder: (_) => const SuggestionBoxScreen(),
-                      ),
-                    );
-                  },
-                ),
-                const Divider(color: Colors.white24),
-                ListTile(
-                  leading: const Icon(Icons.history, color: Colors.white70),
-                  title: const Text(
-                    'Downloads',
-                    style: TextStyle(color: Colors.white),
-                  ),
-                  onTap: () {
-                    Navigator.of(context).pop();
-                    Navigator.of(context).push(
-                      MaterialPageRoute(
-                        builder: (_) => const DownloadHistoryScreen(),
-                      ),
-                    );
-                  },
-                ),
-                ListTile(
-                  leading: const Icon(Icons.settings, color: Colors.white70),
-                  title: const Text(
-                    'Settings',
-                    style: TextStyle(color: Colors.white),
-                  ),
-                  onTap: () {
-                    Navigator.of(context).pop();
-                    Navigator.of(context).push(
-                      MaterialPageRoute(builder: (_) => const SettingsScreen()),
-                    );
-                  },
-                ),
-                const Divider(color: Colors.white24),
-                ListTile(
-                  leading: const Icon(
-                    Icons.new_releases,
-                    color: Colors.white70,
-                  ),
-                  title: const Text(
-                    'Version updates',
-                    style: TextStyle(color: Colors.white),
-                  ),
-                  onTap: () {
-                    Navigator.of(context).pop();
-                    Navigator.of(context).push(
-                      MaterialPageRoute(builder: (_) => const WhatsNewScreen()),
-                    );
-                  },
-                ),
-                ListTile(
-                  leading: const Icon(Icons.logout, color: Colors.red),
-                  title: const Text(
-                    'Log out',
-                    style: TextStyle(
-                      color: Colors.red,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  onTap: () => _logOut(context),
-                ),
-              ],
-            ),
+              ),
+              const SizedBox(width: 7),
+              const Text(
+                '·  © 2026',
+                style: TextStyle(color: AppColors.textMuted, fontSize: 10),
+              ),
+            ],
           ),
-          const Padding(
-            padding: EdgeInsets.only(bottom: 20),
-            child: Column(
-              children: [
-                Text(
-                  'Powered by OG Technologies',
-                  style: TextStyle(
-                    color: Colors.white70,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-                SizedBox(height: 3),
-                Text(
-                  '© 2026 OG Technologies',
-                  style: TextStyle(color: Colors.white38, fontSize: 11),
-                ),
-              ],
-            ),
-          ),
+          const SizedBox(height: 2),
         ],
       ),
     );
+  }
+
+  void _openScreen(BuildContext context, Widget screen) {
+    final navigator = Navigator.of(context);
+    navigator.pop();
+    navigator.push(MaterialPageRoute<void>(builder: (_) => screen));
   }
 
   Future<void> _logOut(BuildContext context) async {
