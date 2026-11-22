@@ -35,7 +35,27 @@ class LegalDocumentScreen extends StatelessWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Icon(Icons.gavel_rounded, color: Colors.white),
+                        Container(
+                          width: 112,
+                          height: 112,
+                          padding: const EdgeInsets.all(4),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(20),
+                            border: Border.all(
+                              color: const Color(0xFFFFC107),
+                              width: 2,
+                            ),
+                          ),
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(15),
+                            child: Image.asset(
+                              'assets/images/logo.jpeg',
+                              fit: BoxFit.contain,
+                              semanticLabel: 'OG Vibes logo',
+                            ),
+                          ),
+                        ),
                         const SizedBox(height: 16),
                         Text(
                           isTerms

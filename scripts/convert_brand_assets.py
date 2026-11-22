@@ -8,16 +8,9 @@ IMAGES = ROOT / "assets" / "images"
 
 
 def make_logo() -> None:
+    # Keep the complete supplied mark, including its white background, so no
+    # white lettering or negative space is removed when assets are regenerated.
     source = Image.open(IMAGES / "logo.jpeg").convert("RGBA")
-    pixels = []
-    for red, green, blue, alpha in source.getdata():
-        lightest = min(red, green, blue)
-        if lightest >= 248:
-            alpha = 0
-        elif lightest >= 232:
-            alpha = int(alpha * (248 - lightest) / 16)
-        pixels.append((red, green, blue, alpha))
-    source.putdata(pixels)
     source.save(IMAGES / "logo_transparent.png", optimize=True)
 
 

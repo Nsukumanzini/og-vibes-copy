@@ -35,10 +35,37 @@ class _PrivacyScreenState extends State<PrivacyScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('Privacy Policy')),
-      body: Stack(
+      body: Column(
         children: [
-          WebViewWidget(controller: _controller),
-          if (_isLoading) const LinearProgressIndicator(minHeight: 3),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(vertical: 10),
+            decoration: const BoxDecoration(
+              color: Color(0xFFF3F7FF),
+              border: Border(bottom: BorderSide(color: Color(0xFFDCE7FB))),
+            ),
+            child: Center(
+              child: Image.asset(
+                'assets/images/logo.jpeg',
+                width: 72,
+                height: 72,
+                fit: BoxFit.contain,
+                semanticLabel: 'OG Vibes logo',
+              ),
+            ),
+          ),
+          Expanded(
+            child: Stack(
+              children: [
+                WebViewWidget(controller: _controller),
+                if (_isLoading)
+                  const Align(
+                    alignment: Alignment.topCenter,
+                    child: LinearProgressIndicator(minHeight: 3),
+                  ),
+              ],
+            ),
+          ),
         ],
       ),
     );
