@@ -1,3 +1,4 @@
+import 'package:og_vibes_student/utils/theme_constants.dart';
 import 'package:confetti/confetti.dart';
 import 'package:flutter/material.dart';
 import '../services/offline_data_adapter.dart';
@@ -35,11 +36,11 @@ class _SuggestionBoxScreenState extends State<SuggestionBoxScreen> {
       appBar: AppBar(
         title: const Text(
           'Suggestion Box',
-          style: TextStyle(color: Colors.white),
+          style: TextStyle(color: AppColors.midnightInk),
         ),
         backgroundColor: Colors.transparent,
         elevation: 0,
-        iconTheme: const IconThemeData(color: Colors.white),
+        iconTheme: const IconThemeData(color: AppColors.midnightInk),
       ),
       extendBodyBehindAppBar: false,
       body: Container(
@@ -47,7 +48,7 @@ class _SuggestionBoxScreenState extends State<SuggestionBoxScreen> {
           gradient: LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
-            colors: [Color(0xFF0D47A1), Color(0xFF2962FF), Color(0xFF6200EA)],
+            colors: [AppColors.surface, AppColors.auroraCanvas, AppColors.blueTint],
           ),
         ),
         child: Stack(
@@ -61,13 +62,13 @@ class _SuggestionBoxScreenState extends State<SuggestionBoxScreen> {
                     controller: _ideaController,
                     minLines: 8,
                     maxLines: 16,
-                    style: const TextStyle(color: Colors.white),
-                    cursorColor: Colors.white,
+                    style: const TextStyle(color: AppColors.midnightInk),
+                    cursorColor: AppColors.midnightInk,
                     decoration: InputDecoration(
                       labelText: 'Share your campus-changing idea...',
-                      labelStyle: const TextStyle(color: Colors.white70),
+                      labelStyle: const TextStyle(color: AppColors.textMuted),
                       filled: true,
-                      fillColor: Colors.white.withValues(alpha: 0.15),
+                      fillColor: AppColors.surface,
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
                         borderSide: const BorderSide(color: Colors.white30),
@@ -78,7 +79,7 @@ class _SuggestionBoxScreenState extends State<SuggestionBoxScreen> {
                       ),
                       focusedBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
-                        borderSide: const BorderSide(color: Colors.white),
+                        borderSide: const BorderSide(color: AppColors.midnightInk),
                       ),
                     ),
                   ),
@@ -87,7 +88,7 @@ class _SuggestionBoxScreenState extends State<SuggestionBoxScreen> {
                     width: double.infinity,
                     child: ElevatedButton(
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.deepPurpleAccent,
+                        backgroundColor: AppColors.vibeBlue,
                         padding: const EdgeInsets.symmetric(vertical: 16),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(28),
@@ -98,7 +99,7 @@ class _SuggestionBoxScreenState extends State<SuggestionBoxScreen> {
                         _sending ? 'Sending…' : 'Send suggestion',
                         style: const TextStyle(
                           fontWeight: FontWeight.bold,
-                          color: Colors.white,
+                          color: AppColors.midnightInk,
                         ),
                       ),
                     ),

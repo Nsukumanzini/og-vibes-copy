@@ -1,3 +1,4 @@
+import 'package:og_vibes_student/utils/theme_constants.dart';
 import 'package:flutter/material.dart';
 
 import '../services/content_service.dart';
@@ -24,10 +25,10 @@ class WhatsNewScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Version updates', style: TextStyle(color: Colors.white)),
+        title: const Text('Version updates', style: TextStyle(color: AppColors.midnightInk)),
         backgroundColor: Colors.transparent,
         elevation: 0,
-        iconTheme: const IconThemeData(color: Colors.white),
+        iconTheme: const IconThemeData(color: AppColors.midnightInk),
       ),
       extendBodyBehindAppBar: true,
       body: Container(
@@ -35,7 +36,7 @@ class WhatsNewScreen extends StatelessWidget {
           gradient: LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
-            colors: [Color(0xFF0D47A1), Color(0xFF2962FF), Color(0xFF6200EA)],
+            colors: [AppColors.surface, AppColors.auroraCanvas, AppColors.blueTint],
           ),
         ),
         child: SafeArea(
@@ -79,9 +80,9 @@ class _UpdateTimelineItem extends StatelessWidget {
             Container(
               width: 10,
               height: 10,
-              decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
+              decoration: const BoxDecoration(color: AppColors.midnightInk, shape: BoxShape.circle),
             ),
-            if (drawLine) Container(width: 2, height: 90, color: Colors.white24),
+            if (drawLine) Container(width: 2, height: 90, color: AppColors.glassBorder),
           ],
         ),
         const SizedBox(width: 16),
@@ -89,18 +90,18 @@ class _UpdateTimelineItem extends StatelessWidget {
           child: Container(
             padding: const EdgeInsets.all(18),
             decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.08),
+              color: AppColors.surface,
               borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: Colors.white24),
+              border: Border.all(color: AppColors.glassBorder),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(release.version, style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.amberAccent)),
+                Text(release.version, style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.ogGold)),
                 const SizedBox(height: 6),
-                Text(release.title, style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600)),
+                Text(release.title, style: const TextStyle(color: AppColors.midnightInk, fontSize: 18, fontWeight: FontWeight.w600)),
                 const SizedBox(height: 4),
-                Text(release.subtitle, style: const TextStyle(color: Colors.white70)),
+                Text(release.subtitle, style: const TextStyle(color: AppColors.textMuted)),
               ],
             ),
           ),

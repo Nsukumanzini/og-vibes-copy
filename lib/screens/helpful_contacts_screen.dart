@@ -1,3 +1,4 @@
+import 'package:og_vibes_student/utils/theme_constants.dart';
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -104,11 +105,7 @@ class _HelpfulContactsScreenState extends State<HelpfulContactsScreen> {
           gradient: LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
-            colors: <Color>[
-              Color(0xFF071C42),
-              Color(0xFF1248A0),
-              Color(0xFF5B2FC9),
-            ],
+            colors: <Color>[AppColors.surface, AppColors.auroraCanvas, AppColors.blueTint],
           ),
         ),
         child: FutureBuilder<List<Map<String, dynamic>>>(
@@ -116,7 +113,7 @@ class _HelpfulContactsScreenState extends State<HelpfulContactsScreen> {
           builder: (context, snapshot) {
             if (snapshot.connectionState != ConnectionState.done) {
               return const Center(
-                child: CircularProgressIndicator(color: Colors.white),
+                child: CircularProgressIndicator(color: AppColors.midnightInk),
               );
             }
             final contacts = snapshot.data ?? const <Map<String, dynamic>>[];
@@ -124,7 +121,7 @@ class _HelpfulContactsScreenState extends State<HelpfulContactsScreen> {
               return const Center(
                 child: Text(
                   'The contact directory is currently unavailable.',
-                  style: TextStyle(color: Colors.white70),
+                  style: TextStyle(color: AppColors.textMuted),
                 ),
               );
             }
@@ -145,10 +142,10 @@ class _HelpfulContactsScreenState extends State<HelpfulContactsScreen> {
                 return Container(
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: .11),
+                    color: AppColors.surface,
                     borderRadius: BorderRadius.circular(22),
                     border: Border.all(
-                      color: Colors.white.withValues(alpha: .18),
+                      color: AppColors.surface,
                     ),
                   ),
                   child: Column(
@@ -159,13 +156,13 @@ class _HelpfulContactsScreenState extends State<HelpfulContactsScreen> {
                           CircleAvatar(
                             radius: 25,
                             backgroundColor:
-                                (urgent ? Colors.redAccent : Colors.cyanAccent)
+                                (urgent ? Colors.redAccent : AppColors.blueLight)
                                     .withValues(alpha: .18),
                             child: Icon(
                               icon,
                               color: urgent
                                   ? Colors.redAccent
-                                  : Colors.cyanAccent,
+                                  : AppColors.blueLight,
                             ),
                           ),
                           const SizedBox(width: 14),
@@ -176,7 +173,7 @@ class _HelpfulContactsScreenState extends State<HelpfulContactsScreen> {
                                 Text(
                                   '${contact['title']}',
                                   style: const TextStyle(
-                                    color: Colors.white,
+                                    color: AppColors.midnightInk,
                                     fontWeight: FontWeight.w900,
                                     fontSize: 16,
                                   ),
@@ -185,7 +182,7 @@ class _HelpfulContactsScreenState extends State<HelpfulContactsScreen> {
                                 Text(
                                   '${contact['subtitle'] ?? ''}',
                                   style: const TextStyle(
-                                    color: Colors.white70,
+                                    color: AppColors.textMuted,
                                     height: 1.35,
                                   ),
                                 ),
@@ -198,7 +195,7 @@ class _HelpfulContactsScreenState extends State<HelpfulContactsScreen> {
                       Text(
                         '${contact['display_value'] ?? contact['value'] ?? ''}',
                         style: const TextStyle(
-                          color: Colors.cyanAccent,
+                          color: AppColors.blueLight,
                           fontWeight: FontWeight.w700,
                         ),
                       ),

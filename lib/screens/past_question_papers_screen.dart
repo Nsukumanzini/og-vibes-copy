@@ -613,7 +613,7 @@ class _PastQuestionPapersScreenState extends State<PastQuestionPapersScreen> {
               colors: [
                 AppColors.midnightInk,
                 AppColors.vibeBlue,
-                Color(0xFF2089D8),
+                Color(0xFF2457F5),
               ],
             ),
             borderRadius: AppStyles.bentoRadius,
@@ -1121,7 +1121,7 @@ class _PastQuestionPapersScreenState extends State<PastQuestionPapersScreen> {
                         height: 48,
                         decoration: BoxDecoration(
                           gradient: const LinearGradient(
-                            colors: [AppColors.vibeBlue, Color(0xFF4A82FB)],
+                            colors: [AppColors.vibeBlue, Color(0xFF2457F5)],
                           ),
                           borderRadius: BorderRadius.circular(15),
                           boxShadow: [

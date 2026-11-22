@@ -2080,7 +2080,7 @@ class _ScheduleItem {
       case 'exam':
         return AppColors.danger;
       case 'test':
-        return const Color(0xFF7E57C2);
+        return const Color(0xFF2457F5);
       case 'practical':
         return AppColors.success;
       case 'assignment':
@@ -2088,7 +2088,7 @@ class _ScheduleItem {
       case 'quiz':
         return AppColors.vibeBlue;
       default:
-        return const Color(0xFF546E7A);
+        return const Color(0xFF2457F5);
     }
   }
 

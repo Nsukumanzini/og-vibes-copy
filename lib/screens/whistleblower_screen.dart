@@ -1,3 +1,4 @@
+import 'package:og_vibes_student/utils/theme_constants.dart';
 import 'package:flutter/material.dart';
 import '../services/offline_data_adapter.dart';
 
@@ -44,7 +45,7 @@ class _WhistleblowerScreenState extends State<WhistleblowerScreen> {
           gradient: LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
-            colors: [Color(0xFF1A1F2B), Color(0xFF10243C), Color(0xFF3A0F18)],
+            colors: [AppColors.surface, AppColors.auroraCanvas, AppColors.blueTint],
           ),
         ),
         child: SingleChildScrollView(
@@ -67,20 +68,20 @@ class _WhistleblowerScreenState extends State<WhistleblowerScreen> {
       width: double.infinity,
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: const Color(0xFFB71C1C).withValues(alpha: 0.22),
+        color: AppColors.blueTint,
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: const Color(0xFFEF5350).withValues(alpha: 0.5)),
+        border: Border.all(color: AppColors.glassBorder),
       ),
       child: const Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(Icons.gpp_good_rounded, color: Color(0xFFFF8A80), size: 24),
+          Icon(Icons.gpp_good_rounded, color: AppColors.deepBlue, size: 24),
           SizedBox(width: 10),
           Expanded(
             child: Text(
               'This report is 100% anonymous and goes directly to Campus Management. IP addresses are not tracked.',
               style: TextStyle(
-                color: Colors.white,
+                color: AppColors.midnightInk,
                 fontWeight: FontWeight.w700,
                 height: 1.35,
               ),
@@ -95,9 +96,9 @@ class _WhistleblowerScreenState extends State<WhistleblowerScreen> {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.08),
+        color: AppColors.surface,
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: Colors.white24),
+        border: Border.all(color: AppColors.glassBorder),
       ),
       child: Form(
         key: _formKey,
@@ -108,9 +109,9 @@ class _WhistleblowerScreenState extends State<WhistleblowerScreen> {
             const SizedBox(height: 8),
             DropdownButtonFormField<String>(
               value: _selectedIncidentType,
-              dropdownColor: const Color(0xFF1F2A3C),
-              iconEnabledColor: Colors.white,
-              style: const TextStyle(color: Colors.white),
+              dropdownColor: AppColors.surface,
+              iconEnabledColor: AppColors.midnightInk,
+              style: const TextStyle(color: AppColors.midnightInk),
               decoration: _fieldDecoration(
                 hintText: 'Select incident type',
                 icon: Icons.report_problem_outlined,
@@ -136,7 +137,7 @@ class _WhistleblowerScreenState extends State<WhistleblowerScreen> {
             const SizedBox(height: 8),
             TextFormField(
               controller: _locationController,
-              style: const TextStyle(color: Colors.white),
+              style: const TextStyle(color: AppColors.midnightInk),
               decoration: _fieldDecoration(
                 hintText: 'Example: Near Block B stairwell',
                 icon: Icons.location_on_outlined,
@@ -154,7 +155,7 @@ class _WhistleblowerScreenState extends State<WhistleblowerScreen> {
             TextFormField(
               controller: _descriptionController,
               maxLines: 5,
-              style: const TextStyle(color: Colors.white),
+              style: const TextStyle(color: AppColors.midnightInk),
               decoration: _fieldDecoration(
                 hintText: 'Describe what happened in clear detail.',
                 icon: Icons.notes_rounded,
@@ -171,7 +172,7 @@ class _WhistleblowerScreenState extends State<WhistleblowerScreen> {
             const SizedBox(height: 8),
             TextFormField(
               controller: _dateTimeController,
-              style: const TextStyle(color: Colors.white),
+              style: const TextStyle(color: AppColors.midnightInk),
               decoration: _fieldDecoration(
                 hintText: 'Example: 26 Mar 2026, 11:45 AM',
                 icon: Icons.schedule,
@@ -180,7 +181,7 @@ class _WhistleblowerScreenState extends State<WhistleblowerScreen> {
                   onPressed: () {
                     _dateTimeController.text = '26 Mar 2026, 11:45 AM';
                   },
-                  icon: const Icon(Icons.event_available, color: Colors.white70),
+                  icon: const Icon(Icons.event_available, color: AppColors.textMuted),
                 ),
               ),
               validator: (value) {
@@ -196,7 +197,7 @@ class _WhistleblowerScreenState extends State<WhistleblowerScreen> {
               child: ElevatedButton(
                 onPressed: _isSubmitting ? null : _submitAnonymously,
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFFB71C1C),
+                  backgroundColor: AppColors.vibeBlue,
                   foregroundColor: Colors.white,
                   padding: const EdgeInsets.symmetric(vertical: 14),
                   shape: RoundedRectangleBorder(
@@ -231,7 +232,7 @@ class _WhistleblowerScreenState extends State<WhistleblowerScreen> {
     return Text(
       text,
       style: const TextStyle(
-        color: Colors.white,
+        color: AppColors.midnightInk,
         fontWeight: FontWeight.w700,
       ),
     );
@@ -243,18 +244,18 @@ class _WhistleblowerScreenState extends State<WhistleblowerScreen> {
   }) {
     return InputDecoration(
       hintText: hintText,
-      hintStyle: const TextStyle(color: Colors.white54),
-      prefixIcon: Icon(icon, color: Colors.white70),
+      hintStyle: const TextStyle(color: AppColors.textMuted),
+      prefixIcon: Icon(icon, color: AppColors.textMuted),
       filled: true,
-      fillColor: Colors.white.withValues(alpha: 0.08),
+      fillColor: AppColors.surface,
       errorStyle: const TextStyle(color: Color(0xFFFF8A80)),
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(14),
-        borderSide: const BorderSide(color: Colors.white24),
+        borderSide: const BorderSide(color: AppColors.glassBorder),
       ),
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(14),
-        borderSide: const BorderSide(color: Colors.white24),
+        borderSide: const BorderSide(color: AppColors.glassBorder),
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(14),

@@ -211,14 +211,14 @@ class _NsfasCheckScreenState extends State<NsfasCheckScreen> {
             icon: Icons.check_circle_outline,
             title: 'Last Payout',
             value: data['lastPayout'] ?? '',
-            color: const Color(0xFF00ACC1),
+            color: const Color(0xFF2457F5),
           ),
           const Divider(height: 22),
           _detailTile(
             icon: Icons.pending_actions_outlined,
             title: 'Next Expected Payout',
             value: data['nextPayout'] ?? '',
-            color: const Color(0xFFFF8F00),
+            color: const Color(0xFFFFC107),
           ),
         ],
       ),
@@ -284,7 +284,7 @@ class _NsfasCheckScreenState extends State<NsfasCheckScreen> {
         icon: const Icon(Icons.download_rounded),
         label: const Text('Download Proof of Funding'),
         style: ElevatedButton.styleFrom(
-          backgroundColor: const Color(0xFF2962FF),
+          backgroundColor: const Color(0xFF2457F5),
           foregroundColor: Colors.white,
           padding: const EdgeInsets.symmetric(vertical: 14),
           shape: RoundedRectangleBorder(

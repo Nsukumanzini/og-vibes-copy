@@ -58,7 +58,7 @@ class _MarkSimulatorScreenState extends State<MarkSimulatorScreen> {
                   child: ElevatedButton.icon(
                     onPressed: _simulate,
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF1565C0),
+                      backgroundColor: const Color(0xFF2457F5),
                       foregroundColor: Colors.white,
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(14),
@@ -87,7 +87,7 @@ class _MarkSimulatorScreenState extends State<MarkSimulatorScreen> {
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(16),
         gradient: const LinearGradient(
-          colors: <Color>[Color(0xFF0D47A1), Color(0xFF1976D2)],
+          colors: <Color>[Color(0xFF2457F5), Color(0xFF2457F5)],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
@@ -116,7 +116,7 @@ class _MarkSimulatorScreenState extends State<MarkSimulatorScreen> {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFFE3EAF2)),
+        border: Border.all(color: const Color(0xFFE8F0FF)),
         boxShadow: <BoxShadow>[
           BoxShadow(
             color: Colors.black.withValues(alpha: 0.05),
@@ -153,7 +153,7 @@ class _MarkSimulatorScreenState extends State<MarkSimulatorScreen> {
         labelText: label,
         hintText: 'Enter value between 0 and 100',
         filled: true,
-        fillColor: const Color(0xFFF7F9FC),
+        fillColor: const Color(0xFFF7F9FD),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
           borderSide: BorderSide.none,
@@ -170,7 +170,7 @@ class _MarkSimulatorScreenState extends State<MarkSimulatorScreen> {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFFDDE7F1)),
+        border: Border.all(color: const Color(0xFFE8F0FF)),
         boxShadow: <BoxShadow>[
           BoxShadow(
             color: Colors.black.withValues(alpha: 0.05),
@@ -191,15 +191,15 @@ class _MarkSimulatorScreenState extends State<MarkSimulatorScreen> {
                 CircularProgressIndicator(
                   value: ringValue,
                   strokeWidth: 8,
-                  backgroundColor: const Color(0xFFE3ECF5),
+                  backgroundColor: const Color(0xFFE8F0FF),
                   valueColor: const AlwaysStoppedAnimation<Color>(
-                    Color(0xFF1565C0),
+                    Color(0xFF2457F5),
                   ),
                 ),
                 Text(
                   '${_requiredExam.toStringAsFixed(0)}%',
                   style: const TextStyle(
-                    color: Color(0xFF102027),
+                    color: Color(0xFF07172F),
                     fontWeight: FontWeight.w800,
                   ),
                 ),
@@ -213,7 +213,7 @@ class _MarkSimulatorScreenState extends State<MarkSimulatorScreen> {
               'you need to score exactly ${_requiredExam.toStringAsFixed(0)}% '
               'in your final DHET Exam. You can do this! 🚀',
               style: const TextStyle(
-                color: Color(0xFF263238),
+                color: Color(0xFF0D47A1),
                 fontWeight: FontWeight.w700,
                 height: 1.35,
               ),

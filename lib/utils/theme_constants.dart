@@ -10,11 +10,11 @@ class AppColors {
   /// Deep Blue – main brand primary.
   static const Color deepBlue = Color(0xFF0D47A1);
   static const Color vibeBlue = Color(0xFF2457F5);
-  static const Color electricCyan = Color(0xFF27D8F7);
+  static const Color electricCyan = Color(0xFF7FA2FF);
   static const Color midnightInk = Color(0xFF07172F);
   static const Color blueLight = Color(0xFF7FA2FF);
   static const Color blueTint = Color(0xFFE8F0FF);
-  static const Color cyanTint = Color(0xFFE8FBFF);
+  static const Color cyanTint = Color(0xFFE8F0FF);
   static const Color goldTint = Color(0xFFFFF6D6);
 
   /// OG Gold / Accent Yellow – secondary brand accent.
@@ -49,12 +49,12 @@ class AppColors {
   static const Color success = Color(0xFF159A6B);
   static const Color warning = Color(0xFFE2A500);
   static const Color danger = Color(0xFFD83A52);
-  static const Color academicIndigo = Color(0xFF4F46E5);
-  static const Color academicViolet = Color(0xFF7C3AED);
-  static const Color academicMagenta = Color(0xFFDB2777);
-  static const Color academicOrange = Color(0xFFF97316);
-  static const Color academicEmerald = Color(0xFF059669);
-  static const Color academicTeal = Color(0xFF0D9488);
+  static const Color academicIndigo = Color(0xFF2457F5);
+  static const Color academicViolet = Color(0xFF2457F5);
+  static const Color academicMagenta = Color(0xFF2457F5);
+  static const Color academicOrange = Color(0xFFFFC107);
+  static const Color academicEmerald = Color(0xFF2457F5);
+  static const Color academicTeal = Color(0xFF2457F5);
 
   // ── Semantic application tokens ───────────────────────────────────────────
   // Prefer these names in screens. Brand aliases above remain available for
@@ -129,32 +129,21 @@ class AppStyles {
   );
 
   static const LinearGradient auroraGradient = LinearGradient(
-    colors: [Color(0xFFF8FAFF), AppColors.auroraCanvas, Color(0xFFEAFBFF)],
+    colors: [Color(0xFFF8FAFF), AppColors.auroraCanvas, Color(0xFFF3F7FF)],
     begin: Alignment.topLeft,
     end: Alignment.bottomRight,
   );
 
+  // Compatibility name retained for existing screens; all entries use the brand palette.
   static const List<LinearGradient> academicRainbowGradients = <LinearGradient>[
     LinearGradient(colors: <Color>[AppColors.deepBlue, AppColors.vibeBlue]),
-    LinearGradient(colors: <Color>[AppColors.vibeBlue, AppColors.electricCyan]),
-    LinearGradient(
-      colors: <Color>[AppColors.academicIndigo, AppColors.academicViolet],
-    ),
-    LinearGradient(
-      colors: <Color>[AppColors.academicViolet, AppColors.academicMagenta],
-    ),
-    LinearGradient(
-      colors: <Color>[AppColors.academicMagenta, AppColors.dangerLight],
-    ),
-    LinearGradient(colors: <Color>[AppColors.academicOrange, AppColors.ogGold]),
-    LinearGradient(
-      colors: <Color>[AppColors.academicEmerald, AppColors.successLight],
-    ),
-    LinearGradient(
-      colors: <Color>[AppColors.academicTeal, AppColors.electricCyan],
-    ),
-    LinearGradient(
-      colors: <Color>[AppColors.midnightInk, AppColors.academicIndigo],
-    ),
+    LinearGradient(colors: <Color>[AppColors.vibeBlue, AppColors.blueLight]),
+    LinearGradient(colors: <Color>[AppColors.midnightInk, AppColors.deepBlue]),
+    LinearGradient(colors: <Color>[AppColors.deepBlue, AppColors.vibeBlue]),
+    LinearGradient(colors: <Color>[AppColors.vibeBlue, AppColors.blueLight]),
+    LinearGradient(colors: <Color>[AppColors.ogGold, AppColors.goldTint]),
+    LinearGradient(colors: <Color>[AppColors.deepBlue, AppColors.vibeBlue]),
+    LinearGradient(colors: <Color>[AppColors.vibeBlue, AppColors.blueLight]),
+    LinearGradient(colors: <Color>[AppColors.midnightInk, AppColors.deepBlue]),
   ];
 }

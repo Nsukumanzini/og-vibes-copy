@@ -1,3 +1,4 @@
+import 'package:og_vibes_student/utils/theme_constants.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 
@@ -34,11 +35,11 @@ class _TutorApplicationScreenState extends State<TutorApplicationScreen> {
       appBar: AppBar(
         title: const Text(
           'Tutor Application',
-          style: TextStyle(color: Colors.white),
+          style: TextStyle(color: AppColors.midnightInk),
         ),
         backgroundColor: Colors.transparent,
         elevation: 0,
-        iconTheme: const IconThemeData(color: Colors.white),
+        iconTheme: const IconThemeData(color: AppColors.midnightInk),
       ),
       extendBodyBehindAppBar: true,
       body: Container(
@@ -46,7 +47,7 @@ class _TutorApplicationScreenState extends State<TutorApplicationScreen> {
           gradient: LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
-            colors: [Color(0xFF0D47A1), Color(0xFF2962FF), Color(0xFF6200EA)],
+            colors: [AppColors.surface, AppColors.auroraCanvas, AppColors.blueTint],
           ),
         ),
         child: SingleChildScrollView(
@@ -59,16 +60,16 @@ class _TutorApplicationScreenState extends State<TutorApplicationScreen> {
                 Container(
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.08),
+                    color: AppColors.surface,
                     borderRadius: BorderRadius.circular(24),
-                    border: Border.all(color: Colors.white24),
+                    border: Border.all(color: AppColors.glassBorder),
                   ),
                   child: Column(
                     children: [
                       DropdownButtonFormField<String>(
-                        dropdownColor: const Color(0xFF0D47A1),
-                        iconEnabledColor: Colors.white,
-                        style: const TextStyle(color: Colors.white),
+                        dropdownColor: const Color(0xFF2457F5),
+                        iconEnabledColor: AppColors.midnightInk,
+                        style: const TextStyle(color: AppColors.midnightInk),
                         decoration: _glassInputDecoration('Subject you aced?'),
                         initialValue: _selectedSubject,
                         items: _subjects
@@ -77,7 +78,7 @@ class _TutorApplicationScreenState extends State<TutorApplicationScreen> {
                                 value: subject,
                                 child: Text(
                                   subject,
-                                  style: const TextStyle(color: Colors.white),
+                                  style: const TextStyle(color: AppColors.midnightInk),
                                 ),
                               ),
                             )
@@ -90,7 +91,7 @@ class _TutorApplicationScreenState extends State<TutorApplicationScreen> {
                       const SizedBox(height: 16),
                       ElevatedButton.icon(
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.white.withValues(alpha: 0.15),
+                          backgroundColor: AppColors.surface,
                           foregroundColor: Colors.white,
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(18),
@@ -110,15 +111,15 @@ class _TutorApplicationScreenState extends State<TutorApplicationScreen> {
                 Container(
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.08),
+                    color: AppColors.surface,
                     borderRadius: BorderRadius.circular(24),
-                    border: Border.all(color: Colors.white24),
+                    border: Border.all(color: AppColors.glassBorder),
                   ),
                   child: TextFormField(
                     controller: _motivationController,
                     maxLines: 6,
-                    style: const TextStyle(color: Colors.white),
-                    cursorColor: Colors.white,
+                    style: const TextStyle(color: AppColors.midnightInk),
+                    cursorColor: AppColors.midnightInk,
                     decoration: _glassInputDecoration(
                       'Why should we pick you?',
                     ),
@@ -131,8 +132,8 @@ class _TutorApplicationScreenState extends State<TutorApplicationScreen> {
                 const SizedBox(height: 24),
                 ElevatedButton(
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.white,
-                    foregroundColor: const Color(0xFF0D47A1),
+                    backgroundColor: AppColors.surface,
+                    foregroundColor: const Color(0xFF2457F5),
                     padding: const EdgeInsets.symmetric(vertical: 16),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(30),
@@ -199,9 +200,9 @@ class _TutorApplicationScreenState extends State<TutorApplicationScreen> {
   InputDecoration _glassInputDecoration(String label) {
     return InputDecoration(
       labelText: label,
-      labelStyle: const TextStyle(color: Colors.white70),
+      labelStyle: const TextStyle(color: AppColors.textMuted),
       filled: true,
-      fillColor: Colors.white.withValues(alpha: 0.15),
+      fillColor: AppColors.surface,
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
         borderSide: const BorderSide(color: Colors.white30),
@@ -212,9 +213,9 @@ class _TutorApplicationScreenState extends State<TutorApplicationScreen> {
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
-        borderSide: const BorderSide(color: Colors.white),
+        borderSide: const BorderSide(color: AppColors.midnightInk),
       ),
-      hintStyle: const TextStyle(color: Colors.white54),
+      hintStyle: const TextStyle(color: AppColors.textMuted),
     );
   }
 }

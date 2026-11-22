@@ -1021,7 +1021,7 @@ class _EmergencyServiceCard extends StatelessWidget {
                     Text(
                       choice.name,
                       style: const TextStyle(
-                        color: Color(0xFF252B36),
+                        color: Color(0xFF0D47A1),
                         fontWeight: FontWeight.w900,
                       ),
                     ),
@@ -1065,7 +1065,7 @@ class _SavedContactCard extends StatelessWidget {
     child: ListTile(
       contentPadding: const EdgeInsets.symmetric(horizontal: 10),
       leading: const CircleAvatar(
-        backgroundColor: Color(0xFFEAF0FF),
+        backgroundColor: Color(0xFFF7F9FD),
         child: Icon(Icons.person_outline_rounded, color: AppColors.vibeBlue),
       ),
       title: Text(

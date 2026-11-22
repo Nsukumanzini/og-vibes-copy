@@ -651,7 +651,7 @@ class _SlidesScreenState extends State<SlidesScreen> {
                             height: 50,
                             decoration: BoxDecoration(
                               gradient: const LinearGradient(
-                                colors: [AppColors.vibeBlue, Color(0xFF7A5AF8)],
+                                colors: [AppColors.vibeBlue, Color(0xFF2457F5)],
                               ),
                               borderRadius: BorderRadius.circular(16),
                               boxShadow: [
@@ -810,7 +810,7 @@ class _SlidesScreenState extends State<SlidesScreen> {
               end: Alignment.bottomRight,
               colors: [
                 AppColors.midnightInk,
-                Color(0xFF4C55D9),
+                Color(0xFF2457F5),
                 AppColors.vibeBlue,
               ],
             ),

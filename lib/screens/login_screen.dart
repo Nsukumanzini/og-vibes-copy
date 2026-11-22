@@ -80,7 +80,7 @@ class _LoginScreenState extends State<LoginScreen>
         icon: const Icon(
           Icons.mark_email_read_outlined,
           size: 42,
-          color: Color(0xFF2962FF),
+          color: Color(0xFF2457F5),
         ),
         title: const Text('Reset your password'),
         content: Column(
@@ -124,8 +124,8 @@ class _LoginScreenState extends State<LoginScreen>
 
   @override
   Widget build(BuildContext context) {
-    const primaryBlue = Color(0xFF2962FF);
-    const accentCyan = Color(0xFF00E5FF);
+    const primaryBlue = Color(0xFF2457F5);
+    const accentCyan = Color(0xFF2457F5);
 
     return Scaffold(
       backgroundColor: Colors.white,
@@ -136,7 +136,7 @@ class _LoginScreenState extends State<LoginScreen>
               gradient: LinearGradient(
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
-                colors: [Color(0xFFE9F1FF), Color(0xFFF5F7FA)],
+                colors: [Color(0xFFF7F9FD), Color(0xFFF7F9FD)],
               ),
             ),
           ),
@@ -180,7 +180,7 @@ class _LoginScreenState extends State<LoginScreen>
                       child: IconButton(
                         icon: const Icon(
                           Icons.arrow_back,
-                          color: Color(0xFF0D47A1),
+                          color: Color(0xFF2457F5),
                         ),
                         onPressed: () => Navigator.of(context).pop(),
                       ),
@@ -235,12 +235,12 @@ class _LoginScreenState extends State<LoginScreen>
                                         context,
                                       ).textTheme.headlineSmall?.copyWith(
                                         fontWeight: FontWeight.bold,
-                                        color: const Color(0xFF0D47A1),
+                                        color: const Color(0xFF2457F5),
                                       ) ??
                                       const TextStyle(
                                         fontSize: 24,
                                         fontWeight: FontWeight.bold,
-                                        color: Color(0xFF0D47A1),
+                                        color: Color(0xFF2457F5),
                                       ),
                                 ),
                                 const SizedBox(height: 8),

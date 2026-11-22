@@ -12,9 +12,9 @@ class LiveBroadcastScreen extends StatefulWidget {
 
 class _LiveBroadcastScreenState extends State<LiveBroadcastScreen>
     with SingleTickerProviderStateMixin {
-  static const Color _navy = Color(0xFF0A192F);
+  static const Color _navy = Color(0xFF07172F);
   static const Color _slate = Color(0xFF5B677A);
-  static const Color _softSlate = Color(0xFFE7ECF3);
+  static const Color _softSlate = Color(0xFFE8F0FF);
 
   late final AnimationController _pulseController;
   final TextEditingController _chatController = TextEditingController();
@@ -170,7 +170,7 @@ class _LiveBroadcastScreenState extends State<LiveBroadcastScreen>
     return DefaultTabController(
       length: 3,
       child: Scaffold(
-        backgroundColor: const Color(0xFFF4F7FB),
+        backgroundColor: const Color(0xFFF7F9FD),
         appBar: AppBar(
           backgroundColor: _navy,
           foregroundColor: Colors.white,
@@ -196,7 +196,7 @@ class _LiveBroadcastScreenState extends State<LiveBroadcastScreen>
                 decoration: BoxDecoration(
                   color: Colors.white,
                   borderRadius: BorderRadius.circular(14),
-                  border: Border.all(color: const Color(0xFFD7DEE8)),
+                  border: Border.all(color: const Color(0xFFE8F0FF)),
                 ),
                 child: const TabBar(
                   labelColor: _navy,
@@ -269,8 +269,8 @@ class _BroadcastPlayer extends StatelessWidget {
                         begin: Alignment.topCenter,
                         end: Alignment.bottomCenter,
                         colors: [
-                          const Color(0xFF0B1020).withOpacity(0.16),
-                          const Color(0xFF0B1020).withOpacity(0.72),
+                          const Color(0xFF07172F).withOpacity(0.16),
+                          const Color(0xFF07172F).withOpacity(0.72),
                         ],
                       ),
                     ),
@@ -342,7 +342,7 @@ class _BroadcastPlayer extends StatelessWidget {
                 const Center(
                   child: Icon(
                     Icons.play_circle_fill_rounded,
-                    color: Color(0xFFF8FAFC),
+                    color: Color(0xFFF7F9FD),
                     size: 76,
                   ),
                 ),
@@ -402,7 +402,7 @@ class _SessionContextCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: const Color(0xFFD7DEE8)),
+        border: Border.all(color: const Color(0xFFE8F0FF)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -410,7 +410,7 @@ class _SessionContextCard extends StatelessWidget {
           const Text(
             'Mathematics N4 - Calculus Fundamentals',
             style: TextStyle(
-              color: Color(0xFF0A192F),
+              color: Color(0xFF07172F),
               fontSize: 19,
               fontWeight: FontWeight.w800,
             ),
@@ -427,9 +427,9 @@ class _SessionContextCard extends StatelessWidget {
           Container(
             padding: const EdgeInsets.all(14),
             decoration: BoxDecoration(
-              color: const Color(0xFFF8FAFC),
+              color: const Color(0xFFF7F9FD),
               borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: const Color(0xFFE2E8F0)),
+              border: Border.all(color: const Color(0xFFE8F0FF)),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -437,7 +437,7 @@ class _SessionContextCard extends StatelessWidget {
                 const Text(
                   'Attendance Logged: 15:00 / 30:00',
                   style: TextStyle(
-                    color: Color(0xFF0A192F),
+                    color: Color(0xFF07172F),
                     fontWeight: FontWeight.w800,
                   ),
                 ),
@@ -447,9 +447,9 @@ class _SessionContextCard extends StatelessWidget {
                   child: const LinearProgressIndicator(
                     value: 0.5,
                     minHeight: 10,
-                    backgroundColor: Color(0xFFE5EAF2),
+                    backgroundColor: Color(0xFFE8F0FF),
                     valueColor: AlwaysStoppedAnimation<Color>(
-                      Color(0xFF0A192F),
+                      Color(0xFF07172F),
                     ),
                   ),
                 ),
@@ -483,7 +483,7 @@ class _LiveQATab extends StatelessWidget {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: const Color(0xFFD7DEE8)),
+        border: Border.all(color: const Color(0xFFE8F0FF)),
       ),
       child: Column(
         children: [
@@ -510,7 +510,7 @@ class _LiveQATab extends StatelessWidget {
           Container(
             padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
             decoration: const BoxDecoration(
-              border: Border(top: BorderSide(color: Color(0xFFE2E8F0))),
+              border: Border(top: BorderSide(color: Color(0xFFE8F0FF))),
             ),
             child: Row(
               children: [
@@ -520,18 +520,18 @@ class _LiveQATab extends StatelessWidget {
                     decoration: InputDecoration(
                       hintText: 'Ask a question...',
                       filled: true,
-                      fillColor: const Color(0xFFF8FAFC),
+                      fillColor: const Color(0xFFF7F9FD),
                       contentPadding: const EdgeInsets.symmetric(
                         horizontal: 14,
                         vertical: 12,
                       ),
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
-                        borderSide: const BorderSide(color: Color(0xFFD7DEE8)),
+                        borderSide: const BorderSide(color: Color(0xFFE8F0FF)),
                       ),
                       enabledBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
-                        borderSide: const BorderSide(color: Color(0xFFD7DEE8)),
+                        borderSide: const BorderSide(color: Color(0xFFE8F0FF)),
                       ),
                     ),
                   ),
@@ -539,7 +539,7 @@ class _LiveQATab extends StatelessWidget {
                 const SizedBox(width: 10),
                 Container(
                   decoration: BoxDecoration(
-                    color: const Color(0xFF0A192F),
+                    color: const Color(0xFF07172F),
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: IconButton(
@@ -579,7 +579,7 @@ class _ChatBubble extends StatelessWidget {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: const Color(0xFFE2E8F0)),
+        border: Border.all(color: const Color(0xFFE8F0FF)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -587,7 +587,7 @@ class _ChatBubble extends StatelessWidget {
           Text(
             message.author,
             style: TextStyle(
-              color: const Color(0xFF0A192F),
+              color: const Color(0xFF07172F),
               fontWeight: FontWeight.w800,
             ),
           ),
@@ -595,7 +595,7 @@ class _ChatBubble extends StatelessWidget {
           Text(
             message.message,
             style: const TextStyle(
-              color: Color(0xFF1E293B),
+              color: Color(0xFF0D47A1),
               height: 1.35,
               fontWeight: FontWeight.w500,
             ),
@@ -623,7 +623,7 @@ class _ClassNotesTab extends StatelessWidget {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: const Color(0xFFD7DEE8)),
+        border: Border.all(color: const Color(0xFFE8F0FF)),
       ),
       child: TextField(
         controller: notesController,
@@ -634,20 +634,20 @@ class _ClassNotesTab extends StatelessWidget {
         decoration: InputDecoration(
           hintText:
               'Write your private lecture notes here while the stream continues...',
-          hintStyle: const TextStyle(color: Color(0xFF94A3B8)),
+          hintStyle: const TextStyle(color: Color(0xFF2457F5)),
           filled: true,
-          fillColor: const Color(0xFFF8FAFC),
+          fillColor: const Color(0xFFF7F9FD),
           border: OutlineInputBorder(
             borderRadius: BorderRadius.circular(14),
-            borderSide: const BorderSide(color: Color(0xFFD7DEE8)),
+            borderSide: const BorderSide(color: Color(0xFFE8F0FF)),
           ),
           enabledBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(14),
-            borderSide: const BorderSide(color: Color(0xFFD7DEE8)),
+            borderSide: const BorderSide(color: Color(0xFFE8F0FF)),
           ),
           focusedBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(14),
-            borderSide: const BorderSide(color: Color(0xFF0A192F), width: 1.4),
+            borderSide: const BorderSide(color: Color(0xFF07172F), width: 1.4),
           ),
         ),
       ),
@@ -665,15 +665,15 @@ class _ResourcesTab extends StatelessWidget {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: const Color(0xFFD7DEE8)),
+        border: Border.all(color: const Color(0xFFE8F0FF)),
       ),
       child: Card(
         margin: EdgeInsets.zero,
         elevation: 0,
-        color: const Color(0xFFF8FAFC),
+        color: const Color(0xFFF7F9FD),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(14),
-          side: const BorderSide(color: Color(0xFFE2E8F0)),
+          side: const BorderSide(color: Color(0xFFE8F0FF)),
         ),
         child: ListTile(
           contentPadding: const EdgeInsets.symmetric(
@@ -681,13 +681,13 @@ class _ResourcesTab extends StatelessWidget {
             vertical: 6,
           ),
           leading: const CircleAvatar(
-            backgroundColor: Color(0xFFE2E8F0),
+            backgroundColor: Color(0xFFE8F0FF),
             child: Icon(Icons.picture_as_pdf_rounded, color: Color(0xFFB91C1C)),
           ),
           title: const Text(
             'Calculus_Cheat_Sheet.pdf',
             style: TextStyle(
-              color: Color(0xFF0A192F),
+              color: Color(0xFF07172F),
               fontWeight: FontWeight.w700,
             ),
           ),
@@ -704,7 +704,7 @@ class _ResourcesTab extends StatelessWidget {
                 const SnackBar(content: Text('Resource download started.')),
               );
             },
-            icon: const Icon(Icons.download_rounded, color: Color(0xFF0A192F)),
+            icon: const Icon(Icons.download_rounded, color: Color(0xFF07172F)),
             tooltip: 'Download',
           ),
         ),

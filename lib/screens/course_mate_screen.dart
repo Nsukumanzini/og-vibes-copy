@@ -28,7 +28,7 @@ class _CourseMateScreenState extends State<CourseMateScreen> {
         members: '4/6',
         focus: 'Past Papers',
         meeting: 'Library / WhatsApp',
-        accent: Color(0xFF1565C0),
+        accent: Color(0xFF2457F5),
       ),
       _StudyGroup(
         name: 'Mech Draughting Distinction Seekers',
@@ -97,14 +97,14 @@ class _CourseMateScreenState extends State<CourseMateScreen> {
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
         gradient: const LinearGradient(
-          colors: [Color(0xFF0D47A1), Color(0xFF1976D2)],
+          colors: [Color(0xFF2457F5), Color(0xFF2457F5)],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
         borderRadius: BorderRadius.circular(24),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFF0D47A1).withValues(alpha: 0.28),
+            color: const Color(0xFF2457F5).withValues(alpha: 0.28),
             blurRadius: 14,
             offset: const Offset(0, 6),
           ),
@@ -201,7 +201,7 @@ class _CourseGroupCard extends StatelessWidget {
             group.name,
             style: const TextStyle(
               fontSize: 16,
-              color: Color(0xFF102027),
+              color: Color(0xFF07172F),
               fontWeight: FontWeight.w800,
               height: 1.35,
             ),
@@ -266,13 +266,13 @@ class _InfoRow extends StatelessWidget {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Icon(icon, size: 18, color: const Color(0xFF546E7A)),
+        Icon(icon, size: 18, color: const Color(0xFF2457F5)),
         const SizedBox(width: 8),
         Expanded(
           child: RichText(
             text: TextSpan(
               style: const TextStyle(
-                color: Color(0xFF37474F),
+                color: Color(0xFF0D47A1),
                 fontSize: 13,
                 height: 1.35,
               ),

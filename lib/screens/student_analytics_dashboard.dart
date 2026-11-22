@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 class StudentAnalyticsDashboard extends StatelessWidget {
   const StudentAnalyticsDashboard({super.key});
 
-  static const Color _navy = Color(0xFF0A192F);
+  static const Color _navy = Color(0xFF07172F);
   // ignore: unused_field
   static const Color _slate = Color(0xFF5B677A);
   static const Color _white = Color(0xFFFFFFFF);
@@ -15,22 +15,22 @@ class StudentAnalyticsDashboard extends StatelessWidget {
       _CourseHours(
         course: 'Mathematics N4',
         hours: 6.2,
-        color: Color(0xFF1D4ED8),
+        color: Color(0xFF2457F5),
       ),
       _CourseHours(
         course: 'Computer Practice N4',
         hours: 5.0,
-        color: Color(0xFF0F766E),
+        color: Color(0xFF0D47A1),
       ),
       _CourseHours(
         course: 'Entrepreneurship N4',
         hours: 3.3,
-        color: Color(0xFF7C3AED),
+        color: Color(0xFF2457F5),
       ),
     ];
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF4F7FB),
+      backgroundColor: const Color(0xFFF7F9FD),
       appBar: AppBar(
         elevation: 0,
         backgroundColor: _navy,
@@ -95,7 +95,7 @@ class _HeroMetricCard extends StatelessWidget {
         gradient: const LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [Color(0xFF0A192F), Color(0xFF1E3A5F)],
+          colors: [Color(0xFF07172F), Color(0xFF0D47A1)],
         ),
         borderRadius: BorderRadius.circular(18),
         boxShadow: const [
@@ -122,7 +122,7 @@ class _HeroMetricCard extends StatelessWidget {
                     strokeWidth: 9,
                     backgroundColor: const Color(0x3DFFFFFF),
                     valueColor: const AlwaysStoppedAnimation<Color>(
-                      Color(0xFF67E8F9),
+                      Color(0xFF7FA2FF),
                     ),
                   ),
                 ),
@@ -154,7 +154,7 @@ class _HeroMetricCard extends StatelessWidget {
                 Text(
                   'Total Time Spent Learning This Week (+2 hrs from last week)',
                   style: TextStyle(
-                    color: Color(0xFFE2E8F0),
+                    color: Color(0xFFE8F0FF),
                     fontWeight: FontWeight.w600,
                     height: 1.35,
                   ),
@@ -181,7 +181,7 @@ class _BreakdownCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: const Color(0xFFFFFFFF),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFFD7DEE8)),
+        border: Border.all(color: const Color(0xFFE8F0FF)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -189,7 +189,7 @@ class _BreakdownCard extends StatelessWidget {
           const Text(
             'Weekly Breakdown By Course',
             style: TextStyle(
-              color: Color(0xFF0A192F),
+              color: Color(0xFF07172F),
               fontWeight: FontWeight.w800,
               fontSize: 17,
             ),
@@ -236,7 +236,7 @@ class _BreakdownRow extends StatelessWidget {
               child: Text(
                 course,
                 style: const TextStyle(
-                  color: Color(0xFF0A192F),
+                  color: Color(0xFF07172F),
                   fontWeight: FontWeight.w700,
                 ),
               ),
@@ -256,7 +256,7 @@ class _BreakdownRow extends StatelessWidget {
           child: LinearProgressIndicator(
             minHeight: 10,
             value: ratio,
-            backgroundColor: const Color(0xFFE8EDF4),
+            backgroundColor: const Color(0xFFE8F0FF),
             valueColor: AlwaysStoppedAnimation<Color>(color),
           ),
         ),
@@ -273,18 +273,18 @@ class _InsightCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: const Color(0xFFFFFFFF),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFFD7DEE8)),
+        border: Border.all(color: const Color(0xFFE8F0FF)),
       ),
       child: const Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(Icons.lightbulb_rounded, color: Color(0xFFCA8A04)),
+          Icon(Icons.lightbulb_rounded, color: Color(0xFFFFC107)),
           SizedBox(width: 10),
           Expanded(
             child: Text(
               'Insight: You are in the Top 15% of active learners at the Ermelo Campus this month! Keep it up.',
               style: TextStyle(
-                color: Color(0xFF0A192F),
+                color: Color(0xFF07172F),
                 fontWeight: FontWeight.w600,
                 height: 1.4,
               ),

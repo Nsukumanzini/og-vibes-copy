@@ -752,7 +752,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       child: Text(
         label,
         style: TextStyle(
-          color: color == const Color(0xFFB9E8FF)
+          color: color == const Color(0xFFE8F0FF)
               ? AppColors.primaryStrong
               : Colors.white,
           fontSize: 12,
@@ -764,7 +764,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   Widget _buildShimmerState() {
     return Container(
-      color: const Color(0xFFF5F7FA),
+      color: const Color(0xFFF7F9FD),
       child: Padding(
         padding: const EdgeInsets.fromLTRB(20, 20, 20, 32),
         child: Shimmer.fromColors(

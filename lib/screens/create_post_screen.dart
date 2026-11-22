@@ -176,7 +176,7 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
           mainAxisSize: MainAxisSize.min,
           children: [
             ListTile(
-              leading: const Icon(Icons.camera_alt, color: Color(0xFF2962FF)),
+              leading: const Icon(Icons.camera_alt, color: Color(0xFF2457F5)),
               title: const Text('Take a photo'),
               onTap: () async {
                 Navigator.pop(context);
@@ -202,7 +202,7 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
             ListTile(
               leading: const Icon(
                 Icons.video_library_rounded,
-                color: Color(0xFF2962FF),
+                color: Color(0xFF2457F5),
               ),
               title: const Text('Add a video'),
               subtitle: const Text('Up to 25 MB'),
@@ -240,7 +240,7 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
             ListTile(
               leading: const Icon(
                 Icons.photo_library,
-                color: Color(0xFF2962FF),
+                color: Color(0xFF2457F5),
               ),
               title: const Text('Pick from gallery'),
               onTap: () async {
@@ -267,7 +267,7 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
             ListTile(
               leading: const Icon(
                 Icons.insert_drive_file,
-                color: Color(0xFF2962FF),
+                color: Color(0xFF2457F5),
               ),
               title: const Text('Upload a file'),
               onTap: () async {
@@ -394,7 +394,7 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
                     'Add Tags',
                     style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                       fontWeight: FontWeight.bold,
-                      color: const Color(0xFF0D47A1),
+                      color: const Color(0xFF2457F5),
                     ),
                   ),
                   const SizedBox(height: 10),
@@ -440,8 +440,8 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
                         return Chip(
                           label: Text(tag),
                           onDeleted: () => _removeTag(tag),
-                          backgroundColor: const Color(0xFFE3F2FD),
-                          labelStyle: const TextStyle(color: Color(0xFF0D47A1)),
+                          backgroundColor: const Color(0xFFF7F9FD),
+                          labelStyle: const TextStyle(color: Color(0xFF2457F5)),
                         );
                       }).toList(),
                     ),
@@ -460,7 +460,7 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
             ),
             child: ListTile(
               leading: const CircleAvatar(
-                backgroundColor: Color(0xFF2962FF),
+                backgroundColor: Color(0xFF2457F5),
                 child: Icon(Icons.add_photo_alternate, color: Colors.white),
               ),
               title: const Text('Add Media'),
@@ -480,7 +480,7 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
               'Attachments (${_attachments.length})',
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                 fontWeight: FontWeight.bold,
-                color: const Color(0xFF0D47A1),
+                color: const Color(0xFF2457F5),
               ),
             ),
             const SizedBox(height: 12),
@@ -527,7 +527,7 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
                                               ? Icons.play_circle_fill_rounded
                                               : Icons.insert_drive_file_rounded,
                                           size: 34,
-                                          color: const Color(0xFF2962FF),
+                                          color: const Color(0xFF2457F5),
                                         ),
                                         const SizedBox(height: 10),
                                         Text(

@@ -177,13 +177,13 @@ class _CampusEventsScreenState extends State<CampusEventsScreen> {
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(22),
         gradient: const LinearGradient(
-          colors: [Color(0xFF2962FF), Color(0xFF6A5AE0)],
+          colors: [Color(0xFF2457F5), Color(0xFF2457F5)],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFF2962FF).withValues(alpha: 0.3),
+            color: const Color(0xFF2457F5).withValues(alpha: 0.3),
             blurRadius: 16,
             offset: const Offset(0, 8),
           ),
@@ -282,7 +282,7 @@ class _CampusEventsScreenState extends State<CampusEventsScreen> {
                     width: 8,
                     height: 8,
                     decoration: const BoxDecoration(
-                      color: Color(0xFF2962FF),
+                      color: Color(0xFF2457F5),
                       shape: BoxShape.circle,
                     ),
                   ),

@@ -48,7 +48,7 @@ class _FlashcardsScreenState extends State<FlashcardsScreen> {
               style: const TextStyle(
                 fontSize: 20,
                 fontWeight: FontWeight.w800,
-                color: Color(0xFF102027),
+                color: Color(0xFF07172F),
               ),
             ),
             const SizedBox(height: 8),
@@ -57,7 +57,7 @@ class _FlashcardsScreenState extends State<FlashcardsScreen> {
                   ? 'Deck completed'
                   : 'Card ${_currentIndex + 1} of ${_flashcards.length}',
               style: const TextStyle(
-                color: Color(0xFF607D8B),
+                color: Color(0xFF2457F5),
                 fontWeight: FontWeight.w700,
               ),
             ),
@@ -66,9 +66,9 @@ class _FlashcardsScreenState extends State<FlashcardsScreen> {
               value: _completed ? 1 : (_currentIndex + 1) / _flashcards.length,
               minHeight: 8,
               borderRadius: BorderRadius.circular(99),
-              backgroundColor: const Color(0xFFE3ECF5),
+              backgroundColor: const Color(0xFFE8F0FF),
               valueColor: const AlwaysStoppedAnimation<Color>(
-                Color(0xFF1565C0),
+                Color(0xFF2457F5),
               ),
             ),
             const SizedBox(height: 20),
@@ -140,7 +140,7 @@ class _FlashcardsScreenState extends State<FlashcardsScreen> {
                   end: Alignment.bottomRight,
                 )
               : const LinearGradient(
-                  colors: <Color>[Color(0xFF0D47A1), Color(0xFF1976D2)],
+                  colors: <Color>[Color(0xFF2457F5), Color(0xFF2457F5)],
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
                 ),
@@ -227,7 +227,7 @@ class _FlashcardsScreenState extends State<FlashcardsScreen> {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: const Color(0xFFDDE7F1)),
+        border: Border.all(color: const Color(0xFFE8F0FF)),
       ),
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -242,7 +242,7 @@ class _FlashcardsScreenState extends State<FlashcardsScreen> {
             'Deck completed! Great studying.',
             textAlign: TextAlign.center,
             style: TextStyle(
-              color: Color(0xFF102027),
+              color: Color(0xFF07172F),
               fontSize: 20,
               fontWeight: FontWeight.w800,
             ),
@@ -259,8 +259,8 @@ class _FlashcardsScreenState extends State<FlashcardsScreen> {
             icon: const Icon(Icons.replay_rounded),
             label: const Text('Restart Deck'),
             style: OutlinedButton.styleFrom(
-              foregroundColor: const Color(0xFF1565C0),
-              side: const BorderSide(color: Color(0xFF1565C0)),
+              foregroundColor: const Color(0xFF2457F5),
+              side: const BorderSide(color: Color(0xFF2457F5)),
             ),
           ),
         ],

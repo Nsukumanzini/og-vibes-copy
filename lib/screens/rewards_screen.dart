@@ -119,13 +119,13 @@ class _RewardsScreenState extends State<RewardsScreen> {
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(24),
         gradient: const LinearGradient(
-          colors: [Color(0xFF2962FF), Color(0xFF6A5AE0)],
+          colors: [Color(0xFF2457F5), Color(0xFF2457F5)],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFF2962FF).withValues(alpha: 0.28),
+            color: const Color(0xFF2457F5).withValues(alpha: 0.28),
             blurRadius: 16,
             offset: const Offset(0, 8),
           ),
@@ -145,7 +145,7 @@ class _RewardsScreenState extends State<RewardsScreen> {
           Text(
             points.toString(),
             style: const TextStyle(
-              color: Color(0xFFFFEB3B),
+              color: Color(0xFFFFC107),
               fontWeight: FontWeight.w900,
               fontSize: 44,
             ),
@@ -158,7 +158,7 @@ class _RewardsScreenState extends State<RewardsScreen> {
               minHeight: 10,
               backgroundColor: Colors.white.withValues(alpha: 0.2),
               valueColor: const AlwaysStoppedAnimation<Color>(
-                Color(0xFFFFEB3B),
+                Color(0xFFFFC107),
               ),
             ),
           ),

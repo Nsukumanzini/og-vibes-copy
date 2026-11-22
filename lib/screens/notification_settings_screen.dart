@@ -1,3 +1,4 @@
+import 'package:og_vibes_student/utils/theme_constants.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -47,13 +48,13 @@ class _NotificationSettingsScreenState
       appBar: AppBar(
         title: const Text(
           'Notification Manager',
-          style: TextStyle(color: Colors.white),
+          style: TextStyle(color: AppColors.midnightInk),
         ),
         backgroundColor: Colors.transparent,
         elevation: 0,
-        iconTheme: const IconThemeData(color: Colors.white),
+        iconTheme: const IconThemeData(color: AppColors.midnightInk),
         titleTextStyle: const TextStyle(
-          color: Colors.white,
+          color: AppColors.midnightInk,
           fontSize: 20,
           fontWeight: FontWeight.bold,
         ),
@@ -63,7 +64,7 @@ class _NotificationSettingsScreenState
           gradient: LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
-            colors: [Color(0xFF0D47A1), Color(0xFF2962FF), Color(0xFF6200EA)],
+            colors: [AppColors.surface, AppColors.auroraCanvas, AppColors.blueTint],
           ),
         ),
         child: _isLoading
@@ -111,7 +112,7 @@ class _NotificationSettingsScreenState
     required ValueChanged<bool> onChanged,
   }) {
     return Card(
-      color: Colors.white.withValues(alpha: 0.1),
+      color: AppColors.surface,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       margin: const EdgeInsets.only(bottom: 16),
       child: SwitchListTile.adaptive(
@@ -120,14 +121,14 @@ class _NotificationSettingsScreenState
         title: Text(
           title,
           style: const TextStyle(
-            color: Colors.white,
+            color: AppColors.midnightInk,
             fontWeight: FontWeight.bold,
           ),
         ),
-        subtitle: Text(subtitle, style: const TextStyle(color: Colors.white70)),
-        activeThumbColor: Colors.amber,
-        inactiveThumbColor: Colors.white54,
-        inactiveTrackColor: Colors.white24,
+        subtitle: Text(subtitle, style: const TextStyle(color: AppColors.textMuted)),
+        activeThumbColor: AppColors.ogGold,
+        inactiveThumbColor: AppColors.textMuted,
+        inactiveTrackColor: AppColors.glassBorder,
       ),
     );
   }

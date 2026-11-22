@@ -36,7 +36,7 @@ class _VideoTutorialsScreenState extends State<VideoTutorialsScreen> {
         duration: '14:20',
         views: '1.2k',
         category: 'Engineering',
-        accent: Color(0xFF1565C0),
+        accent: Color(0xFF2457F5),
       ),
       _VideoTutorial(
         title: 'Bank Reconciliation Statements - Financial Accounting N4',
@@ -52,7 +52,7 @@ class _VideoTutorialsScreenState extends State<VideoTutorialsScreen> {
         duration: '10:05',
         views: '890',
         category: 'NC(V) IT',
-        accent: Color(0xFF5E35B1),
+        accent: Color(0xFF2457F5),
       ),
     ];
   }
@@ -138,15 +138,15 @@ class _VideoTutorialsScreenState extends State<VideoTutorialsScreen> {
               });
             },
             showCheckmark: false,
-            selectedColor: const Color(0xFF1A237E),
+            selectedColor: const Color(0xFF0D47A1),
             backgroundColor: Colors.white,
             side: BorderSide(
               color: selected
-                  ? const Color(0xFF1A237E)
+                  ? const Color(0xFF0D47A1)
                   : const Color(0xFFCFD8DC),
             ),
             labelStyle: TextStyle(
-              color: selected ? Colors.white : const Color(0xFF37474F),
+              color: selected ? Colors.white : const Color(0xFF0D47A1),
               fontWeight: FontWeight.w700,
             ),
           );
@@ -287,7 +287,7 @@ class _VideoCard extends StatelessWidget {
                     style: const TextStyle(
                       fontSize: 15,
                       fontWeight: FontWeight.w800,
-                      color: Color(0xFF102027),
+                      color: Color(0xFF07172F),
                       height: 1.35,
                     ),
                   ),
@@ -295,7 +295,7 @@ class _VideoCard extends StatelessWidget {
                   Text(
                     video.channel,
                     style: const TextStyle(
-                      color: Color(0xFF546E7A),
+                      color: Color(0xFF2457F5),
                       fontWeight: FontWeight.w600,
                     ),
                   ),
@@ -305,13 +305,13 @@ class _VideoCard extends StatelessWidget {
                       const Icon(
                         Icons.visibility_outlined,
                         size: 16,
-                        color: Color(0xFF607D8B),
+                        color: Color(0xFF2457F5),
                       ),
                       const SizedBox(width: 6),
                       Text(
                         '${video.views} views',
                         style: const TextStyle(
-                          color: Color(0xFF607D8B),
+                          color: Color(0xFF2457F5),
                           fontWeight: FontWeight.w600,
                         ),
                       ),

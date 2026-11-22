@@ -1469,12 +1469,12 @@ class _SmallPill extends StatelessWidget {
     child: Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Icon(icon, size: 12, color: const Color(0xFF9C7300)),
+        Icon(icon, size: 12, color: const Color(0xFF775700)),
         const SizedBox(width: 4),
         Text(
           label,
           style: const TextStyle(
-            color: Color(0xFF9C7300),
+            color: Color(0xFF775700),
             fontSize: 9,
             fontWeight: FontWeight.w900,
           ),

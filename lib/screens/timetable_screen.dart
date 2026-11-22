@@ -427,7 +427,7 @@ class _TimetableScreenState extends State<TimetableScreen> {
               colors: [
                 AppColors.midnightInk,
                 AppColors.vibeBlue,
-                Color(0xFF16A4C8),
+                Color(0xFF2457F5),
               ],
             ),
             borderRadius: AppStyles.bentoRadius,

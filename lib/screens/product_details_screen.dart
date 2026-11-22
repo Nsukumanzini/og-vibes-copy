@@ -105,7 +105,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(20),
         gradient: const LinearGradient(
-          colors: [Color(0xFF2962FF), Color(0xFF00ACC1)],
+          colors: [Color(0xFF2457F5), Color(0xFF2457F5)],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
@@ -146,7 +146,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
           Text(
             data['price']!,
             style: const TextStyle(
-              color: Color(0xFF2962FF),
+              color: Color(0xFF2457F5),
               fontWeight: FontWeight.w800,
               fontSize: 20,
             ),
@@ -183,8 +183,8 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
           ListTile(
             contentPadding: EdgeInsets.zero,
             leading: CircleAvatar(
-              backgroundColor: const Color(0xFF2962FF).withValues(alpha: 0.15),
-              child: const Icon(Icons.person, color: Color(0xFF2962FF)),
+              backgroundColor: const Color(0xFF2457F5).withValues(alpha: 0.15),
+              child: const Icon(Icons.person, color: Color(0xFF2457F5)),
             ),
             title: Text(
               data['seller']!,
@@ -201,18 +201,18 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
-        color: const Color(0xFF2962FF).withValues(alpha: 0.1),
+        color: const Color(0xFF2457F5).withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(999),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 15, color: const Color(0xFF2962FF)),
+          Icon(icon, size: 15, color: const Color(0xFF2457F5)),
           const SizedBox(width: 6),
           Text(
             label,
             style: const TextStyle(
-              color: Color(0xFF2962FF),
+              color: Color(0xFF2457F5),
               fontWeight: FontWeight.w700,
               fontSize: 12,
             ),

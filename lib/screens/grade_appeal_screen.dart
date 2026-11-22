@@ -8,7 +8,7 @@ class GradeAppealScreen extends StatefulWidget {
 }
 
 class _GradeAppealScreenState extends State<GradeAppealScreen> {
-  static const Color _navy = Color(0xFF0A192F);
+  static const Color _navy = Color(0xFF07172F);
   static const Color _slate = Color(0xFF5B677A);
   static const Color _white = Color(0xFFFFFFFF);
 
@@ -25,7 +25,7 @@ class _GradeAppealScreenState extends State<GradeAppealScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF4F7FB),
+      backgroundColor: const Color(0xFFF7F9FD),
       appBar: AppBar(
         backgroundColor: _navy,
         foregroundColor: _white,
@@ -44,7 +44,7 @@ class _GradeAppealScreenState extends State<GradeAppealScreen> {
               decoration: BoxDecoration(
                 color: _white,
                 borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: const Color(0xFFD7DEE8)),
+                border: Border.all(color: const Color(0xFFE8F0FF)),
                 boxShadow: const [
                   BoxShadow(
                     color: Color(0x120A192F),
@@ -79,9 +79,9 @@ class _GradeAppealScreenState extends State<GradeAppealScreen> {
                       vertical: 10,
                     ),
                     decoration: BoxDecoration(
-                      color: const Color(0xFFF8FAFC),
+                      color: const Color(0xFFF7F9FD),
                       borderRadius: BorderRadius.circular(10),
-                      border: Border.all(color: const Color(0xFFDCE3EE)),
+                      border: Border.all(color: const Color(0xFFE8F0FF)),
                     ),
                     child: const Row(
                       children: [
@@ -111,18 +111,18 @@ class _GradeAppealScreenState extends State<GradeAppealScreen> {
                     value: _selectedReason,
                     decoration: InputDecoration(
                       filled: true,
-                      fillColor: const Color(0xFFF8FAFC),
+                      fillColor: const Color(0xFFF7F9FD),
                       contentPadding: const EdgeInsets.symmetric(
                         horizontal: 12,
                         vertical: 12,
                       ),
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(10),
-                        borderSide: const BorderSide(color: Color(0xFFDCE3EE)),
+                        borderSide: const BorderSide(color: Color(0xFFE8F0FF)),
                       ),
                       enabledBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(10),
-                        borderSide: const BorderSide(color: Color(0xFFDCE3EE)),
+                        borderSide: const BorderSide(color: Color(0xFFE8F0FF)),
                       ),
                     ),
                     items: const [
@@ -161,14 +161,14 @@ class _GradeAppealScreenState extends State<GradeAppealScreen> {
                       hintText: 'Please explain your dispute...',
                       hintStyle: const TextStyle(color: Color(0xFF8A94A6)),
                       filled: true,
-                      fillColor: const Color(0xFFF8FAFC),
+                      fillColor: const Color(0xFFF7F9FD),
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(10),
-                        borderSide: const BorderSide(color: Color(0xFFDCE3EE)),
+                        borderSide: const BorderSide(color: Color(0xFFE8F0FF)),
                       ),
                       enabledBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(10),
-                        borderSide: const BorderSide(color: Color(0xFFDCE3EE)),
+                        borderSide: const BorderSide(color: Color(0xFFE8F0FF)),
                       ),
                       focusedBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(10),

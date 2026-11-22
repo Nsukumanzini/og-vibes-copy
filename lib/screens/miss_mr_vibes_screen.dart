@@ -1,3 +1,4 @@
+import 'package:og_vibes_student/utils/theme_constants.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -27,13 +28,13 @@ class _MissMrVibesScreenState extends State<MissMrVibesScreen> {
         'name': 'Siyabonga',
         'course': 'IT L4',
         'votes': 340,
-        'accent': Color(0xFF2962FF),
+        'accent': Color(0xFF2457F5),
       },
       {
         'name': 'Nomsa',
         'course': 'Hospitality',
         'votes': 412,
-        'accent': Color(0xFFE91E63),
+        'accent': AppColors.deepBlue,
       },
     ];
   }
@@ -44,7 +45,7 @@ class _MissMrVibesScreenState extends State<MissMrVibesScreen> {
       body: Container(
         decoration: const BoxDecoration(
           gradient: LinearGradient(
-            colors: [Color(0xFF0D0D11), Color(0xFF2D033B), Color(0xFF810CA8)],
+            colors: [AppColors.surface, AppColors.auroraCanvas, AppColors.blueTint],
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
           ),
@@ -81,7 +82,7 @@ class _MissMrVibesScreenState extends State<MissMrVibesScreen> {
                       child: Text(
                         'Miss & Mr Vibes Voting Gallery',
                         style: TextStyle(
-                          color: Colors.white,
+                          color: AppColors.midnightInk,
                           fontWeight: FontWeight.w900,
                           fontSize: 24,
                         ),
@@ -102,15 +103,15 @@ class _MissMrVibesScreenState extends State<MissMrVibesScreen> {
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 14, 16, 30),
       child: Shimmer.fromColors(
-        baseColor: Colors.white24,
-        highlightColor: Colors.white38,
+        baseColor: AppColors.glassBorder,
+        highlightColor: AppColors.blueTint,
         child: ListView.separated(
           itemCount: 2,
           separatorBuilder: (_, _) => const SizedBox(height: 12),
           itemBuilder: (_, _) => Container(
             height: 230,
             decoration: BoxDecoration(
-              color: Colors.white,
+              color: AppColors.midnightInk,
               borderRadius: BorderRadius.circular(22),
             ),
           ),
@@ -135,8 +136,8 @@ class _ContestantCard extends StatelessWidget {
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(22),
-        color: Colors.white.withValues(alpha: 0.12),
-        border: Border.all(color: Colors.white24),
+        color: AppColors.surface,
+        border: Border.all(color: AppColors.glassBorder),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -160,7 +161,7 @@ class _ContestantCard extends StatelessWidget {
           Text(
             'Contestant: ${contestant['name']} (${contestant['course']})',
             style: const TextStyle(
-              color: Colors.white,
+              color: AppColors.midnightInk,
               fontWeight: FontWeight.w800,
               fontSize: 16,
             ),
@@ -169,7 +170,7 @@ class _ContestantCard extends StatelessWidget {
           Text(
             '$votes Votes',
             style: const TextStyle(
-              color: Colors.white70,
+              color: AppColors.textMuted,
               fontWeight: FontWeight.w700,
             ),
           ),

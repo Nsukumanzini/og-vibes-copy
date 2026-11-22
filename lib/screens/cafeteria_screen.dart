@@ -69,7 +69,7 @@ class _CafeteriaScreenState extends State<CafeteriaScreen> {
       isPopular: true,
       isAvailable: false,
       icon: Icons.lunch_dining_rounded,
-      accent: Color(0xFF607D8B),
+      accent: Color(0xFF2457F5),
     ),
     _MealItem(
       id: 'iced-rooibos',
@@ -82,7 +82,7 @@ class _CafeteriaScreenState extends State<CafeteriaScreen> {
       rating: 4.5,
       isPopular: false,
       icon: Icons.local_drink_rounded,
-      accent: Color(0xFF9C6B20),
+      accent: Color(0xFFFFC107),
     ),
   ];
 

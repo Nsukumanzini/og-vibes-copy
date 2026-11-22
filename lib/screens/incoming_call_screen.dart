@@ -59,7 +59,7 @@ class _IncomingCallScreenState extends State<IncomingCallScreen> {
             gradient: LinearGradient(
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
-              colors: [Color(0xFF07172F), Color(0xFF123F7E), Color(0xFF07A0BE)],
+              colors: [Color(0xFF07172F), Color(0xFF0D47A1), Color(0xFF2457F5)],
             ),
           ),
           child: SafeArea(

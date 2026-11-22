@@ -865,7 +865,7 @@ class _LostAndFoundScreenState extends State<LostAndFoundScreen>
                         return Container(
                           padding: const EdgeInsets.all(15),
                           decoration: BoxDecoration(
-                            color: const Color(0xFFF6F8FC),
+                            color: const Color(0xFFF7F9FD),
                             borderRadius: AppStyles.controlRadius,
                             border: Border.all(color: AppColors.glassBorder),
                           ),
@@ -875,7 +875,7 @@ class _LostAndFoundScreenState extends State<LostAndFoundScreen>
                               Row(
                                 children: <Widget>[
                                   const CircleAvatar(
-                                    backgroundColor: Color(0xFFE8EEFF),
+                                    backgroundColor: Color(0xFFF7F9FD),
                                     child: Icon(
                                       Icons.person_outline_rounded,
                                       color: AppColors.vibeBlue,
@@ -1561,7 +1561,7 @@ class _ReportSafetyStep extends StatelessWidget {
               height: 180,
               clipBehavior: Clip.antiAlias,
               decoration: BoxDecoration(
-                color: const Color(0xFFF1F5FC),
+                color: const Color(0xFFF7F9FD),
                 borderRadius: AppStyles.controlRadius,
                 border: Border.all(color: AppColors.glassBorder),
               ),
@@ -2240,7 +2240,7 @@ class _InfoPanel extends StatelessWidget {
       width: double.infinity,
       padding: const EdgeInsets.all(15),
       decoration: BoxDecoration(
-        color: const Color(0xFFF6F8FC),
+        color: const Color(0xFFF7F9FD),
         borderRadius: AppStyles.controlRadius,
         border: Border.all(color: AppColors.glassBorder),
       ),
@@ -2298,7 +2298,7 @@ class _CommunityHeroBadge extends StatelessWidget {
       padding: const EdgeInsets.all(15),
       decoration: BoxDecoration(
         gradient: const LinearGradient(
-          colors: <Color>[Color(0xFF0C9B70), Color(0xFF24B9AE)],
+          colors: <Color>[Color(0xFF0C9B70), Color(0xFF2457F5)],
         ),
         borderRadius: AppStyles.controlRadius,
         boxShadow: <BoxShadow>[

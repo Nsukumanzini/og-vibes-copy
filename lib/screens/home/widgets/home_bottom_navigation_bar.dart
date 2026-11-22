@@ -60,11 +60,11 @@ class HomeBottomNavigationBar extends StatelessWidget {
                 height: 72,
                 padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 7),
                 decoration: BoxDecoration(
-                  color: (dark ? const Color(0xFF0D1B31) : Colors.white)
+                  color: (dark ? const Color(0xFF07172F) : Colors.white)
                       .withValues(alpha: .92),
                   borderRadius: BorderRadius.circular(24),
                   border: Border.all(
-                    color: dark ? Colors.white12 : const Color(0xFFE2E9F4),
+                    color: dark ? Colors.white12 : const Color(0xFFE8F0FF),
                   ),
                   boxShadow: AppStyles.glassShadow,
                 ),

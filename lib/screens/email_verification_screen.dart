@@ -139,9 +139,9 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
             numberOfParticles: 28,
             gravity: 0.22,
             colors: const [
-              Color(0xFFFFD740),
-              Color(0xFF00D4FF),
-              Color(0xFF7C4DFF),
+              Color(0xFFFFC107),
+              Color(0xFF2457F5),
+              Color(0xFF2457F5),
               Colors.white,
             ],
           ),
@@ -175,13 +175,13 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
             decoration: const BoxDecoration(
               shape: BoxShape.circle,
               gradient: LinearGradient(
-                colors: [Color(0xFFFFD740), Color(0xFFFFA000)],
+                colors: [Color(0xFFFFC107), Color(0xFFFFC107)],
               ),
             ),
             child: const Icon(
               Icons.password_rounded,
               size: 44,
-              color: Color(0xFF071A3A),
+              color: Color(0xFF07172F),
             ),
           ),
           const SizedBox(height: 22),
@@ -220,7 +220,7 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
                 fontSize: 28,
                 fontWeight: FontWeight.w800,
                 letterSpacing: 10,
-                color: Color(0xFF071A3A),
+                color: Color(0xFF07172F),
               ),
               maxLength: 6,
               inputFormatters: [FilteringTextInputFormatter.digitsOnly],
@@ -234,7 +234,7 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
                 counterText: '',
                 hintText: '000000',
                 hintStyle: TextStyle(
-                  color: const Color(0xFF071A3A).withValues(alpha: 0.24),
+                  color: const Color(0xFF07172F).withValues(alpha: 0.24),
                   letterSpacing: 10,
                 ),
                 filled: true,
@@ -311,14 +311,14 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
           const Icon(
             Icons.auto_awesome_rounded,
             size: 80,
-            color: Color(0xFF1769E0),
+            color: Color(0xFF2457F5),
           ),
           const SizedBox(height: 18),
           Text(
             'Welcome to OG Vibes!',
             textAlign: TextAlign.center,
             style: theme.textTheme.headlineSmall?.copyWith(
-              color: const Color(0xFF071A3A),
+              color: const Color(0xFF07172F),
               fontWeight: FontWeight.w900,
             ),
           ),
@@ -326,7 +326,7 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
           const Text(
             'Your email is verified. We’re opening your campus feed now.',
             textAlign: TextAlign.center,
-            style: TextStyle(color: Color(0xFF53627A), height: 1.5),
+            style: TextStyle(color: Color(0xFF2457F5), height: 1.5),
           ),
           const SizedBox(height: 24),
           const CircularProgressIndicator(),

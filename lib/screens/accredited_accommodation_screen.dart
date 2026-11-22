@@ -886,7 +886,7 @@ class _PropertyImageCarouselState extends State<_PropertyImageCarousel> {
         borderRadius: widget.borderRadius,
         child: Container(
           height: widget.height,
-          color: const Color(0xFFEAF1FB),
+          color: const Color(0xFFF7F9FD),
           child: const Center(
             child: Icon(
               Icons.apartment_rounded,
@@ -911,9 +911,9 @@ class _PropertyImageCarouselState extends State<_PropertyImageCarousel> {
                 imageUrl: widget.images[index],
                 fit: BoxFit.cover,
                 placeholder: (_, _) =>
-                    Container(color: const Color(0xFFEAF1FB)),
+                    Container(color: const Color(0xFFF7F9FD)),
                 errorWidget: (_, _, _) => Container(
-                  color: const Color(0xFFEAF1FB),
+                  color: const Color(0xFFF7F9FD),
                   child: const Icon(
                     Icons.broken_image_outlined,
                     color: AppColors.textMuted,
@@ -1187,19 +1187,19 @@ class _AccommodationSafetyNotice extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: const Color(0xFFFFF7E1),
+        color: const Color(0xFFFFF6D6),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFFF0C453)),
+        border: Border.all(color: const Color(0xFFFFC107)),
       ),
       child: const Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
-          Icon(Icons.shield_outlined, color: Color(0xFF8A5A00)),
+          Icon(Icons.shield_outlined, color: Color(0xFF775700)),
           SizedBox(width: 10),
           Expanded(
             child: Text(
               'Safety first: visit the property and confirm its details before paying. Do not send a deposit because of a listing alone.',
-              style: TextStyle(color: Color(0xFF674600), height: 1.35),
+              style: TextStyle(color: Color(0xFF775700), height: 1.35),
             ),
           ),
         ],
@@ -1339,7 +1339,7 @@ class _AmenityChip extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
-        color: const Color(0xFFEFF5FF),
+        color: const Color(0xFFF7F9FD),
         borderRadius: BorderRadius.circular(14),
       ),
       child: Row(

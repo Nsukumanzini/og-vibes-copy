@@ -1085,7 +1085,7 @@ class _OnlineClassesScreenState extends State<OnlineClassesScreen>
               '30-minute attendance requirement • live timer and percentage '
               'start when you join',
               style: TextStyle(
-                color: Color(0xFF845E00),
+                color: Color(0xFF775700),
                 fontSize: 12,
                 fontWeight: FontWeight.w800,
               ),

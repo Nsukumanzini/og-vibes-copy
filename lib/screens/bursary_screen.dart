@@ -1,3 +1,4 @@
+import 'package:og_vibes_student/utils/theme_constants.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -64,7 +65,7 @@ class _BursaryScreenState extends State<BursaryScreen> {
           gradient: LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
-            colors: [Color(0xFF0D47A1), Color(0xFF2962FF), Color(0xFF6200EA)],
+            colors: [AppColors.surface, AppColors.auroraCanvas, AppColors.blueTint],
           ),
         ),
         child: FutureBuilder<List<Map<String, String>>>(
@@ -105,15 +106,15 @@ class _BursaryScreenState extends State<BursaryScreen> {
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 20, 20, 100),
       child: Shimmer.fromColors(
-        baseColor: Colors.white24,
-        highlightColor: Colors.white38,
+        baseColor: AppColors.glassBorder,
+        highlightColor: AppColors.blueTint,
         child: ListView.separated(
           itemCount: 3,
           separatorBuilder: (_, _) => const SizedBox(height: 14),
           itemBuilder: (_, _) => Container(
             height: 178,
             decoration: BoxDecoration(
-              color: Colors.white,
+              color: AppColors.midnightInk,
               borderRadius: BorderRadius.circular(22),
             ),
           ),
@@ -133,15 +134,15 @@ class _BursaryCard extends StatelessWidget {
     final tagColor = switch (data['tagColor']) {
       'red' => const Color(0xFFE53935),
       'green' => const Color(0xFF2E7D32),
-      _ => const Color(0xFF2962FF),
+      _ => const Color(0xFF2457F5),
     };
 
     return Container(
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(22),
-        color: Colors.white.withValues(alpha: 0.1),
-        border: Border.all(color: Colors.white24),
+        color: AppColors.surface,
+        border: Border.all(color: AppColors.glassBorder),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: 0.16),
@@ -159,7 +160,7 @@ class _BursaryCard extends StatelessWidget {
                 child: Text(
                   data['title']!,
                   style: const TextStyle(
-                    color: Colors.white,
+                    color: AppColors.midnightInk,
                     fontWeight: FontWeight.w800,
                     fontSize: 18,
                   ),
@@ -190,12 +191,12 @@ class _BursaryCard extends StatelessWidget {
           Text(
             data['subtitle']!,
             style: const TextStyle(
-              color: Colors.white70,
+              color: AppColors.textMuted,
               fontWeight: FontWeight.w700,
             ),
           ),
           const SizedBox(height: 10),
-          Text(data['details']!, style: const TextStyle(color: Colors.white70)),
+          Text(data['details']!, style: const TextStyle(color: AppColors.textMuted)),
           const SizedBox(height: 14),
           Align(
             alignment: Alignment.centerRight,

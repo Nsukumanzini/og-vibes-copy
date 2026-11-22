@@ -1,3 +1,4 @@
+import 'package:og_vibes_student/utils/theme_constants.dart';
 import 'package:flutter/material.dart';
 
 class SrcHelpDeskScreen extends StatefulWidget {
@@ -25,11 +26,11 @@ class _SrcHelpDeskScreenState extends State<SrcHelpDeskScreen> {
       appBar: AppBar(
         title: const Text(
           'SRC Help Desk',
-          style: TextStyle(color: Colors.white),
+          style: TextStyle(color: AppColors.midnightInk),
         ),
         backgroundColor: Colors.transparent,
         elevation: 0,
-        iconTheme: const IconThemeData(color: Colors.white),
+        iconTheme: const IconThemeData(color: AppColors.midnightInk),
       ),
       extendBodyBehindAppBar: true,
       body: Container(
@@ -37,7 +38,7 @@ class _SrcHelpDeskScreenState extends State<SrcHelpDeskScreen> {
           gradient: LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
-            colors: [Color(0xFF0D47A1), Color(0xFF2962FF), Color(0xFF6200EA)],
+            colors: [AppColors.surface, AppColors.auroraCanvas, AppColors.blueTint],
           ),
         ),
         child: Padding(
@@ -49,9 +50,9 @@ class _SrcHelpDeskScreenState extends State<SrcHelpDeskScreen> {
                 decoration: _glassInputDecoration(
                   'What do you need help with?',
                 ),
-                dropdownColor: const Color(0xFF0D47A1),
-                style: const TextStyle(color: Colors.white),
-                iconEnabledColor: Colors.white,
+                dropdownColor: const Color(0xFF2457F5),
+                style: const TextStyle(color: AppColors.midnightInk),
+                iconEnabledColor: AppColors.midnightInk,
                 initialValue: _selectedCategory,
                 items: _categories
                     .map(
@@ -59,7 +60,7 @@ class _SrcHelpDeskScreenState extends State<SrcHelpDeskScreen> {
                         value: category,
                         child: Text(
                           category,
-                          style: const TextStyle(color: Colors.white),
+                          style: const TextStyle(color: AppColors.midnightInk),
                         ),
                       ),
                     )
@@ -70,14 +71,14 @@ class _SrcHelpDeskScreenState extends State<SrcHelpDeskScreen> {
               TextField(
                 controller: _issueController,
                 maxLines: 6,
-                style: const TextStyle(color: Colors.white),
-                cursorColor: Colors.white,
+                style: const TextStyle(color: AppColors.midnightInk),
+                cursorColor: AppColors.midnightInk,
                 decoration: _glassInputDecoration('Describe your issue...'),
               ),
               const Spacer(),
               ElevatedButton(
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.pinkAccent,
+                  backgroundColor: AppColors.vibeBlue,
                   padding: const EdgeInsets.symmetric(vertical: 16),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(30),
@@ -90,7 +91,7 @@ class _SrcHelpDeskScreenState extends State<SrcHelpDeskScreen> {
                         height: 18,
                         child: CircularProgressIndicator(
                           strokeWidth: 2,
-                          color: Colors.white,
+                          color: AppColors.midnightInk,
                         ),
                       )
                     : const Text(
@@ -130,9 +131,9 @@ class _SrcHelpDeskScreenState extends State<SrcHelpDeskScreen> {
   InputDecoration _glassInputDecoration(String label) {
     return InputDecoration(
       labelText: label,
-      labelStyle: const TextStyle(color: Colors.white70),
+      labelStyle: const TextStyle(color: AppColors.textMuted),
       filled: true,
-      fillColor: Colors.white.withValues(alpha: 0.15),
+      fillColor: AppColors.surface,
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
         borderSide: const BorderSide(color: Colors.white30),
@@ -143,9 +144,9 @@ class _SrcHelpDeskScreenState extends State<SrcHelpDeskScreen> {
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
-        borderSide: const BorderSide(color: Colors.white),
+        borderSide: const BorderSide(color: AppColors.midnightInk),
       ),
-      hintStyle: const TextStyle(color: Colors.white54),
+      hintStyle: const TextStyle(color: AppColors.textMuted),
     );
   }
 }

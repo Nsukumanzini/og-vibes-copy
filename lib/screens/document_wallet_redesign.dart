@@ -967,7 +967,7 @@ class _PreviewSheetState extends State<PreviewSheet> {
     return Container(
       height: MediaQuery.sizeOf(context).height * .92,
       decoration: const BoxDecoration(
-        color: Color(0xFFF7F9FF),
+        color: Color(0xFFF7F9FD),
         borderRadius: BorderRadius.vertical(top: Radius.circular(32)),
       ),
       child: Column(
@@ -1817,7 +1817,7 @@ class UploadTask {
       return (Icons.picture_as_pdf_rounded, const Color(0xFFE5484D));
     case 'doc':
     case 'docx':
-      return (Icons.article_rounded, const Color(0xFF2B6FE8));
+      return (Icons.article_rounded, const Color(0xFF2457F5));
     case 'xls':
     case 'xlsx':
     case 'csv':
@@ -1830,7 +1830,7 @@ class UploadTask {
     case 'jpeg':
     case 'gif':
     case 'webp':
-      return (Icons.image_rounded, const Color(0xFF8C4FE8));
+      return (Icons.image_rounded, const Color(0xFF2457F5));
     case 'zip':
     case 'rar':
     case '7z':

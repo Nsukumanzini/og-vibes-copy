@@ -110,7 +110,7 @@ class _AcademicEscalationScreenState extends State<AcademicEscalationScreen> {
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(16),
         gradient: const LinearGradient(
-          colors: <Color>[Color(0xFF0D47A1), Color(0xFF1976D2)],
+          colors: <Color>[Color(0xFF2457F5), Color(0xFF2457F5)],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
@@ -137,7 +137,7 @@ class _AcademicEscalationScreenState extends State<AcademicEscalationScreen> {
           Text(
             "Don't struggle in silence. We are here to help.",
             style: TextStyle(
-              color: Color(0xFFE3F2FD),
+              color: Color(0xFFF7F9FD),
               fontWeight: FontWeight.w600,
             ),
           ),
@@ -152,7 +152,7 @@ class _AcademicEscalationScreenState extends State<AcademicEscalationScreen> {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFFE3EAF2)),
+        border: Border.all(color: const Color(0xFFE8F0FF)),
         boxShadow: <BoxShadow>[
           BoxShadow(
             color: Colors.black.withValues(alpha: 0.05),
@@ -212,7 +212,7 @@ class _AcademicEscalationScreenState extends State<AcademicEscalationScreen> {
     return InputDecoration(
       labelText: label,
       filled: true,
-      fillColor: const Color(0xFFF7F9FC),
+      fillColor: const Color(0xFFF7F9FD),
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
         borderSide: BorderSide.none,

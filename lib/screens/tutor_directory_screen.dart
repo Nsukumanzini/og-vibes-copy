@@ -45,7 +45,7 @@ class _TutorDirectoryScreenState extends State<TutorDirectoryScreen> {
         rating: '4.9 (12 reviews)',
         availability: 'Tuesdays and Thursdays, Library',
         category: 'NATED Engineering',
-        accent: Color(0xFF1565C0),
+        accent: Color(0xFF2457F5),
       ),
       _TutorProfile(
         name: 'Lerato M. (L4)',
@@ -61,7 +61,7 @@ class _TutorDirectoryScreenState extends State<TutorDirectoryScreen> {
         rating: '4.7 (15 reviews)',
         availability: 'Weekends only',
         category: 'NATED Business',
-        accent: Color(0xFF6A1B9A),
+        accent: Color(0xFF2457F5),
       ),
       _TutorProfile(
         name: 'Thandiwe S. (L4)',
@@ -191,7 +191,7 @@ class _TutorDirectoryScreenState extends State<TutorDirectoryScreen> {
               setState(() => _selectedCategory = category);
             },
             showCheckmark: false,
-            selectedColor: const Color(0xFF2962FF),
+            selectedColor: const Color(0xFF2457F5),
             backgroundColor: Colors.white,
             labelStyle: TextStyle(
               color: selected ? Colors.white : Colors.black87,

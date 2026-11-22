@@ -1,0 +1,382 @@
+[
+  {
+    "file": "lib/screens/academic_escalation_screen.dart",
+    "palette": "screen colors harmonized"
+  },
+  {
+    "file": "lib/screens/accredited_accommodation_screen.dart",
+    "palette": "screen colors harmonized"
+  },
+  {
+    "file": "lib/screens/active_call_screen.dart",
+    "palette": "screen colors harmonized"
+  },
+  {
+    "file": "lib/screens/all_tools_screen.dart",
+    "palette": "existing shared blue/white or semantic palette retained"
+  },
+  {
+    "file": "lib/screens/announcements_screen.dart",
+    "palette": "screen colors harmonized"
+  },
+  {
+    "file": "lib/screens/assessments_calendar_screen.dart",
+    "palette": "screen colors harmonized"
+  },
+  {
+    "file": "lib/screens/assignment_submission_screen.dart",
+    "palette": "existing shared blue/white or semantic palette retained"
+  },
+  {
+    "file": "lib/screens/blocked_users_screen.dart",
+    "palette": "existing shared blue/white or semantic palette retained"
+  },
+  {
+    "file": "lib/screens/bursary_screen.dart",
+    "palette": "screen colors harmonized"
+  },
+  {
+    "file": "lib/screens/cafeteria_screen.dart",
+    "palette": "screen colors harmonized"
+  },
+  {
+    "file": "lib/screens/call_feature_screen.dart",
+    "palette": "existing shared blue/white or semantic palette retained"
+  },
+  {
+    "file": "lib/screens/call_history_screen.dart",
+    "palette": "existing shared blue/white or semantic palette retained"
+  },
+  {
+    "file": "lib/screens/campus_events_screen.dart",
+    "palette": "screen colors harmonized"
+  },
+  {
+    "file": "lib/screens/campus_hub_screens.dart",
+    "palette": "existing shared blue/white or semantic palette retained"
+  },
+  {
+    "file": "lib/screens/campus_map_screen.dart",
+    "palette": "screen colors harmonized"
+  },
+  {
+    "file": "lib/screens/career_screen.dart",
+    "palette": "existing shared blue/white or semantic palette retained"
+  },
+  {
+    "file": "lib/screens/chat_detail_screen.dart",
+    "palette": "existing shared blue/white or semantic palette retained"
+  },
+  {
+    "file": "lib/screens/checklist_screen.dart",
+    "palette": "screen colors harmonized"
+  },
+  {
+    "file": "lib/screens/course_mate_screen.dart",
+    "palette": "screen colors harmonized"
+  },
+  {
+    "file": "lib/screens/course_portal_screen.dart",
+    "palette": "screen colors harmonized"
+  },
+  {
+    "file": "lib/screens/create_post_screen.dart",
+    "palette": "screen colors harmonized"
+  },
+  {
+    "file": "lib/screens/digital_library_screen.dart",
+    "palette": "screen colors harmonized"
+  },
+  {
+    "file": "lib/screens/document_wallet_redesign.dart",
+    "palette": "screen colors harmonized"
+  },
+  {
+    "file": "lib/screens/donation_screen.dart",
+    "palette": "existing shared blue/white or semantic palette retained"
+  },
+  {
+    "file": "lib/screens/download_history_screen.dart",
+    "palette": "existing shared blue/white or semantic palette retained"
+  },
+  {
+    "file": "lib/screens/email_confirmed_landing_screen.dart",
+    "palette": "screen colors harmonized"
+  },
+  {
+    "file": "lib/screens/email_verification_screen.dart",
+    "palette": "screen colors harmonized"
+  },
+  {
+    "file": "lib/screens/events_screen.dart",
+    "palette": "screen colors harmonized"
+  },
+  {
+    "file": "lib/screens/exam_readiness_screen.dart",
+    "palette": "screen colors harmonized"
+  },
+  {
+    "file": "lib/screens/exam_timetable_screen.dart",
+    "palette": "screen colors harmonized"
+  },
+  {
+    "file": "lib/screens/flashcards_screen.dart",
+    "palette": "screen colors harmonized"
+  },
+  {
+    "file": "lib/screens/friend_requests_screen.dart",
+    "palette": "screen colors harmonized"
+  },
+  {
+    "file": "lib/screens/grade_appeal_screen.dart",
+    "palette": "screen colors harmonized"
+  },
+  {
+    "file": "lib/screens/group_call_screen.dart",
+    "palette": "screen colors harmonized"
+  },
+  {
+    "file": "lib/screens/group_chats_screen.dart",
+    "palette": "existing shared blue/white or semantic palette retained"
+  },
+  {
+    "file": "lib/screens/helpful_contacts_screen.dart",
+    "palette": "screen colors harmonized"
+  },
+  {
+    "file": "lib/screens/home/widgets/home_bottom_navigation_bar.dart",
+    "palette": "screen colors harmonized"
+  },
+  {
+    "file": "lib/screens/home_screen.dart",
+    "palette": "screen colors harmonized"
+  },
+  {
+    "file": "lib/screens/icass_checker_screen.dart",
+    "palette": "existing shared blue/white or semantic palette retained"
+  },
+  {
+    "file": "lib/screens/incoming_call_screen.dart",
+    "palette": "screen colors harmonized"
+  },
+  {
+    "file": "lib/screens/landing_screen.dart",
+    "palette": "screen colors harmonized"
+  },
+  {
+    "file": "lib/screens/legal_document_screen.dart",
+    "palette": "screen colors harmonized"
+  },
+  {
+    "file": "lib/screens/lesson_player_screen.dart",
+    "palette": "screen colors harmonized"
+  },
+  {
+    "file": "lib/screens/lift_club_screen.dart",
+    "palette": "screen colors harmonized"
+  },
+  {
+    "file": "lib/screens/live_broadcast_screen.dart",
+    "palette": "screen colors harmonized"
+  },
+  {
+    "file": "lib/screens/live_classroom_screen.dart",
+    "palette": "screen colors harmonized"
+  },
+  {
+    "file": "lib/screens/lms_dashboard_screen.dart",
+    "palette": "screen colors harmonized"
+  },
+  {
+    "file": "lib/screens/lms_quiz_lockdown_screen.dart",
+    "palette": "existing shared blue/white or semantic palette retained"
+  },
+  {
+    "file": "lib/screens/login_screen.dart",
+    "palette": "screen colors harmonized"
+  },
+  {
+    "file": "lib/screens/lost_and_found_screen.dart",
+    "palette": "screen colors harmonized"
+  },
+  {
+    "file": "lib/screens/mark_simulator_screen.dart",
+    "palette": "screen colors harmonized"
+  },
+  {
+    "file": "lib/screens/market_screen.dart",
+    "palette": "screen colors harmonized"
+  },
+  {
+    "file": "lib/screens/messages_screen.dart",
+    "palette": "existing shared blue/white or semantic palette retained"
+  },
+  {
+    "file": "lib/screens/miss_mr_vibes_screen.dart",
+    "palette": "screen colors harmonized"
+  },
+  {
+    "file": "lib/screens/my_campus_friends_screen.dart",
+    "palette": "existing shared blue/white or semantic palette retained"
+  },
+  {
+    "file": "lib/screens/my_modules_screen.dart",
+    "palette": "screen colors harmonized"
+  },
+  {
+    "file": "lib/screens/my_posts_screen.dart",
+    "palette": "existing shared blue/white or semantic palette retained"
+  },
+  {
+    "file": "lib/screens/no_connection_screen.dart",
+    "palette": "screen colors harmonized"
+  },
+  {
+    "file": "lib/screens/notification_center_screen.dart",
+    "palette": "existing shared blue/white or semantic palette retained"
+  },
+  {
+    "file": "lib/screens/notification_settings_screen.dart",
+    "palette": "screen colors harmonized"
+  },
+  {
+    "file": "lib/screens/nsfas_check_screen.dart",
+    "palette": "screen colors harmonized"
+  },
+  {
+    "file": "lib/screens/offline_downloader_screen.dart",
+    "palette": "screen colors harmonized"
+  },
+  {
+    "file": "lib/screens/og_assistant_screen.dart",
+    "palette": "existing shared blue/white or semantic palette retained"
+  },
+  {
+    "file": "lib/screens/online_classes_screen.dart",
+    "palette": "screen colors harmonized"
+  },
+  {
+    "file": "lib/screens/outgoing_call_screen.dart",
+    "palette": "existing shared blue/white or semantic palette retained"
+  },
+  {
+    "file": "lib/screens/past_question_papers_screen.dart",
+    "palette": "screen colors harmonized"
+  },
+  {
+    "file": "lib/screens/pdf_viewer_screen.dart",
+    "palette": "existing shared blue/white or semantic palette retained"
+  },
+  {
+    "file": "lib/screens/portal_screen.dart",
+    "palette": "screen colors harmonized"
+  },
+  {
+    "file": "lib/screens/privacy_screen.dart",
+    "palette": "existing shared blue/white or semantic palette retained"
+  },
+  {
+    "file": "lib/screens/product_details_screen.dart",
+    "palette": "screen colors harmonized"
+  },
+  {
+    "file": "lib/screens/profile_screen.dart",
+    "palette": "screen colors harmonized"
+  },
+  {
+    "file": "lib/screens/quiz_screen.dart",
+    "palette": "existing shared blue/white or semantic palette retained"
+  },
+  {
+    "file": "lib/screens/reset_password_screen.dart",
+    "palette": "existing shared blue/white or semantic palette retained"
+  },
+  {
+    "file": "lib/screens/rewards_screen.dart",
+    "palette": "screen colors harmonized"
+  },
+  {
+    "file": "lib/screens/safety_screen.dart",
+    "palette": "existing shared blue/white or semantic palette retained"
+  },
+  {
+    "file": "lib/screens/settings_screen.dart",
+    "palette": "screen colors harmonized"
+  },
+  {
+    "file": "lib/screens/signup_confirmation_screen.dart",
+    "palette": "existing shared blue/white or semantic palette retained"
+  },
+  {
+    "file": "lib/screens/signup_screen.dart",
+    "palette": "screen colors harmonized"
+  },
+  {
+    "file": "lib/screens/slides_screen.dart",
+    "palette": "screen colors harmonized"
+  },
+  {
+    "file": "lib/screens/splash_screen.dart",
+    "palette": "screen colors harmonized"
+  },
+  {
+    "file": "lib/screens/src_help_desk_screen.dart",
+    "palette": "screen colors harmonized"
+  },
+  {
+    "file": "lib/screens/src_voting_screen.dart",
+    "palette": "screen colors harmonized"
+  },
+  {
+    "file": "lib/screens/student_analytics_dashboard.dart",
+    "palette": "screen colors harmonized"
+  },
+  {
+    "file": "lib/screens/student_profile_screen.dart",
+    "palette": "existing shared blue/white or semantic palette retained"
+  },
+  {
+    "file": "lib/screens/study_group_finder_screen.dart",
+    "palette": "screen colors harmonized"
+  },
+  {
+    "file": "lib/screens/study_hub_screens.dart",
+    "palette": "existing shared blue/white or semantic palette retained"
+  },
+  {
+    "file": "lib/screens/study_resources_screen.dart",
+    "palette": "screen colors harmonized"
+  },
+  {
+    "file": "lib/screens/suggestion_box_screen.dart",
+    "palette": "screen colors harmonized"
+  },
+  {
+    "file": "lib/screens/timetable_screen.dart",
+    "palette": "screen colors harmonized"
+  },
+  {
+    "file": "lib/screens/trivia_game_screen.dart",
+    "palette": "screen colors harmonized"
+  },
+  {
+    "file": "lib/screens/tutor_application_screen.dart",
+    "palette": "screen colors harmonized"
+  },
+  {
+    "file": "lib/screens/tutor_directory_screen.dart",
+    "palette": "screen colors harmonized"
+  },
+  {
+    "file": "lib/screens/video_tutorials_screen.dart",
+    "palette": "screen colors harmonized"
+  },
+  {
+    "file": "lib/screens/whats_new_screen.dart",
+    "palette": "screen colors harmonized"
+  },
+  {
+    "file": "lib/screens/whistleblower_screen.dart",
+    "palette": "screen colors harmonized"
+  }
+]

@@ -653,8 +653,8 @@ class _HomeScreenState extends State<HomeScreen> {
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
                   colors: <Color>[
-                    Color(0xFFFFE29A),
-                    Color(0xFFFFF5D8),
+                    Color(0xFFFFC107),
+                    Color(0xFFFFF6D6),
                   ],
                 ),
                 shape: BoxShape.circle,
@@ -682,14 +682,14 @@ class _HomeScreenState extends State<HomeScreen> {
                       end: Alignment.bottomRight,
                       colors: <Color>[
                         Color(0xFFFFFFFF),
-                        Color(0xFFF2F6FF),
-                        Color(0xFFFFFCF2),
+                        Color(0xFFF7F9FD),
+                        Color(0xFFFFF6D6),
                       ],
                       stops: <double>[0, .66, 1],
                     ),
                     borderRadius: BorderRadius.circular(18),
                     border: Border.all(
-                      color: const Color(0xFFE8D9A9),
+                      color: const Color(0xFFFFC107),
                       width: 1.1,
                     ),
                     boxShadow: <BoxShadow>[

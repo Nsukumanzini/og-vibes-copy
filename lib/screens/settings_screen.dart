@@ -544,7 +544,7 @@ class _SettingsTabs extends StatelessWidget {
           ),
           labelColor: Colors.white,
           unselectedLabelColor: isDark
-              ? const Color(0xFFB8C5D9)
+              ? const Color(0xFF7FA2FF)
               : AppColors.textMuted,
           tabs: const [
             Tab(icon: Icon(Icons.person_outline_rounded), text: 'Account'),

@@ -29,7 +29,7 @@ class _CampusMapScreenState extends State<CampusMapScreen> {
         'title': 'Admin Block & Student Support',
         'icon': Icons.business,
         'description': 'Main gate entrance',
-        'accent': Color(0xFF2962FF),
+        'accent': Color(0xFF2457F5),
       },
       {
         'title': 'Campus Clinic',
@@ -41,13 +41,13 @@ class _CampusMapScreenState extends State<CampusMapScreen> {
         'title': 'IT Labs 1-4',
         'icon': Icons.computer,
         'description': 'First floor, Block A',
-        'accent': Color(0xFF00ACC1),
+        'accent': Color(0xFF2457F5),
       },
       {
         'title': 'Main Cafeteria',
         'icon': Icons.restaurant,
         'description': 'Center of campus',
-        'accent': Color(0xFFFF8F00),
+        'accent': Color(0xFFFFC107),
       },
     ];
   }
@@ -122,13 +122,13 @@ class _CampusMapScreenState extends State<CampusMapScreen> {
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(22),
         gradient: const LinearGradient(
-          colors: [Color(0xFF2962FF), Color(0xFF00ACC1)],
+          colors: [Color(0xFF2457F5), Color(0xFF2457F5)],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFF2962FF).withValues(alpha: 0.3),
+            color: const Color(0xFF2457F5).withValues(alpha: 0.3),
             blurRadius: 16,
             offset: const Offset(0, 8),
           ),

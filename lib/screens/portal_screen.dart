@@ -127,7 +127,7 @@ class _PortalScreenState extends State<PortalScreen> {
     width: double.infinity,
     padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
     decoration: const BoxDecoration(gradient: LinearGradient(
-      colors: [Color(0xFF071323), Color(0xFF123965), Color(0xFF075E63)],
+      colors: [Color(0xFF07172F), Color(0xFF0D47A1), Color(0xFF0D47A1)],
     )),
     child: const Row(children: [
       Icon(Icons.verified_user_rounded, color: Color(0xFF50E3C2), size: 19),
@@ -138,7 +138,7 @@ class _PortalScreenState extends State<PortalScreen> {
           Text('Gert Sibande TVET College', overflow: TextOverflow.ellipsis,
             style: TextStyle(color: Colors.white, fontWeight: FontWeight.w800)),
           Text('Secure iEnabler • ienabler.gscollege.edu.za', overflow: TextOverflow.ellipsis,
-            style: TextStyle(color: Color(0xFFB6D5E9), fontSize: 11)),
+            style: TextStyle(color: Color(0xFF7FA2FF), fontSize: 11)),
         ],
       )),
     ]),

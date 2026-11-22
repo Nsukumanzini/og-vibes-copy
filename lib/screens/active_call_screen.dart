@@ -395,7 +395,7 @@ class _ActiveCallScreenState extends State<ActiveCallScreen> {
             gradient: LinearGradient(
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
-              colors: [Color(0xFF06142D), Color(0xFF173F7C), Color(0xFF087F9F)],
+              colors: [Color(0xFF07172F), Color(0xFF0D47A1), Color(0xFF2457F5)],
             ),
           ),
           child: SafeArea(
@@ -792,7 +792,7 @@ class _ProfileAvatar extends StatelessWidget {
             : null,
       ),
       child: CircleAvatar(
-        backgroundColor: const Color(0xFF183D6C),
+        backgroundColor: const Color(0xFF0D47A1),
         backgroundImage: photo.isEmpty
             ? null
             : CachedNetworkImageProvider(photo),

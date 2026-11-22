@@ -1,3 +1,4 @@
+import 'package:og_vibes_student/utils/theme_constants.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -47,7 +48,7 @@ class _TriviaGameScreenState extends State<TriviaGameScreen> {
       body: Container(
         decoration: const BoxDecoration(
           gradient: LinearGradient(
-            colors: [Color(0xFF020024), Color(0xFF090979), Color(0xFF00D4FF)],
+            colors: [AppColors.surface, AppColors.auroraCanvas, AppColors.blueTint],
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
           ),
@@ -86,7 +87,7 @@ class _TriviaGameScreenState extends State<TriviaGameScreen> {
                     Text(
                       data['title'] as String,
                       style: const TextStyle(
-                        color: Colors.white,
+                        color: AppColors.midnightInk,
                         fontSize: 26,
                         fontWeight: FontWeight.w900,
                       ),
@@ -117,9 +118,9 @@ class _TriviaGameScreenState extends State<TriviaGameScreen> {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.12),
+        color: AppColors.surface,
         borderRadius: BorderRadius.circular(22),
-        border: Border.all(color: Colors.white24),
+        border: Border.all(color: AppColors.glassBorder),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -127,7 +128,7 @@ class _TriviaGameScreenState extends State<TriviaGameScreen> {
           const Text(
             'Current Question',
             style: TextStyle(
-              color: Colors.white70,
+              color: AppColors.textMuted,
               fontWeight: FontWeight.w700,
             ),
           ),
@@ -135,7 +136,7 @@ class _TriviaGameScreenState extends State<TriviaGameScreen> {
           Text(
             question,
             style: const TextStyle(
-              color: Colors.white,
+              color: AppColors.midnightInk,
               fontSize: 20,
               fontWeight: FontWeight.w800,
             ),
@@ -146,7 +147,7 @@ class _TriviaGameScreenState extends State<TriviaGameScreen> {
             final isCorrect = index == correctIndex;
             final showResult = _selectedIndex != null;
 
-            Color bg = Colors.white.withValues(alpha: 0.12);
+            Color bg = AppColors.surface;
             if (showResult && isCorrect) {
               bg = const Color(0xFF2E7D32);
             } else if (showResult && selected && !isCorrect) {
@@ -173,7 +174,7 @@ class _TriviaGameScreenState extends State<TriviaGameScreen> {
                   child: Text(
                     answers[index],
                     style: const TextStyle(
-                      color: Colors.white,
+                      color: AppColors.midnightInk,
                       fontWeight: FontWeight.w700,
                     ),
                   ),
@@ -190,7 +191,7 @@ class _TriviaGameScreenState extends State<TriviaGameScreen> {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: AppColors.midnightInk,
         borderRadius: BorderRadius.circular(20),
       ),
       child: Column(
@@ -221,7 +222,7 @@ class _TriviaGameScreenState extends State<TriviaGameScreen> {
                 style: TextStyle(
                   fontWeight: FontWeight.w800,
                   color: row['name'] == 'You'
-                      ? const Color(0xFF2962FF)
+                      ? const Color(0xFF2457F5)
                       : Colors.black87,
                 ),
               ),
@@ -240,14 +241,14 @@ class _TriviaGameScreenState extends State<TriviaGameScreen> {
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 14, 16, 24),
       child: Shimmer.fromColors(
-        baseColor: Colors.white24,
-        highlightColor: Colors.white38,
+        baseColor: AppColors.glassBorder,
+        highlightColor: AppColors.blueTint,
         child: Column(
           children: [
             Container(
               height: 300,
               decoration: BoxDecoration(
-                color: Colors.white,
+                color: AppColors.midnightInk,
                 borderRadius: BorderRadius.circular(22),
               ),
             ),
@@ -255,7 +256,7 @@ class _TriviaGameScreenState extends State<TriviaGameScreen> {
             Container(
               height: 220,
               decoration: BoxDecoration(
-                color: Colors.white,
+                color: AppColors.midnightInk,
                 borderRadius: BorderRadius.circular(20),
               ),
             ),

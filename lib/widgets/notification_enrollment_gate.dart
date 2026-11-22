@@ -192,7 +192,7 @@ class _NotificationEnrollmentGateState
                       padding: const EdgeInsets.all(16),
                       decoration: BoxDecoration(
                         gradient: const LinearGradient(
-                          colors: [Color(0xFF071A39), Color(0xFF164FBA)],
+                          colors: [Color(0xFF07172F), Color(0xFF2457F5)],
                         ),
                         borderRadius: BorderRadius.circular(24),
                         border: Border.all(color: Colors.white24),
@@ -233,7 +233,7 @@ class _NotificationEnrollmentGateState
                                 Text(
                                   permission.description,
                                   style: const TextStyle(
-                                    color: Color(0xFFDCE8FF),
+                                    color: Color(0xFFE8F0FF),
                                     height: 1.35,
                                     fontSize: 12,
                                   ),

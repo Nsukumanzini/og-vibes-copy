@@ -1,3 +1,4 @@
+import 'package:og_vibes_student/utils/theme_constants.dart';
 import 'dart:async';
 
 import 'package:confetti/confetti.dart';
@@ -73,9 +74,9 @@ class _ChecklistScreenState extends State<ChecklistScreen> {
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
                 colors: [
-                  Color(0xFF0D47A1),
-                  Color(0xFF2962FF),
-                  Color(0xFF6200EA),
+                  Color(0xFF2457F5),
+                  Color(0xFF2457F5),
+                  Color(0xFF2457F5),
                 ],
               ),
             ),
@@ -152,7 +153,7 @@ class _ChecklistScreenState extends State<ChecklistScreen> {
         subtitle: Text(
           item.due,
           style: TextStyle(
-            color: item.done ? const Color(0xFF69F0AE) : Colors.amberAccent,
+            color: item.done ? const Color(0xFF69F0AE) : AppColors.ogGold,
             fontWeight: FontWeight.w700,
           ),
         ),

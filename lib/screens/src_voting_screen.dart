@@ -24,7 +24,7 @@ class _SrcVotingScreenState extends State<SrcVotingScreen> {
           manifesto:
               'Improve campus connectivity, extend study support, and publish '
               'clear progress updates each term.',
-          color: Color(0xFF2457C5),
+          color: Color(0xFF2457F5),
           sampleResult: 42,
         ),
         _ElectionCandidate(
@@ -35,7 +35,7 @@ class _SrcVotingScreenState extends State<SrcVotingScreen> {
           manifesto:
               'Strengthen campus safety communication and make student '
               'support services easier to find.',
-          color: Color(0xFF008C95),
+          color: Color(0xFF0D47A1),
           sampleResult: 33,
         ),
         _ElectionCandidate(
@@ -63,7 +63,7 @@ class _SrcVotingScreenState extends State<SrcVotingScreen> {
           manifesto:
               'Create regular feedback sessions and share clear follow-up '
               'notes after student meetings.',
-          color: Color(0xFF6844B5),
+          color: Color(0xFF2457F5),
           sampleResult: 38,
         ),
         _ElectionCandidate(
@@ -74,7 +74,7 @@ class _SrcVotingScreenState extends State<SrcVotingScreen> {
           manifesto:
               'Bring student representatives closer to classrooms and '
               'communicate decisions in plain language.',
-          color: Color(0xFF2457C5),
+          color: Color(0xFF2457F5),
           sampleResult: 35,
         ),
         _ElectionCandidate(
@@ -85,7 +85,7 @@ class _SrcVotingScreenState extends State<SrcVotingScreen> {
           manifesto:
               'Help students navigate support services and raise common '
               'issues with the right teams.',
-          color: Color(0xFF008C95),
+          color: Color(0xFF0D47A1),
           sampleResult: 27,
         ),
       ],
@@ -102,7 +102,7 @@ class _SrcVotingScreenState extends State<SrcVotingScreen> {
           manifesto:
               'Publish accessible meeting summaries and keep an organized '
               'record of student requests.',
-          color: Color(0xFF008C95),
+          color: Color(0xFF0D47A1),
           sampleResult: 45,
         ),
         _ElectionCandidate(
@@ -122,7 +122,7 @@ class _SrcVotingScreenState extends State<SrcVotingScreen> {
           manifesto:
               'Use consistent updates so students know what was raised and '
               'what happens next.',
-          color: Color(0xFF6844B5),
+          color: Color(0xFF2457F5),
           sampleResult: 24,
         ),
       ],
@@ -221,7 +221,7 @@ class _SrcVotingScreenState extends State<SrcVotingScreen> {
         Text(
           'Meet the candidates',
           style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-            color: const Color(0xFF15233B),
+            color: const Color(0xFF07172F),
             fontWeight: FontWeight.w800,
           ),
         ),
@@ -230,7 +230,7 @@ class _SrcVotingScreenState extends State<SrcVotingScreen> {
           'Review each candidate before choosing a sample ballot selection.',
           style: Theme.of(
             context,
-          ).textTheme.bodyMedium?.copyWith(color: const Color(0xFF52617A)),
+          ).textTheme.bodyMedium?.copyWith(color: const Color(0xFF2457F5)),
         ),
         const SizedBox(height: 14),
         _buildPositionPicker(context, _positionId, (value) {
@@ -261,11 +261,11 @@ class _SrcVotingScreenState extends State<SrcVotingScreen> {
             fillColor: Colors.white,
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(16),
-              borderSide: const BorderSide(color: Color(0xFFD9E1ED)),
+              borderSide: const BorderSide(color: Color(0xFFE8F0FF)),
             ),
             enabledBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(16),
-              borderSide: const BorderSide(color: Color(0xFFD9E1ED)),
+              borderSide: const BorderSide(color: Color(0xFFE8F0FF)),
             ),
           ),
         ),
@@ -356,7 +356,7 @@ class _SrcVotingScreenState extends State<SrcVotingScreen> {
       color: Colors.white,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(20),
-        side: const BorderSide(color: Color(0xFFDCE5F1)),
+        side: const BorderSide(color: Color(0xFFE8F0FF)),
       ),
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -365,13 +365,13 @@ class _SrcVotingScreenState extends State<SrcVotingScreen> {
           children: [
             Row(
               children: [
-                const Icon(Icons.how_to_vote_rounded, color: Color(0xFF2457C5)),
+                const Icon(Icons.how_to_vote_rounded, color: Color(0xFF2457F5)),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
                     'Ermelo TVET College · SRC elections',
                     style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      color: const Color(0xFF15233B),
+                      color: const Color(0xFF07172F),
                       fontWeight: FontWeight.w800,
                     ),
                   ),
@@ -414,8 +414,8 @@ class _SrcVotingScreenState extends State<SrcVotingScreen> {
               child: const LinearProgressIndicator(
                 value: .62,
                 minHeight: 7,
-                backgroundColor: Color(0xFFE6EDF6),
-                valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF2457C5)),
+                backgroundColor: Color(0xFFE8F0FF),
+                valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF2457F5)),
               ),
             ),
             const SizedBox(height: 6),
@@ -423,7 +423,7 @@ class _SrcVotingScreenState extends State<SrcVotingScreen> {
               'Sample turnout: 62% · sample schedule only',
               style: Theme.of(
                 context,
-              ).textTheme.bodySmall?.copyWith(color: const Color(0xFF52617A)),
+              ).textTheme.bodySmall?.copyWith(color: const Color(0xFF2457F5)),
             ),
           ],
         ),
@@ -462,7 +462,7 @@ class _SrcVotingScreenState extends State<SrcVotingScreen> {
         child: Text(
           '${_position.candidates.length} candidates',
           style: Theme.of(context).textTheme.labelLarge?.copyWith(
-            color: const Color(0xFF52617A),
+            color: const Color(0xFF2457F5),
             fontWeight: FontWeight.w700,
           ),
         ),
@@ -518,10 +518,10 @@ class _SrcVotingScreenState extends State<SrcVotingScreen> {
     elevation: 0,
     shape: RoundedRectangleBorder(
       borderRadius: BorderRadius.circular(18),
-      side: const BorderSide(color: Color(0xFFDCE5F1)),
+      side: const BorderSide(color: Color(0xFFE8F0FF)),
     ),
     child: ExpansionTile(
-      leading: const Icon(Icons.info_outline_rounded, color: Color(0xFF2457C5)),
+      leading: const Icon(Icons.info_outline_rounded, color: Color(0xFF2457F5)),
       title: const Text('How the ballot works'),
       subtitle: const Text('Review candidates, then choose by position.'),
       childrenPadding: const EdgeInsets.fromLTRB(18, 0, 18, 16),
@@ -543,21 +543,21 @@ class _SrcVotingScreenState extends State<SrcVotingScreen> {
   );
 
   Widget _buildPrivacyCard(BuildContext context) => Card(
-    color: const Color(0xFFEAF2FF),
+    color: const Color(0xFFF7F9FD),
     elevation: 0,
     child: const Padding(
       padding: EdgeInsets.all(16),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(Icons.lock_outline_rounded, color: Color(0xFF2457C5)),
+          Icon(Icons.lock_outline_rounded, color: Color(0xFF2457F5)),
           SizedBox(width: 12),
           Expanded(
             child: Text(
               'Privacy preview. This screen stores sample selections only in '
               'memory. It does not verify voter eligibility, save a ballot, '
               'or send data to an election service.',
-              style: TextStyle(color: Color(0xFF213653), height: 1.4),
+              style: TextStyle(color: Color(0xFF0D47A1), height: 1.4),
             ),
           ),
         ],
@@ -585,7 +585,7 @@ class _SrcVotingScreenState extends State<SrcVotingScreen> {
               child: Text(
                 'Position ${_ballotStep + 1} of ${_positions.length}',
                 style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                  color: const Color(0xFF15233B),
+                  color: const Color(0xFF07172F),
                   fontWeight: FontWeight.w800,
                 ),
               ),
@@ -594,7 +594,7 @@ class _SrcVotingScreenState extends State<SrcVotingScreen> {
               '$completed selected',
               style: Theme.of(
                 context,
-              ).textTheme.labelLarge?.copyWith(color: const Color(0xFF52617A)),
+              ).textTheme.labelLarge?.copyWith(color: const Color(0xFF2457F5)),
             ),
           ],
         ),
@@ -604,8 +604,8 @@ class _SrcVotingScreenState extends State<SrcVotingScreen> {
           child: LinearProgressIndicator(
             value: (_ballotStep + 1) / _positions.length,
             minHeight: 8,
-            backgroundColor: const Color(0xFFE2E8F0),
-            valueColor: const AlwaysStoppedAnimation<Color>(Color(0xFF2457C5)),
+            backgroundColor: const Color(0xFFE8F0FF),
+            valueColor: const AlwaysStoppedAnimation<Color>(Color(0xFF2457F5)),
           ),
         ),
         const SizedBox(height: 18),
@@ -617,14 +617,14 @@ class _SrcVotingScreenState extends State<SrcVotingScreen> {
         Text(
           position.title,
           style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-            color: const Color(0xFF15233B),
+            color: const Color(0xFF07172F),
             fontWeight: FontWeight.w800,
           ),
         ),
         const SizedBox(height: 4),
         const Text(
           'Choose one candidate for this position. You can change it before review.',
-          style: TextStyle(color: Color(0xFF52617A), height: 1.4),
+          style: TextStyle(color: Color(0xFF2457F5), height: 1.4),
         ),
         const SizedBox(height: 12),
         ...position.candidates.map(
@@ -675,7 +675,7 @@ class _SrcVotingScreenState extends State<SrcVotingScreen> {
           const SizedBox(height: 8),
           const Text(
             'Choose a candidate for each position to review the demo ballot.',
-            style: TextStyle(color: Color(0xFF52617A)),
+            style: TextStyle(color: Color(0xFF2457F5)),
             textAlign: TextAlign.end,
           ),
         ],
@@ -708,14 +708,14 @@ class _SrcVotingScreenState extends State<SrcVotingScreen> {
         Text(
           'Election overview',
           style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-            color: const Color(0xFF15233B),
+            color: const Color(0xFF07172F),
             fontWeight: FontWeight.w800,
           ),
         ),
         const SizedBox(height: 4),
         const Text(
           'A sample dashboard for reviewing positions and candidate totals.',
-          style: TextStyle(color: Color(0xFF52617A)),
+          style: TextStyle(color: Color(0xFF2457F5)),
         ),
         const SizedBox(height: 14),
         Wrap(
@@ -747,7 +747,7 @@ class _SrcVotingScreenState extends State<SrcVotingScreen> {
         const Text(
           'Results are sample percentages for this prototype. They do not '
           'represent official election results.',
-          style: TextStyle(color: Color(0xFF52617A), height: 1.4),
+          style: TextStyle(color: Color(0xFF2457F5), height: 1.4),
         ),
       ],
     );
@@ -765,7 +765,7 @@ class _SrcVotingScreenState extends State<SrcVotingScreen> {
       elevation: 0,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(18),
-        side: const BorderSide(color: Color(0xFFDCE5F1)),
+        side: const BorderSide(color: Color(0xFFE8F0FF)),
       ),
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -775,7 +775,7 @@ class _SrcVotingScreenState extends State<SrcVotingScreen> {
             Text(
               position.title,
               style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                color: const Color(0xFF15233B),
+                color: const Color(0xFF07172F),
                 fontWeight: FontWeight.w800,
               ),
             ),
@@ -814,7 +814,7 @@ class _SrcVotingScreenState extends State<SrcVotingScreen> {
                   width: 42,
                   height: 4,
                   decoration: BoxDecoration(
-                    color: const Color(0xFFC7D0DE),
+                    color: const Color(0xFF7FA2FF),
                     borderRadius: BorderRadius.circular(99),
                   ),
                 ),
@@ -826,14 +826,14 @@ class _SrcVotingScreenState extends State<SrcVotingScreen> {
                 candidate.name,
                 textAlign: TextAlign.center,
                 style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                  color: const Color(0xFF15233B),
+                  color: const Color(0xFF07172F),
                   fontWeight: FontWeight.w800,
                 ),
               ),
               Text(
                 candidate.course,
                 textAlign: TextAlign.center,
-                style: const TextStyle(color: Color(0xFF52617A)),
+                style: const TextStyle(color: Color(0xFF2457F5)),
               ),
               const SizedBox(height: 20),
               const _SampleBadge(),
@@ -850,14 +850,14 @@ class _SrcVotingScreenState extends State<SrcVotingScreen> {
               Text(
                 'Manifesto',
                 style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                  color: const Color(0xFF15233B),
+                  color: const Color(0xFF07172F),
                   fontWeight: FontWeight.w800,
                 ),
               ),
               const SizedBox(height: 6),
               Text(
                 candidate.manifesto,
-                style: const TextStyle(color: Color(0xFF34435C), height: 1.5),
+                style: const TextStyle(color: Color(0xFF0D47A1), height: 1.5),
               ),
               const SizedBox(height: 20),
               FilledButton.icon(
@@ -1043,8 +1043,8 @@ class _CandidateCard extends StatelessWidget {
       borderRadius: BorderRadius.circular(18),
       side: BorderSide(
         color: selectedForBallot
-            ? const Color(0xFF2457C5)
-            : const Color(0xFFDCE5F1),
+            ? const Color(0xFF2457F5)
+            : const Color(0xFFE8F0FF),
         width: selectedForBallot ? 1.5 : 1,
       ),
     ),
@@ -1067,7 +1067,7 @@ class _CandidateCard extends StatelessWidget {
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                       style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        color: const Color(0xFF15233B),
+                        color: const Color(0xFF07172F),
                         fontWeight: FontWeight.w800,
                       ),
                     ),
@@ -1077,7 +1077,7 @@ class _CandidateCard extends StatelessWidget {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: const Color(0xFF52617A),
+                        color: const Color(0xFF2457F5),
                       ),
                     ),
                   ],
@@ -1108,7 +1108,7 @@ class _CandidateCard extends StatelessWidget {
               maxLines: 3,
               overflow: TextOverflow.ellipsis,
               style: const TextStyle(
-                color: Color(0xFF34435C),
+                color: Color(0xFF0D47A1),
                 height: 1.35,
                 fontSize: 13,
               ),
@@ -1150,13 +1150,13 @@ class _CandidateCard extends StatelessWidget {
                 Icon(
                   Icons.check_circle_outline_rounded,
                   size: 15,
-                  color: Color(0xFF2457C5),
+                  color: Color(0xFF2457F5),
                 ),
                 SizedBox(width: 5),
                 Text(
                   'Selected for this session only',
                   style: TextStyle(
-                    color: Color(0xFF2457C5),
+                    color: Color(0xFF2457F5),
                     fontSize: 11,
                     fontWeight: FontWeight.w600,
                   ),
@@ -1189,7 +1189,7 @@ class _BallotChoiceTile extends StatelessWidget {
     shape: RoundedRectangleBorder(
       borderRadius: BorderRadius.circular(16),
       side: BorderSide(
-        color: selected ? const Color(0xFF2457C5) : const Color(0xFFDCE5F1),
+        color: selected ? const Color(0xFF2457F5) : const Color(0xFFE8F0FF),
         width: selected ? 1.5 : 1,
       ),
     ),
@@ -1215,13 +1215,13 @@ class _BallotChoiceTile extends StatelessWidget {
                   Text(
                     candidate.name,
                     style: const TextStyle(
-                      color: Color(0xFF15233B),
+                      color: Color(0xFF07172F),
                       fontWeight: FontWeight.w800,
                     ),
                   ),
                   Text(
                     candidate.course,
-                    style: const TextStyle(color: Color(0xFF52617A)),
+                    style: const TextStyle(color: Color(0xFF2457F5)),
                   ),
                   Text(
                     candidate.slogan,
@@ -1290,7 +1290,7 @@ class _ResultBar extends StatelessWidget {
             child: Text(
               candidate.name,
               style: const TextStyle(
-                color: Color(0xFF34435C),
+                color: Color(0xFF0D47A1),
                 fontWeight: FontWeight.w600,
               ),
             ),
@@ -1310,7 +1310,7 @@ class _ResultBar extends StatelessWidget {
         child: LinearProgressIndicator(
           value: candidate.sampleResult / 100,
           minHeight: 9,
-          backgroundColor: const Color(0xFFE6EDF6),
+          backgroundColor: const Color(0xFFE8F0FF),
           valueColor: AlwaysStoppedAnimation<Color>(candidate.color),
           semanticsLabel: 'Sample result for ${candidate.name}',
           semanticsValue: '${candidate.sampleResult} percent',
@@ -1335,20 +1335,20 @@ class _OverviewMetric extends StatelessWidget {
   Widget build(BuildContext context) => Container(
     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
     decoration: BoxDecoration(
-      color: const Color(0xFFF3F6FB),
+      color: const Color(0xFFF7F9FD),
       borderRadius: BorderRadius.circular(14),
     ),
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Icon(icon, size: 18, color: const Color(0xFF2457C5)),
+        Icon(icon, size: 18, color: const Color(0xFF2457F5)),
         const SizedBox(height: 5),
         Text(
           value,
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
           style: Theme.of(context).textTheme.labelLarge?.copyWith(
-            color: const Color(0xFF15233B),
+            color: const Color(0xFF07172F),
             fontWeight: FontWeight.w800,
           ),
         ),
@@ -1358,7 +1358,7 @@ class _OverviewMetric extends StatelessWidget {
           overflow: TextOverflow.ellipsis,
           style: Theme.of(
             context,
-          ).textTheme.labelSmall?.copyWith(color: const Color(0xFF52617A)),
+          ).textTheme.labelSmall?.copyWith(color: const Color(0xFF2457F5)),
         ),
       ],
     ),
@@ -1384,23 +1384,23 @@ class _ResultSummaryCard extends StatelessWidget {
       elevation: 0,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
-        side: const BorderSide(color: Color(0xFFDCE5F1)),
+        side: const BorderSide(color: Color(0xFFE8F0FF)),
       ),
       child: Padding(
         padding: const EdgeInsets.all(14),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Icon(icon, color: const Color(0xFF2457C5)),
+            Icon(icon, color: const Color(0xFF2457F5)),
             const SizedBox(height: 8),
             Text(
               value,
               style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                color: const Color(0xFF15233B),
+                color: const Color(0xFF07172F),
                 fontWeight: FontWeight.w800,
               ),
             ),
-            Text(label, style: const TextStyle(color: Color(0xFF52617A))),
+            Text(label, style: const TextStyle(color: Color(0xFF2457F5))),
           ],
         ),
       ),
@@ -1422,18 +1422,18 @@ class _GuidanceRow extends StatelessWidget {
       children: [
         CircleAvatar(
           radius: 12,
-          backgroundColor: const Color(0xFFEAF2FF),
+          backgroundColor: const Color(0xFFF7F9FD),
           child: Text(
             number,
             style: const TextStyle(
-              color: Color(0xFF2457C5),
+              color: Color(0xFF2457F5),
               fontWeight: FontWeight.w800,
             ),
           ),
         ),
         const SizedBox(width: 10),
         Expanded(
-          child: Text(text, style: const TextStyle(color: Color(0xFF34435C))),
+          child: Text(text, style: const TextStyle(color: Color(0xFF0D47A1))),
         ),
       ],
     ),
@@ -1451,10 +1451,10 @@ class _DemoNotice extends StatelessWidget {
     width: double.infinity,
     padding: const EdgeInsets.all(13),
     decoration: BoxDecoration(
-      color: success ? const Color(0xFFE9F5EE) : const Color(0xFFFFF6DF),
+      color: success ? const Color(0xFFE9F5EE) : const Color(0xFFFFF6D6),
       borderRadius: BorderRadius.circular(14),
       border: Border.all(
-        color: success ? const Color(0xFFB7DCC4) : const Color(0xFFEAD69C),
+        color: success ? const Color(0xFFB7DCC4) : const Color(0xFFFFC107),
       ),
     ),
     child: Row(
@@ -1463,7 +1463,7 @@ class _DemoNotice extends StatelessWidget {
         Icon(
           success ? Icons.check_circle_outline : Icons.info_outline_rounded,
           size: 19,
-          color: success ? const Color(0xFF23633D) : const Color(0xFF765600),
+          color: success ? const Color(0xFF23633D) : const Color(0xFF775700),
         ),
         const SizedBox(width: 9),
         Expanded(
@@ -1472,7 +1472,7 @@ class _DemoNotice extends StatelessWidget {
             style: TextStyle(
               color: success
                   ? const Color(0xFF214C32)
-                  : const Color(0xFF5E4A13),
+                  : const Color(0xFF775700),
               height: 1.35,
               fontWeight: FontWeight.w600,
             ),
@@ -1490,13 +1490,13 @@ class _SampleBadge extends StatelessWidget {
   Widget build(BuildContext context) => Container(
     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
     decoration: BoxDecoration(
-      color: const Color(0xFFFFF1CC),
+      color: const Color(0xFFFFF6D6),
       borderRadius: BorderRadius.circular(99),
     ),
     child: const Text(
       'SAMPLE',
       style: TextStyle(
-        color: Color(0xFF765600),
+        color: Color(0xFF775700),
         fontSize: 10,
         fontWeight: FontWeight.w900,
         letterSpacing: .5,

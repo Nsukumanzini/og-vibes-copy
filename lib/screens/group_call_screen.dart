@@ -132,9 +132,9 @@ class _GroupCallScreenState extends State<GroupCallScreen> {
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
                 colors: [
-                  Color(0xFF06152D),
-                  Color(0xFF123D78),
-                  Color(0xFF075E76),
+                  Color(0xFF07172F),
+                  Color(0xFF0D47A1),
+                  Color(0xFF0D47A1),
                 ],
               ),
             ),

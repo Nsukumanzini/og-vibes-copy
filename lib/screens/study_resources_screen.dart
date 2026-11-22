@@ -1,3 +1,4 @@
+import 'package:og_vibes_student/utils/theme_constants.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -228,7 +229,7 @@ class _StudyResourcesScreenState extends State<StudyResourcesScreen>
         surfaceTintColor: Colors.transparent,
         bottom: TabBar(
           controller: _tabController,
-          indicatorColor: Colors.white,
+          indicatorColor: AppColors.midnightInk,
           labelStyle: const TextStyle(fontWeight: FontWeight.w700),
           tabs: const [
             Tab(text: 'Subjects'),
@@ -242,7 +243,7 @@ class _StudyResourcesScreenState extends State<StudyResourcesScreen>
           gradient: LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
-            colors: [Color(0xFF0B3D91), Color(0xFF2196F3), Color(0xFF6A1B9A)],
+            colors: [AppColors.surface, AppColors.auroraCanvas, AppColors.blueTint],
           ),
         ),
         child: FutureBuilder<Map<String, Map<String, List<Map<String, String>>>>>(
@@ -280,7 +281,7 @@ class _StudyResourcesScreenState extends State<StudyResourcesScreen>
                         'NCV IT student resources tailored to your level',
                         style: Theme.of(context).textTheme.titleMedium
                             ?.copyWith(
-                              color: Colors.white,
+                              color: AppColors.midnightInk,
                               fontWeight: FontWeight.w600,
                             ),
                       ),
@@ -291,9 +292,9 @@ class _StudyResourcesScreenState extends State<StudyResourcesScreen>
                         width: double.infinity,
                         padding: const EdgeInsets.all(16),
                         decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.12),
+                          color: AppColors.surface,
                           borderRadius: BorderRadius.circular(18),
-                          border: Border.all(color: Colors.white24),
+                          border: Border.all(color: AppColors.glassBorder),
                         ),
                         child: Row(
                           crossAxisAlignment: CrossAxisAlignment.start,
@@ -305,7 +306,7 @@ class _StudyResourcesScreenState extends State<StudyResourcesScreen>
                                   Text(
                                     _selectedLevel,
                                     style: const TextStyle(
-                                      color: Colors.white,
+                                      color: AppColors.midnightInk,
                                       fontSize: 18,
                                       fontWeight: FontWeight.w800,
                                     ),
@@ -314,7 +315,7 @@ class _StudyResourcesScreenState extends State<StudyResourcesScreen>
                                   Text(
                                     'Your selected NCV IT level. Swipe the tabs to find subjects, past papers, and study guides designed for this level.',
                                     style: TextStyle(
-                                      color: Colors.white.withOpacity(0.85),
+                                      color: AppColors.surface,
                                       fontSize: 13,
                                       height: 1.5,
                                     ),
@@ -326,12 +327,12 @@ class _StudyResourcesScreenState extends State<StudyResourcesScreen>
                             Container(
                               padding: const EdgeInsets.all(10),
                               decoration: BoxDecoration(
-                                color: Colors.white24,
+                                color: AppColors.glassBorder,
                                 shape: BoxShape.circle,
                               ),
                               child: const Icon(
                                 Icons.school_outlined,
-                                color: Colors.white,
+                                color: AppColors.midnightInk,
                               ),
                             ),
                           ],
@@ -370,13 +371,13 @@ class _StudyResourcesScreenState extends State<StudyResourcesScreen>
         return ChoiceChip(
           label: Text(level),
           selected: selected,
-          selectedColor: Colors.white,
-          backgroundColor: Colors.white.withOpacity(0.18),
+          selectedColor: AppColors.midnightInk,
+          backgroundColor: AppColors.surface,
           labelStyle: TextStyle(
-            color: selected ? Colors.black87 : Colors.white,
+            color: selected ? Colors.black87 : AppColors.midnightInk,
             fontWeight: FontWeight.w700,
           ),
-          side: BorderSide(color: selected ? Colors.white : Colors.white54),
+          side: BorderSide(color: selected ? AppColors.midnightInk : AppColors.textMuted),
           onSelected: (_) {
             setState(() {
               _selectedLevel = level;
@@ -395,7 +396,7 @@ class _StudyResourcesScreenState extends State<StudyResourcesScreen>
       itemBuilder: (context, index) {
         final item = items[index];
         return Material(
-          color: Colors.white.withOpacity(0.08),
+          color: AppColors.surface,
           borderRadius: BorderRadius.circular(18),
           child: InkWell(
             borderRadius: BorderRadius.circular(18),
@@ -415,14 +416,14 @@ class _StudyResourcesScreenState extends State<StudyResourcesScreen>
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
                       gradient: const LinearGradient(
-                        colors: [Color(0xFF42A5F5), Color(0xFF7E57C2)],
+                        colors: [Color(0xFF2457F5), Color(0xFF2457F5)],
                         begin: Alignment.topLeft,
                         end: Alignment.bottomRight,
                       ),
                     ),
                     child: const Icon(
                       Icons.folder_open,
-                      color: Colors.white,
+                      color: AppColors.midnightInk,
                       size: 26,
                     ),
                   ),
@@ -434,7 +435,7 @@ class _StudyResourcesScreenState extends State<StudyResourcesScreen>
                         Text(
                           item['title']!,
                           style: const TextStyle(
-                            color: Colors.white,
+                            color: AppColors.midnightInk,
                             fontSize: 16,
                             fontWeight: FontWeight.w700,
                           ),
@@ -443,7 +444,7 @@ class _StudyResourcesScreenState extends State<StudyResourcesScreen>
                         Text(
                           item['subtitle']!,
                           style: TextStyle(
-                            color: Colors.white.withOpacity(0.78),
+                            color: AppColors.surface,
                             fontSize: 13,
                             height: 1.4,
                           ),
@@ -454,7 +455,7 @@ class _StudyResourcesScreenState extends State<StudyResourcesScreen>
                   const SizedBox(width: 14),
                   ElevatedButton(
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.white,
+                      backgroundColor: AppColors.surface,
                       foregroundColor: Theme.of(context).colorScheme.primary,
                       elevation: 0,
                       shape: RoundedRectangleBorder(
@@ -481,8 +482,8 @@ class _StudyResourcesScreenState extends State<StudyResourcesScreen>
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 20, 20, 20),
       child: Shimmer.fromColors(
-        baseColor: Colors.white24,
-        highlightColor: Colors.white38,
+        baseColor: AppColors.glassBorder,
+        highlightColor: AppColors.blueTint,
         child: Column(
           children: List.generate(
             4,
@@ -490,7 +491,7 @@ class _StudyResourcesScreenState extends State<StudyResourcesScreen>
               margin: const EdgeInsets.only(bottom: 12),
               height: 84,
               decoration: BoxDecoration(
-                color: Colors.white,
+                color: AppColors.midnightInk,
                 borderRadius: BorderRadius.circular(18),
               ),
             ),

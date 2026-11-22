@@ -33,7 +33,7 @@ class _ExamReadinessScreenState extends State<ExamReadinessScreen> {
               style: TextStyle(
                 fontSize: 21,
                 fontWeight: FontWeight.w800,
-                color: Color(0xFF102027),
+                color: Color(0xFF07172F),
               ),
             ),
             const SizedBox(height: 12),
@@ -45,7 +45,7 @@ class _ExamReadinessScreenState extends State<ExamReadinessScreen> {
                 decoration: BoxDecoration(
                   color: Colors.white,
                   borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: const Color(0xFFE3EAF2)),
+                  border: Border.all(color: const Color(0xFFE8F0FF)),
                   boxShadow: <BoxShadow>[
                     BoxShadow(
                       color: Colors.black.withValues(alpha: 0.04),
@@ -72,7 +72,7 @@ class _ExamReadinessScreenState extends State<ExamReadinessScreen> {
                       title: Text(
                         item.label,
                         style: const TextStyle(
-                          color: Color(0xFF263238),
+                          color: Color(0xFF0D47A1),
                           fontWeight: FontWeight.w600,
                         ),
                       ),
@@ -120,7 +120,7 @@ class _ExamReadinessScreenState extends State<ExamReadinessScreen> {
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(16),
         gradient: const LinearGradient(
-          colors: <Color>[Color(0xFF0D47A1), Color(0xFF1976D2)],
+          colors: <Color>[Color(0xFF2457F5), Color(0xFF2457F5)],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),

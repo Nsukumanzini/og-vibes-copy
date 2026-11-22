@@ -1,3 +1,4 @@
+import 'package:og_vibes_student/utils/theme_constants.dart';
 import 'package:flutter/material.dart';
 import 'package:og_vibes_student/widgets/vibe_scaffold.dart';
 
@@ -72,18 +73,18 @@ class _StudyGroupFinderScreenState extends State<StudyGroupFinderScreen> {
       appBar: AppBar(
         title: Text(
           'Collaboration Lobby — $_selectedLevel',
-          style: const TextStyle(color: Colors.white),
+          style: const TextStyle(color: AppColors.midnightInk),
         ),
         backgroundColor: Colors.transparent,
         elevation: 0,
-        iconTheme: const IconThemeData(color: Colors.white),
+        iconTheme: const IconThemeData(color: AppColors.midnightInk),
       ),
       body: Container(
         decoration: const BoxDecoration(
           gradient: LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
-            colors: [Color(0xFF0D47A1), Color(0xFF2962FF), Color(0xFF6200EA)],
+            colors: [AppColors.surface, AppColors.auroraCanvas, AppColors.blueTint],
           ),
         ),
         child: Padding(
@@ -182,10 +183,10 @@ class _StudyGroupFinderScreenState extends State<StudyGroupFinderScreen> {
             label: Text(level),
             selected: selected,
             onSelected: (_) => setState(() => _selectedLevel = level),
-            selectedColor: Colors.white,
+            selectedColor: AppColors.midnightInk,
             backgroundColor: Colors.white10,
             labelStyle: TextStyle(
-              color: selected ? Colors.black87 : Colors.white,
+              color: selected ? Colors.black87 : AppColors.midnightInk,
               fontWeight: FontWeight.w700,
             ),
           );
@@ -208,9 +209,9 @@ class _SkillMatcherCTA extends StatelessWidget {
         width: double.infinity,
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
         decoration: BoxDecoration(
-          color: Colors.white.withOpacity(0.12),
+          color: AppColors.surface,
           borderRadius: BorderRadius.circular(18),
-          border: Border.all(color: Colors.white24),
+          border: Border.all(color: AppColors.glassBorder),
           boxShadow: [
             BoxShadow(
               color: Colors.black.withOpacity(0.25),
@@ -221,18 +222,18 @@ class _SkillMatcherCTA extends StatelessWidget {
         ),
         child: Row(
           children: const [
-            Icon(Icons.auto_awesome, color: Color(0xFFFFD54F)),
+            Icon(Icons.auto_awesome, color: Color(0xFFFFC107)),
             SizedBox(width: 12),
             Expanded(
               child: Text(
                 'I need help with... Tap to match skills',
                 style: TextStyle(
-                  color: Colors.white,
+                  color: AppColors.midnightInk,
                   fontWeight: FontWeight.w600,
                 ),
               ),
             ),
-            Icon(Icons.chevron_right, color: Colors.white70),
+            Icon(Icons.chevron_right, color: AppColors.textMuted),
           ],
         ),
       ),
@@ -266,11 +267,11 @@ class _DepartmentFilter extends StatelessWidget {
             label: Text(dept),
             selected: selected,
             onSelected: (_) => onSelected(dept),
-            selectedColor: Colors.white24,
+            selectedColor: AppColors.glassBorder,
             backgroundColor: Colors.white10,
-            side: BorderSide(color: selected ? Colors.white : Colors.white24),
+            side: BorderSide(color: selected ? AppColors.midnightInk : AppColors.glassBorder),
             labelStyle: TextStyle(
-              color: Colors.white.withOpacity(selected ? 1 : 0.7),
+              color: AppColors.midnightInk.withOpacity(selected ? 1 : 0.7),
               fontWeight: FontWeight.w600,
             ),
           );
@@ -290,7 +291,7 @@ class _GroupCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.15),
+        color: AppColors.surface,
         borderRadius: BorderRadius.circular(24),
         border: Border.all(color: Colors.white30),
         boxShadow: [
@@ -312,12 +313,12 @@ class _GroupCard extends StatelessWidget {
                   style: const TextStyle(
                     fontSize: 18,
                     fontWeight: FontWeight.w700,
-                    color: Colors.white,
+                    color: AppColors.midnightInk,
                   ),
                 ),
               ),
               if (group.isPrivate)
-                const Icon(Icons.lock_outline, color: Colors.white70),
+                const Icon(Icons.lock_outline, color: AppColors.textMuted),
             ],
           ),
           const SizedBox(height: 10),
@@ -328,10 +329,10 @@ class _GroupCard extends StatelessWidget {
                 .map(
                   (tag) => Chip(
                     label: Text(tag),
-                    backgroundColor: Colors.white24,
+                    backgroundColor: AppColors.glassBorder,
                     labelStyle: const TextStyle(
                       fontWeight: FontWeight.w600,
-                      color: Colors.white,
+                      color: AppColors.midnightInk,
                     ),
                   ),
                 )
@@ -345,7 +346,7 @@ class _GroupCard extends StatelessWidget {
               Text(
                 '${group.members}/${group.capacity} Filled',
                 style: const TextStyle(
-                  color: Colors.white,
+                  color: AppColors.midnightInk,
                   fontWeight: FontWeight.w700,
                 ),
               ),
@@ -357,7 +358,7 @@ class _GroupCard extends StatelessWidget {
             child: FilledButton(
               onPressed: () {},
               style: FilledButton.styleFrom(
-                backgroundColor: Colors.amberAccent,
+                backgroundColor: AppColors.ogGold,
                 foregroundColor: Colors.black,
               ),
               child: const Text('Join Group'),
@@ -392,7 +393,7 @@ class _FacePile extends StatelessWidget {
               child: Text(
                 label,
                 style: const TextStyle(
-                  color: Colors.white,
+                  color: AppColors.midnightInk,
                   fontWeight: FontWeight.bold,
                 ),
               ),
@@ -404,7 +405,7 @@ class _FacePile extends StatelessWidget {
   }
 
   Color _avatarColor(int index) {
-    const palette = [Color(0xFF2962FF), Color(0xFF00BFA5), Color(0xFFFF6D00)];
+    const palette = [Color(0xFF2457F5), Color(0xFF00BFA5), Color(0xFFFF6D00)];
     return palette[index % palette.length];
   }
 }
@@ -417,16 +418,16 @@ class _EmptyLobbyState extends StatelessWidget {
     return Column(
       mainAxisAlignment: MainAxisAlignment.center,
       children: const [
-        Icon(Icons.menu_book_outlined, size: 64, color: Colors.white70),
+        Icon(Icons.menu_book_outlined, size: 64, color: AppColors.textMuted),
         SizedBox(height: 12),
         Text(
           'No groups match this department yet.',
-          style: TextStyle(color: Colors.white70, fontWeight: FontWeight.w600),
+          style: TextStyle(color: AppColors.textMuted, fontWeight: FontWeight.w600),
         ),
         SizedBox(height: 4),
         Text(
           'Tap "I need help with..." to summon collaborators.',
-          style: TextStyle(color: Colors.white54),
+          style: TextStyle(color: AppColors.textMuted),
         ),
       ],
     );

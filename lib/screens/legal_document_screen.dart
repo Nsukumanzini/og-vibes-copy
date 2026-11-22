@@ -12,7 +12,7 @@ class LegalDocumentScreen extends StatelessWidget {
     final isTerms = type == LegalDocumentType.terms;
     final sections = isTerms ? _termsSections : _privacySections;
     return Scaffold(
-      backgroundColor: const Color(0xFFF4F7FC),
+      backgroundColor: const Color(0xFFF7F9FD),
       appBar: AppBar(title: Text(isTerms ? 'Terms of Use' : 'Privacy Policy')),
       body: SelectionArea(
         child: SingleChildScrollView(
@@ -28,7 +28,7 @@ class LegalDocumentScreen extends StatelessWidget {
                     padding: const EdgeInsets.all(24),
                     decoration: BoxDecoration(
                       gradient: const LinearGradient(
-                        colors: [Color(0xFF0A2863), Color(0xFF1769E0)],
+                        colors: [Color(0xFF0D47A1), Color(0xFF2457F5)],
                       ),
                       borderRadius: BorderRadius.circular(24),
                     ),
@@ -74,7 +74,7 @@ class LegalDocumentScreen extends StatelessWidget {
                       decoration: BoxDecoration(
                         color: Colors.white,
                         borderRadius: BorderRadius.circular(18),
-                        border: Border.all(color: const Color(0xFFE4EAF4)),
+                        border: Border.all(color: const Color(0xFFE8F0FF)),
                       ),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -82,7 +82,7 @@ class LegalDocumentScreen extends StatelessWidget {
                           Text(
                             section.$1,
                             style: const TextStyle(
-                              color: Color(0xFF0A2863),
+                              color: Color(0xFF0D47A1),
                               fontSize: 16,
                               fontWeight: FontWeight.w800,
                             ),
@@ -91,7 +91,7 @@ class LegalDocumentScreen extends StatelessWidget {
                           Text(
                             section.$2,
                             style: const TextStyle(
-                              color: Color(0xFF4E5D73),
+                              color: Color(0xFF2457F5),
                               height: 1.6,
                             ),
                           ),

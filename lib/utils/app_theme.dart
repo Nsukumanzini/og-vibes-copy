@@ -26,7 +26,7 @@ class AppTheme {
       seedColor: AppColors.vibeBlue,
       brightness: brightness,
       primary: dark ? AppColors.blueLight : AppColors.vibeBlue,
-      secondary: AppColors.electricCyan,
+      secondary: AppColors.deepBlue,
       tertiary: AppColors.ogGold,
       error: AppColors.danger,
       surface: surface,

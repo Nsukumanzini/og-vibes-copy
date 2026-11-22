@@ -24,11 +24,11 @@ class _LessonPlayerScreenState extends State<LessonPlayerScreen> {
     return DefaultTabController(
       length: 3,
       child: Scaffold(
-        backgroundColor: const Color(0xFFF5F7FB),
+        backgroundColor: const Color(0xFFF7F9FD),
         appBar: AppBar(
           elevation: 0,
           backgroundColor: Colors.white,
-          foregroundColor: const Color(0xFF0F172A),
+          foregroundColor: const Color(0xFF07172F),
           title: Text(
             widget.courseName,
             style: const TextStyle(fontWeight: FontWeight.w700),
@@ -40,9 +40,9 @@ class _LessonPlayerScreenState extends State<LessonPlayerScreen> {
             Container(
               color: Colors.white,
               child: const TabBar(
-                labelColor: Color(0xFF0F172A),
-                unselectedLabelColor: Color(0xFF64748B),
-                indicatorColor: Color(0xFF2563EB),
+                labelColor: Color(0xFF07172F),
+                unselectedLabelColor: Color(0xFF2457F5),
+                indicatorColor: Color(0xFF2457F5),
                 indicatorWeight: 3,
                 tabs: [
                   Tab(text: 'Overview'),
@@ -110,8 +110,8 @@ class _VideoPreview extends StatelessWidget {
                         begin: Alignment.topCenter,
                         end: Alignment.bottomCenter,
                         colors: [
-                          const Color(0xFF0B1020).withOpacity(0.2),
-                          const Color(0xFF0B1020).withOpacity(0.7),
+                          const Color(0xFF07172F).withOpacity(0.2),
+                          const Color(0xFF07172F).withOpacity(0.7),
                         ],
                       ),
                     ),
@@ -133,7 +133,7 @@ class _VideoPreview extends StatelessWidget {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
-                      color: Color(0xFFE2E8F0),
+                      color: Color(0xFFE8F0FF),
                       fontWeight: FontWeight.w700,
                       fontSize: 13,
                     ),
@@ -153,7 +153,7 @@ class _VideoPreview extends StatelessWidget {
                           minHeight: 5,
                           backgroundColor: const Color(0x4DFFFFFF),
                           valueColor: const AlwaysStoppedAnimation<Color>(
-                            Color(0xFF3B82F6),
+                            Color(0xFF2457F5),
                           ),
                         ),
                       ),
@@ -202,7 +202,7 @@ class _OverviewTab extends StatelessWidget {
           decoration: BoxDecoration(
             color: Colors.white,
             borderRadius: BorderRadius.circular(18),
-            border: Border.all(color: const Color(0xFFE2E8F0)),
+            border: Border.all(color: const Color(0xFFE8F0FF)),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -210,7 +210,7 @@ class _OverviewTab extends StatelessWidget {
               Text(
                 lessonTitle,
                 style: TextStyle(
-                  color: Color(0xFF0F172A),
+                  color: Color(0xFF07172F),
                   fontSize: 20,
                   fontWeight: FontWeight.w800,
                 ),
@@ -219,7 +219,7 @@ class _OverviewTab extends StatelessWidget {
               Text(
                 lessonDescription,
                 style: TextStyle(
-                  color: Color(0xFF475569),
+                  color: Color(0xFF2457F5),
                   height: 1.45,
                   fontWeight: FontWeight.w500,
                 ),
@@ -242,7 +242,7 @@ class _OverviewTab extends StatelessWidget {
                     padding: const EdgeInsets.symmetric(vertical: 13),
                     backgroundColor: isCompleted
                         ? const Color(0xFF16A34A)
-                        : const Color(0xFF2563EB),
+                        : const Color(0xFF2457F5),
                     foregroundColor: Colors.white,
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(12),
@@ -288,32 +288,32 @@ class _ResourceCard extends StatelessWidget {
       color: Colors.white,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
-        side: const BorderSide(color: Color(0xFFE2E8F0)),
+        side: const BorderSide(color: Color(0xFFE8F0FF)),
       ),
       child: ListTile(
         contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
         leading: const CircleAvatar(
           radius: 19,
-          backgroundColor: Color(0xFFEFF6FF),
-          child: Icon(Icons.description_rounded, color: Color(0xFF1D4ED8)),
+          backgroundColor: Color(0xFFF7F9FD),
+          child: Icon(Icons.description_rounded, color: Color(0xFF2457F5)),
         ),
         title: Text(
           title,
           style: const TextStyle(
-            color: Color(0xFF0F172A),
+            color: Color(0xFF07172F),
             fontWeight: FontWeight.w700,
           ),
         ),
         subtitle: Text(
           subtitle,
           style: const TextStyle(
-            color: Color(0xFF64748B),
+            color: Color(0xFF2457F5),
             fontWeight: FontWeight.w500,
           ),
         ),
         trailing: IconButton(
           onPressed: () {},
-          icon: const Icon(Icons.download_rounded, color: Color(0xFF0F172A)),
+          icon: const Icon(Icons.download_rounded, color: Color(0xFF07172F)),
           tooltip: 'Download',
         ),
       ),
@@ -333,8 +333,8 @@ class _DiscussionTab extends StatelessWidget {
           author: 'Sipho',
           role: 'Student',
           message: 'At 12:45, why did the sign change?',
-          tint: Color(0xFFEFF6FF),
-          accent: Color(0xFF1D4ED8),
+          tint: Color(0xFFF7F9FD),
+          accent: Color(0xFF2457F5),
         ),
         SizedBox(height: 10),
         _DiscussionBubble(
@@ -372,7 +372,7 @@ class _DiscussionBubble extends StatelessWidget {
       decoration: BoxDecoration(
         color: tint,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFFE2E8F0)),
+        border: Border.all(color: const Color(0xFFE8F0FF)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -387,7 +387,7 @@ class _DiscussionBubble extends StatelessWidget {
               Text(
                 role,
                 style: const TextStyle(
-                  color: Color(0xFF64748B),
+                  color: Color(0xFF2457F5),
                   fontWeight: FontWeight.w600,
                 ),
               ),
@@ -397,7 +397,7 @@ class _DiscussionBubble extends StatelessWidget {
           Text(
             message,
             style: const TextStyle(
-              color: Color(0xFF1E293B),
+              color: Color(0xFF0D47A1),
               height: 1.35,
               fontWeight: FontWeight.w500,
             ),

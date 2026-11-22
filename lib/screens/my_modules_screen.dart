@@ -237,7 +237,7 @@ class _MyModulesScreenState extends State<MyModulesScreen>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF2F6FF),
+      backgroundColor: const Color(0xFFF7F9FD),
       body: Stack(
         children: [
           const Positioned.fill(child: _AuroraBackground()),
@@ -300,7 +300,7 @@ class _MyModulesScreenState extends State<MyModulesScreen>
                     fontSize: 11,
                     fontWeight: FontWeight.w800,
                     letterSpacing: 2,
-                    color: Color(0xFF2563EB),
+                    color: Color(0xFF2457F5),
                   ),
                 ),
                 SizedBox(height: 2),
@@ -331,7 +331,7 @@ class _MyModulesScreenState extends State<MyModulesScreen>
                     width: 9,
                     height: 9,
                     decoration: const BoxDecoration(
-                      color: Color(0xFFF59E0B),
+                      color: Color(0xFFFFC107),
                       shape: BoxShape.circle,
                     ),
                   ),
@@ -367,7 +367,7 @@ class _MyModulesScreenState extends State<MyModulesScreen>
               indicator: BoxDecoration(
                 borderRadius: BorderRadius.circular(14),
                 gradient: const LinearGradient(
-                  colors: [Color(0xFF1247A8), Color(0xFF2878E8)],
+                  colors: [Color(0xFF2457F5), Color(0xFF2457F5)],
                 ),
                 boxShadow: const [
                   BoxShadow(
@@ -378,7 +378,7 @@ class _MyModulesScreenState extends State<MyModulesScreen>
                 ],
               ),
               labelColor: Colors.white,
-              unselectedLabelColor: const Color(0xFF52637A),
+              unselectedLabelColor: const Color(0xFF2457F5),
               labelStyle: const TextStyle(
                 fontWeight: FontWeight.w800,
                 fontSize: 12,
@@ -440,7 +440,7 @@ class _MyModulesScreenState extends State<MyModulesScreen>
     showModalBottomSheet<void>(
       context: context,
       showDragHandle: true,
-      backgroundColor: const Color(0xFFF7FAFF),
+      backgroundColor: const Color(0xFFF7F9FD),
       builder: (context) => Padding(
         padding: const EdgeInsets.fromLTRB(20, 4, 20, 28),
         child: Column(
@@ -684,7 +684,7 @@ class _RegistrationList extends StatelessWidget {
                   decoration: BoxDecoration(
                     borderRadius: BorderRadius.circular(17),
                     gradient: const LinearGradient(
-                      colors: [Color(0xFF1247A8), Color(0xFF26B9D6)],
+                      colors: [Color(0xFF2457F5), Color(0xFF2457F5)],
                     ),
                   ),
                   child: const Icon(
@@ -710,7 +710,7 @@ class _RegistrationList extends StatelessWidget {
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(
-                          color: Color(0xFF62748A),
+                          color: Color(0xFF2457F5),
                           fontSize: 12,
                         ),
                       ),
@@ -718,7 +718,7 @@ class _RegistrationList extends StatelessWidget {
                       Text(
                         '${item.lecturer} · ${item.academicYear} / S${item.semester}',
                         style: const TextStyle(
-                          color: Color(0xFF2563EB),
+                          color: Color(0xFF2457F5),
                           fontWeight: FontWeight.w700,
                           fontSize: 11,
                         ),
@@ -729,7 +729,7 @@ class _RegistrationList extends StatelessWidget {
                 const Icon(
                   Icons.arrow_forward_ios_rounded,
                   size: 17,
-                  color: Color(0xFF8A9AAF),
+                  color: Color(0xFF2457F5),
                 ),
               ],
             ),
@@ -773,12 +773,12 @@ class _InvitationCard extends StatelessWidget {
       decoration: BoxDecoration(
         gradient: LinearGradient(
           colors: highlighted
-              ? const [Color(0xFFFFFFFF), Color(0xFFE7F4FF)]
-              : const [Color(0xFFFFFFFF), Color(0xFFF7FAFF)],
+              ? const [Color(0xFFFFFFFF), Color(0xFFF7F9FD)]
+              : const [Color(0xFFFFFFFF), Color(0xFFF7F9FD)],
         ),
         borderRadius: BorderRadius.circular(26),
         border: Border.all(
-          color: highlighted ? const Color(0xFF65BCEB) : Colors.white,
+          color: highlighted ? const Color(0xFF2457F5) : Colors.white,
           width: highlighted ? 1.5 : 1,
         ),
         boxShadow: const [
@@ -797,7 +797,7 @@ class _InvitationCard extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: const Color(0xFF0D47A1),
+                  color: const Color(0xFF2457F5),
                   borderRadius: BorderRadius.circular(16),
                 ),
                 child: const Icon(
@@ -813,7 +813,7 @@ class _InvitationCard extends StatelessWidget {
                     const Text(
                       'MODULE INVITATION',
                       style: TextStyle(
-                        color: Color(0xFF2563EB),
+                        color: Color(0xFF2457F5),
                         fontSize: 10,
                         letterSpacing: 1.5,
                         fontWeight: FontWeight.w900,
@@ -836,7 +836,7 @@ class _InvitationCard extends StatelessWidget {
           Text(
             '$lecturer invited you to join this module. Accepting securely activates classes, quizzes, slides, assessments and marks for this module.',
             style: const TextStyle(
-              color: Color(0xFF56677B),
+              color: Color(0xFF2457F5),
               height: 1.55,
               fontSize: 13,
             ),
@@ -897,19 +897,19 @@ class _Pill extends StatelessWidget {
   Widget build(BuildContext context) => Container(
     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
     decoration: BoxDecoration(
-      color: const Color(0xFFEAF2FF),
+      color: const Color(0xFFF7F9FD),
       borderRadius: BorderRadius.circular(20),
     ),
     child: Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Icon(icon, size: 14, color: const Color(0xFF2563EB)),
+        Icon(icon, size: 14, color: const Color(0xFF2457F5)),
         const SizedBox(width: 6),
         Text(
           label,
           style: const TextStyle(
             fontWeight: FontWeight.w700,
-            color: Color(0xFF36506F),
+            color: Color(0xFF2457F5),
             fontSize: 11,
           ),
         ),
@@ -929,10 +929,10 @@ class _ResourceButton extends StatelessWidget {
   final VoidCallback onTap;
   @override
   Widget build(BuildContext context) => ActionChip(
-    avatar: Icon(icon, size: 18, color: const Color(0xFF2563EB)),
+    avatar: Icon(icon, size: 18, color: const Color(0xFF2457F5)),
     label: Text(label),
     onPressed: onTap,
-    side: const BorderSide(color: Color(0xFFD7E5FA)),
+    side: const BorderSide(color: Color(0xFFE8F0FF)),
     backgroundColor: Colors.white,
   );
 }
@@ -952,7 +952,7 @@ class _EmptyState extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 58, color: const Color(0xFF8BA9CF)),
+          Icon(icon, size: 58, color: const Color(0xFF2457F5)),
           const SizedBox(height: 16),
           Text(
             title,
@@ -1009,7 +1009,7 @@ class _AuroraBackground extends StatelessWidget {
       gradient: LinearGradient(
         begin: Alignment.topLeft,
         end: Alignment.bottomRight,
-        colors: [Color(0xFFE7F1FF), Color(0xFFF7FAFF), Color(0xFFE8FBFA)],
+        colors: [Color(0xFFF7F9FD), Color(0xFFF7F9FD), Color(0xFFF7F9FD)],
       ),
     ),
   );

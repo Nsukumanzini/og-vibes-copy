@@ -19,20 +19,20 @@ class CoursePortalScreen extends StatelessWidget {
     return DefaultTabController(
       length: 4,
       child: Scaffold(
-        backgroundColor: const Color(0xFFF6F8FC),
+        backgroundColor: const Color(0xFFF7F9FD),
         appBar: AppBar(
           elevation: 0,
           backgroundColor: Colors.white,
-          foregroundColor: const Color(0xFF0F172A),
+          foregroundColor: const Color(0xFF07172F),
           title: Text(
             courseName,
             style: const TextStyle(fontWeight: FontWeight.w700),
           ),
           bottom: const TabBar(
             isScrollable: true,
-            labelColor: Color(0xFF0F172A),
-            unselectedLabelColor: Color(0xFF64748B),
-            indicatorColor: Color(0xFF2563EB),
+            labelColor: Color(0xFF07172F),
+            unselectedLabelColor: Color(0xFF2457F5),
+            indicatorColor: Color(0xFF2457F5),
             indicatorWeight: 3,
             tabs: [
               Tab(text: 'Modules'),
@@ -72,7 +72,7 @@ class _ModulesTab extends StatelessWidget {
               gradient: const LinearGradient(
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
-                colors: [Color(0xFF0A192F), Color(0xFF1E3A5F)],
+                colors: [Color(0xFF07172F), Color(0xFF0D47A1)],
               ),
               borderRadius: BorderRadius.circular(16),
             ),
@@ -95,7 +95,7 @@ class _ModulesTab extends StatelessWidget {
               subtitle: Text(
                 config.liveBannerSubtitle,
                 style: const TextStyle(
-                  color: Color(0xFFE2E8F0),
+                  color: Color(0xFFE8F0FF),
                   fontWeight: FontWeight.w500,
                 ),
               ),
@@ -115,7 +115,7 @@ class _ModulesTab extends StatelessWidget {
         Text(
           'Syllabus',
           style: Theme.of(context).textTheme.titleLarge?.copyWith(
-            color: const Color(0xFF0F172A),
+            color: const Color(0xFF07172F),
             fontWeight: FontWeight.w800,
           ),
         ),
@@ -155,8 +155,8 @@ class _AssessmentsTab extends StatelessWidget {
               icon: const Icon(Icons.lock_outline_rounded),
               label: Text(config.secureQuizLabel),
               style: OutlinedButton.styleFrom(
-                foregroundColor: const Color(0xFF0A192F),
-                side: const BorderSide(color: Color(0xFFCBD5E1)),
+                foregroundColor: const Color(0xFF07172F),
+                side: const BorderSide(color: Color(0xFFE8F0FF)),
                 padding: const EdgeInsets.symmetric(vertical: 12),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(12),
@@ -197,26 +197,26 @@ class _AssessmentCard extends StatelessWidget {
       color: Colors.white,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
-        side: const BorderSide(color: Color(0xFFE2E8F0)),
+        side: const BorderSide(color: Color(0xFFE8F0FF)),
       ),
       child: ListTile(
         contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
         leading: CircleAvatar(
           radius: 19,
-          backgroundColor: const Color(0xFFE0EAFF),
-          child: Icon(icon, color: const Color(0xFF1D4ED8)),
+          backgroundColor: const Color(0xFFE8F0FF),
+          child: Icon(icon, color: const Color(0xFF2457F5)),
         ),
         title: Text(
           title,
           style: const TextStyle(
-            color: Color(0xFF0F172A),
+            color: Color(0xFF07172F),
             fontWeight: FontWeight.w700,
           ),
         ),
         subtitle: Text(
           dueText,
           style: const TextStyle(
-            color: Color(0xFF64748B),
+            color: Color(0xFF2457F5),
             fontWeight: FontWeight.w500,
           ),
         ),
@@ -241,9 +241,9 @@ class _GradesTab extends StatelessWidget {
             child: Container(
               padding: const EdgeInsets.all(14),
               decoration: BoxDecoration(
-                color: const Color(0xFFFEFCE8),
+                color: const Color(0xFFFFF6D6),
                 borderRadius: BorderRadius.circular(14),
-                border: Border.all(color: const Color(0xFFFDE68A)),
+                border: Border.all(color: const Color(0xFFFFC107)),
               ),
               child: Row(
                 children: [
@@ -276,12 +276,12 @@ class _GradesTab extends StatelessWidget {
           decoration: BoxDecoration(
             color: Colors.white,
             borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: const Color(0xFFE2E8F0)),
+            border: Border.all(color: const Color(0xFFE8F0FF)),
           ),
           child: Column(
             children: [
               for (int i = 0; i < config.grades.length; i++) ...[
-                if (i > 0) const Divider(height: 1, color: Color(0xFFE2E8F0)),
+                if (i > 0) const Divider(height: 1, color: Color(0xFFE8F0FF)),
                 _GradeListTile(row: config.grades[i]),
               ],
             ],
@@ -329,7 +329,7 @@ class _ModuleCard extends StatelessWidget {
       color: Colors.white,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
-        side: const BorderSide(color: Color(0xFFE2E8F0)),
+        side: const BorderSide(color: Color(0xFFE8F0FF)),
       ),
       child: ExpansionTile(
         initiallyExpanded: module.initiallyExpanded,
@@ -338,7 +338,7 @@ class _ModuleCard extends StatelessWidget {
         title: Text(
           module.title,
           style: const TextStyle(
-            color: Color(0xFF0F172A),
+            color: Color(0xFF07172F),
             fontWeight: FontWeight.w700,
           ),
         ),
@@ -381,9 +381,9 @@ class _ModuleItemCard extends StatelessWidget {
       child: Ink(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
         decoration: BoxDecoration(
-          color: const Color(0xFFF8FAFC),
+          color: const Color(0xFFF7F9FD),
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: const Color(0xFFE2E8F0)),
+          border: Border.all(color: const Color(0xFFE8F0FF)),
         ),
         child: Row(
           children: [
@@ -393,7 +393,7 @@ class _ModuleItemCard extends StatelessWidget {
               child: Text(
                 item.title,
                 style: const TextStyle(
-                  color: Color(0xFF1E293B),
+                  color: Color(0xFF0D47A1),
                   fontWeight: FontWeight.w600,
                 ),
               ),
@@ -401,7 +401,7 @@ class _ModuleItemCard extends StatelessWidget {
             if (item.isVideo)
               const Icon(
                 Icons.open_in_new_rounded,
-                color: Color(0xFF64748B),
+                color: Color(0xFF2457F5),
                 size: 18,
               ),
           ],
@@ -426,7 +426,7 @@ class _GradeListTile extends StatelessWidget {
             child: Text(
               row.label,
               style: const TextStyle(
-                color: Color(0xFF0F172A),
+                color: Color(0xFF07172F),
                 fontWeight: FontWeight.w600,
               ),
             ),
@@ -464,7 +464,7 @@ class _AnnouncementCard extends StatelessWidget {
       color: Colors.white,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
-        side: const BorderSide(color: Color(0xFFE2E8F0)),
+        side: const BorderSide(color: Color(0xFFE8F0FF)),
       ),
       child: Padding(
         padding: const EdgeInsets.all(14),
@@ -474,14 +474,14 @@ class _AnnouncementCard extends StatelessWidget {
             Text(
               title,
               style: const TextStyle(
-                color: Color(0xFF0F172A),
+                color: Color(0xFF07172F),
                 fontWeight: FontWeight.w700,
               ),
             ),
             const SizedBox(height: 6),
             Text(
               body,
-              style: const TextStyle(color: Color(0xFF475569), height: 1.35),
+              style: const TextStyle(color: Color(0xFF2457F5), height: 1.35),
             ),
           ],
         ),
@@ -594,7 +594,7 @@ class _ModuleItem {
         title: title,
         description: description,
         icon: Icons.videocam_rounded,
-        iconColor: const Color(0xFF2563EB),
+        iconColor: const Color(0xFF2457F5),
         isVideo: true,
       );
 

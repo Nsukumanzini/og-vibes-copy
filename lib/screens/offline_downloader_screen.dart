@@ -18,7 +18,7 @@ class _OfflineDownloaderScreenState extends State<OfflineDownloaderScreen> {
       title: 'N4 Maths Complete Offline Pack',
       details: 'Includes Notes, Past Papers, Flashcards',
       size: '45MB',
-      color: Color(0xFF1565C0),
+      color: Color(0xFF2457F5),
       icon: Icons.school_rounded,
     ),
     _LearningPack(
@@ -74,7 +74,7 @@ class _OfflineDownloaderScreenState extends State<OfflineDownloaderScreen> {
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(16),
         gradient: const LinearGradient(
-          colors: <Color>[Color(0xFF0D47A1), Color(0xFF1976D2)],
+          colors: <Color>[Color(0xFF2457F5), Color(0xFF2457F5)],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
@@ -107,7 +107,7 @@ class _OfflineDownloaderScreenState extends State<OfflineDownloaderScreen> {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFFE3EAF2)),
+        border: Border.all(color: const Color(0xFFE8F0FF)),
         boxShadow: <BoxShadow>[
           BoxShadow(
             color: Colors.black.withValues(alpha: 0.05),
@@ -138,7 +138,7 @@ class _OfflineDownloaderScreenState extends State<OfflineDownloaderScreen> {
                     Text(
                       pack.title,
                       style: const TextStyle(
-                        color: Color(0xFF102027),
+                        color: Color(0xFF07172F),
                         fontWeight: FontWeight.w800,
                         fontSize: 16,
                       ),
@@ -147,7 +147,7 @@ class _OfflineDownloaderScreenState extends State<OfflineDownloaderScreen> {
                     Text(
                       pack.details,
                       style: const TextStyle(
-                        color: Color(0xFF607D8B),
+                        color: Color(0xFF2457F5),
                         fontWeight: FontWeight.w600,
                       ),
                     ),
@@ -155,7 +155,7 @@ class _OfflineDownloaderScreenState extends State<OfflineDownloaderScreen> {
                     Text(
                       'Size: ${pack.size}',
                       style: const TextStyle(
-                        color: Color(0xFF455A64),
+                        color: Color(0xFF2457F5),
                         fontWeight: FontWeight.w700,
                       ),
                     ),
@@ -179,7 +179,7 @@ class _OfflineDownloaderScreenState extends State<OfflineDownloaderScreen> {
           child: ElevatedButton.icon(
             onPressed: () => _startDownload(index),
             style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF1565C0),
+              backgroundColor: const Color(0xFF2457F5),
               foregroundColor: Colors.white,
               padding: const EdgeInsets.symmetric(vertical: 12),
               shape: RoundedRectangleBorder(
@@ -202,9 +202,9 @@ class _OfflineDownloaderScreenState extends State<OfflineDownloaderScreen> {
               child: LinearProgressIndicator(
                 value: _progress[index],
                 minHeight: 10,
-                backgroundColor: const Color(0xFFE3ECF5),
+                backgroundColor: const Color(0xFFE8F0FF),
                 valueColor: const AlwaysStoppedAnimation<Color>(
-                  Color(0xFF1565C0),
+                  Color(0xFF2457F5),
                 ),
               ),
             ),
@@ -212,7 +212,7 @@ class _OfflineDownloaderScreenState extends State<OfflineDownloaderScreen> {
             Text(
               'Downloading... ${(_progress[index] * 100).toStringAsFixed(0)}%',
               style: const TextStyle(
-                color: Color(0xFF546E7A),
+                color: Color(0xFF2457F5),
                 fontWeight: FontWeight.w700,
                 fontSize: 12,
               ),

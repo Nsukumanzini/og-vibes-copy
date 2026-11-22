@@ -1078,7 +1078,7 @@ class _ListingWizardState extends State<_ListingWizard> {
     return Container(
       height: MediaQuery.sizeOf(context).height * .92,
       decoration: const BoxDecoration(
-        color: Color(0xFFF7F9FF),
+        color: Color(0xFFF7F9FD),
         borderRadius: BorderRadius.vertical(top: Radius.circular(32)),
       ),
       child: Column(
@@ -1539,7 +1539,7 @@ class _ProductDetailsSheetState extends State<_ProductDetailsSheet> {
     return Container(
       height: MediaQuery.sizeOf(context).height * .92,
       decoration: const BoxDecoration(
-        color: Color(0xFFF7F9FF),
+        color: Color(0xFFF7F9FD),
         borderRadius: BorderRadius.vertical(top: Radius.circular(32)),
       ),
       child: Column(
@@ -2057,7 +2057,7 @@ class _ProductCard extends StatelessWidget {
                               fit: BoxFit.cover,
                               fadeInDuration: const Duration(milliseconds: 180),
                               placeholder: (_, _) =>
-                                  const ColoredBox(color: Color(0xFFE7EDFA)),
+                                  const ColoredBox(color: Color(0xFFF7F9FD)),
                               errorWidget: (_, _, _) =>
                                   _ImageFallback(category: product.category),
                             ),

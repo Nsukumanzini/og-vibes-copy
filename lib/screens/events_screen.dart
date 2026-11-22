@@ -1613,7 +1613,7 @@ class _IconAction extends StatelessWidget {
         child: Container(
           padding: const EdgeInsets.all(8),
           decoration: BoxDecoration(
-            color: const Color(0xFFF1F4F9),
+            color: const Color(0xFFF7F9FD),
             borderRadius: BorderRadius.circular(11),
           ),
           child: Icon(icon, color: AppColors.midnightInk, size: 18),

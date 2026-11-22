@@ -191,8 +191,8 @@ class _SeatPlanTab extends StatelessWidget {
                       alignment: Alignment.center,
                       decoration: BoxDecoration(
                         color: seat == exam['seat']
-                            ? const Color(0xFF2962FF)
-                            : const Color(0xFFE3F2FD),
+                            ? const Color(0xFF2457F5)
+                            : const Color(0xFFF7F9FD),
                         borderRadius: BorderRadius.circular(10),
                       ),
                       child: Text(
@@ -200,7 +200,7 @@ class _SeatPlanTab extends StatelessWidget {
                         style: TextStyle(
                           color: seat == exam['seat']
                               ? Colors.white
-                              : const Color(0xFF0D47A1),
+                              : const Color(0xFF2457F5),
                           fontWeight: FontWeight.w600,
                           fontSize: 12,
                         ),

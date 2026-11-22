@@ -24,7 +24,7 @@ class _DigitalLibraryScreenState extends State<DigitalLibraryScreen> {
       author: 'M. van Rensburg',
       size: '14 MB',
       category: 'N4 Engineering',
-      color: Color(0xFF1565C0),
+      color: Color(0xFF2457F5),
       icon: Icons.menu_book,
     ),
     _LibraryBook(
@@ -131,13 +131,13 @@ class _DigitalLibraryScreenState extends State<DigitalLibraryScreen> {
                 _selectedCategory = category;
               });
             },
-            selectedColor: const Color(0xFF1565C0),
+            selectedColor: const Color(0xFF2457F5),
             backgroundColor: Colors.white,
             side: BorderSide(
-              color: selected ? Colors.transparent : const Color(0xFFD6DEE8),
+              color: selected ? Colors.transparent : const Color(0xFFE8F0FF),
             ),
             labelStyle: TextStyle(
-              color: selected ? Colors.white : const Color(0xFF1F2A37),
+              color: selected ? Colors.white : const Color(0xFF0D47A1),
               fontWeight: FontWeight.w700,
             ),
           );
@@ -214,7 +214,7 @@ class _BookCard extends StatelessWidget {
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: const Color(0xFFE3EAF2)),
+          border: Border.all(color: const Color(0xFFE8F0FF)),
           boxShadow: <BoxShadow>[
             BoxShadow(
               color: Colors.black.withValues(alpha: 0.05),
@@ -257,7 +257,7 @@ class _BookCard extends StatelessWidget {
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
               style: const TextStyle(
-                color: Color(0xFF102027),
+                color: Color(0xFF07172F),
                 fontWeight: FontWeight.w800,
                 fontSize: 14,
                 height: 1.2,
@@ -269,7 +269,7 @@ class _BookCard extends StatelessWidget {
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: const TextStyle(
-                color: Color(0xFF607D8B),
+                color: Color(0xFF2457F5),
                 fontWeight: FontWeight.w600,
                 fontSize: 12,
               ),
@@ -280,13 +280,13 @@ class _BookCard extends StatelessWidget {
                 const Icon(
                   Icons.sd_storage_rounded,
                   size: 14,
-                  color: Color(0xFF607D8B),
+                  color: Color(0xFF2457F5),
                 ),
                 const SizedBox(width: 4),
                 Text(
                   book.size,
                   style: const TextStyle(
-                    color: Color(0xFF607D8B),
+                    color: Color(0xFF2457F5),
                     fontWeight: FontWeight.w700,
                     fontSize: 12,
                   ),

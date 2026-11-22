@@ -161,7 +161,7 @@ class LmsDashboardScreen extends StatelessWidget {
                 ),
                 const SizedBox(height: 12),
                 _ActivityItem(
-                  color: Color(0xFF3B82F6),
+                  color: Color(0xFF2457F5),
                   iconText: '??',
                   message:
                       'Announcement: Mr. Nkosi posted a new Calculus video.',

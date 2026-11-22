@@ -22,7 +22,7 @@ class EmailConfirmedLandingScreen extends StatelessWidget {
           gradient: LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
-            colors: [Color(0xFF071A3A), Color(0xFF1748A0), Color(0xFF00A6C7)],
+            colors: [Color(0xFF07172F), Color(0xFF2457F5), Color(0xFF2457F5)],
           ),
         ),
         child: SafeArea(
@@ -60,7 +60,7 @@ class EmailConfirmedLandingScreen extends StatelessWidget {
                           decoration: const BoxDecoration(
                             shape: BoxShape.circle,
                             gradient: LinearGradient(
-                              colors: [Color(0xFF19C37D), Color(0xFF00A6C7)],
+                              colors: [Color(0xFF19C37D), Color(0xFF2457F5)],
                             ),
                           ),
                           child: const Icon(
@@ -75,7 +75,7 @@ class EmailConfirmedLandingScreen extends StatelessWidget {
                         'Email confirmed',
                         style: Theme.of(context).textTheme.headlineMedium
                             ?.copyWith(
-                              color: const Color(0xFF071A3A),
+                              color: const Color(0xFF07172F),
                               fontWeight: FontWeight.w800,
                             ),
                         textAlign: TextAlign.center,
@@ -86,7 +86,7 @@ class EmailConfirmedLandingScreen extends StatelessWidget {
                         textAlign: TextAlign.center,
                         style: TextStyle(
                           height: 1.55,
-                          color: Color(0xFF53627A),
+                          color: Color(0xFF2457F5),
                         ),
                       ),
                       const SizedBox(height: 28),

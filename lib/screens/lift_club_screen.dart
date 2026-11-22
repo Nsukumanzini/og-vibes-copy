@@ -108,14 +108,14 @@ class _LiftClubScreenState extends State<LiftClubScreen> {
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         gradient: const LinearGradient(
-          colors: [Color(0xFF2962FF), Color(0xFF00ACC1)],
+          colors: [Color(0xFF2457F5), Color(0xFF2457F5)],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFF2962FF).withValues(alpha: 0.25),
+            color: const Color(0xFF2457F5).withValues(alpha: 0.25),
             blurRadius: 14,
             offset: const Offset(0, 6),
           ),
@@ -195,7 +195,7 @@ class _LiftClubScreenState extends State<LiftClubScreen> {
         children: [
           Row(
             children: [
-              const Icon(Icons.alt_route_rounded, color: Color(0xFF2962FF)),
+              const Icon(Icons.alt_route_rounded, color: Color(0xFF2457F5)),
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
@@ -277,7 +277,7 @@ class _LiftClubScreenState extends State<LiftClubScreen> {
               Text(
                 price,
                 style: const TextStyle(
-                  color: Color(0xFF2962FF),
+                  color: Color(0xFF2457F5),
                   fontWeight: FontWeight.w800,
                   fontSize: 16,
                 ),
@@ -296,7 +296,7 @@ class _LiftClubScreenState extends State<LiftClubScreen> {
               icon: const Icon(Icons.event_seat_outlined),
               label: const Text('Request Seat'),
               style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF2962FF),
+                backgroundColor: const Color(0xFF2457F5),
                 foregroundColor: Colors.white,
                 padding: const EdgeInsets.symmetric(vertical: 12),
                 shape: RoundedRectangleBorder(

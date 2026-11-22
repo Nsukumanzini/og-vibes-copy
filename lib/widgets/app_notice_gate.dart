@@ -189,7 +189,7 @@ class _AppNoticeTakeover extends StatelessWidget {
     return PopScope(
       canPop: !blocking,
       child: Material(
-        color: const Color(0xFF07111F),
+        color: const Color(0xFF07172F),
         child: SafeArea(
           child: Center(
             child: SingleChildScrollView(
@@ -202,7 +202,7 @@ class _AppNoticeTakeover extends StatelessWidget {
                     gradient: const LinearGradient(
                       begin: Alignment.topLeft,
                       end: Alignment.bottomRight,
-                      colors: [Color(0xFF102B4F), Color(0xFF0A1628)],
+                      colors: [Color(0xFF0D47A1), Color(0xFF07172F)],
                     ),
                     borderRadius: BorderRadius.circular(32),
                     border: Border.all(color: Colors.white.withValues(alpha: .14)),

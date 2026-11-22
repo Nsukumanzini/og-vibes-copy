@@ -12,7 +12,7 @@ class NoConnectionScreen extends StatefulWidget {
 
 class _NoConnectionScreenState extends State<NoConnectionScreen> {
   bool _isChecking = false;
-  static const Color _electricBlue = Color(0xFF2962FF);
+  static const Color _electricBlue = Color(0xFF2457F5);
 
   @override
   Widget build(BuildContext context) {

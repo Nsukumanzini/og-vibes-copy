@@ -243,7 +243,7 @@ class _LiveClassroomScreenState extends State<LiveClassroomScreen>
         gradient: LinearGradient(
           colors: <Color>[
             AppColors.vibeBlue.withValues(alpha: .32),
-            const Color(0xFF6B3DF5).withValues(alpha: .18),
+            const Color(0xFF2457F5).withValues(alpha: .18),
           ],
         ),
         borderRadius: BorderRadius.circular(22),

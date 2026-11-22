@@ -56,18 +56,18 @@ class _LandingScreenState extends State<LandingScreen>
                   builder: (context, child) {
                     final t = _ambientController.value;
                     final top = Color.lerp(
-                      const Color(0xFFE9F1FF),
-                      const Color(0xFFE0F7FA),
+                      const Color(0xFFF7F9FD),
+                      const Color(0xFFE8F0FF),
                       t,
                     )!;
                     final mid = Color.lerp(
-                      const Color(0xFFDDE7FF),
-                      const Color(0xFFE3F2FD),
+                      const Color(0xFFE8F0FF),
+                      const Color(0xFFF7F9FD),
                       1 - t,
                     )!;
                     final bottom = Color.lerp(
-                      const Color(0xFFF5F7FA),
-                      const Color(0xFFF0F4FF),
+                      const Color(0xFFF7F9FD),
+                      const Color(0xFFF7F9FD),
                       t,
                     )!;
                     return Container(
@@ -87,9 +87,9 @@ class _LandingScreenState extends State<LandingScreen>
                       begin: Alignment.topLeft,
                       end: Alignment.bottomRight,
                       colors: [
-                        Color(0xFFE9F1FF),
-                        Color(0xFFE3F2FD),
-                        Color(0xFFF5F7FA),
+                        Color(0xFFF7F9FD),
+                        Color(0xFFF7F9FD),
+                        Color(0xFFF7F9FD),
                       ],
                     ),
                   ),
@@ -151,7 +151,7 @@ class _LandingScreenState extends State<LandingScreen>
               textAlign: TextAlign.center,
               style: theme.textTheme.headlineSmall?.copyWith(
                 fontWeight: FontWeight.bold,
-                color: const Color(0xFF0D47A1),
+                color: const Color(0xFF2457F5),
               ),
             ),
             const SizedBox(height: 8),
@@ -190,10 +190,10 @@ class _LandingScreenState extends State<LandingScreen>
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(26),
-        border: Border.all(color: const Color(0xFF2962FF), width: 3),
+        border: Border.all(color: const Color(0xFF2457F5), width: 3),
         boxShadow: const [
           BoxShadow(
-            color: Color(0xFF42A5F5),
+            color: Color(0xFF2457F5),
             blurRadius: 20,
             offset: Offset(0, 10),
           ),
@@ -270,7 +270,7 @@ class _LandingScreenState extends State<LandingScreen>
                 SizedBox(width: 12),
                 Text(
                   'Create Account',
-                  style: TextStyle(color: Color(0xFF2962FF), fontSize: 16),
+                  style: TextStyle(color: Color(0xFF2457F5), fontSize: 16),
                 ),
               ],
             ),
@@ -300,7 +300,7 @@ class _LandingScreenState extends State<LandingScreen>
                 SizedBox(width: 12),
                 Text(
                   'Continue as Guest',
-                  style: TextStyle(color: Color(0xFF2962FF), fontSize: 16),
+                  style: TextStyle(color: Color(0xFF2457F5), fontSize: 16),
                 ),
               ],
             ),
@@ -317,17 +317,17 @@ class _LandingScreenState extends State<LandingScreen>
           Positioned(
             top: -80,
             left: -40,
-            child: _blob(const Color(0xFF2962FF), 220),
+            child: _blob(const Color(0xFF2457F5), 220),
           ),
           Positioned(
             top: 120,
             right: -60,
-            child: _blob(const Color(0xFF00B0FF), 180),
+            child: _blob(const Color(0xFF2457F5), 180),
           ),
           Positioned(
             bottom: -60,
             left: 40,
-            child: _blob(const Color(0xFF26C6DA), 200),
+            child: _blob(const Color(0xFF2457F5), 200),
           ),
         ],
       );
@@ -343,17 +343,17 @@ class _LandingScreenState extends State<LandingScreen>
             Positioned(
               top: -80 + offset,
               left: -40,
-              child: _blob(const Color(0xFF2962FF), 220),
+              child: _blob(const Color(0xFF2457F5), 220),
             ),
             Positioned(
               top: 120 - offset,
               right: -60,
-              child: _blob(const Color(0xFF00B0FF), 180),
+              child: _blob(const Color(0xFF2457F5), 180),
             ),
             Positioned(
               bottom: -60 + offset,
               left: 40,
-              child: _blob(const Color(0xFF26C6DA), 200),
+              child: _blob(const Color(0xFF2457F5), 200),
             ),
           ],
         );
@@ -457,9 +457,9 @@ class _LandingScreenState extends State<LandingScreen>
         width: double.infinity,
         padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
-          color: const Color(0xFFE3F2FD),
+          color: const Color(0xFFF7F9FD),
           borderRadius: BorderRadius.circular(18),
-          border: Border.all(color: const Color(0xFFBBDEFB)),
+          border: Border.all(color: const Color(0xFFE8F0FF)),
         ),
         child: Row(
           children: [
@@ -481,7 +481,7 @@ class _LandingScreenState extends State<LandingScreen>
                     'Apply to study here',
                     style: theme.textTheme.bodyLarge?.copyWith(
                       fontWeight: FontWeight.w700,
-                      color: const Color(0xFF0D47A1),
+                      color: const Color(0xFF2457F5),
                     ),
                   ),
                   const SizedBox(height: 2),
@@ -521,12 +521,12 @@ class _TrustBadge extends StatelessWidget {
       decoration: BoxDecoration(
         color: Colors.white.withValues(alpha: 0.85),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: const Color(0xFFBBDEFB)),
+        border: Border.all(color: const Color(0xFFE8F0FF)),
       ),
       child: Text(
         label,
         style: const TextStyle(
-          color: Color(0xFF0D47A1),
+          color: Color(0xFF2457F5),
           fontWeight: FontWeight.w600,
           fontSize: 12,
         ),

@@ -73,7 +73,7 @@ class _VibeScaffoldState extends State<VibeScaffold>
     final bool isDark = Theme.of(context).brightness == Brightness.dark;
     final LinearGradient background = isDark
         ? const LinearGradient(
-            colors: [Color(0xFF071323), Color(0xFF0B1930), Color(0xFF082330)],
+            colors: [Color(0xFF07172F), Color(0xFF07172F), Color(0xFF07172F)],
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
           )
@@ -100,7 +100,7 @@ class _VibeScaffoldState extends State<VibeScaffold>
                 left: -90 - (drift * 12),
                 child: _AmbientOrb(
                   size: 250,
-                  color: AppColors.electricCyan.withValues(alpha: 0.11),
+                  color: AppColors.ogGold.withValues(alpha: 0.05),
                 ),
               ),
               child!,

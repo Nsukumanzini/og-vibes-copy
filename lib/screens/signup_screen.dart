@@ -1,3 +1,4 @@
+import 'package:og_vibes_student/utils/theme_constants.dart';
 import 'dart:async';
 
 import 'package:confetti/confetti.dart';
@@ -251,8 +252,8 @@ class _SignupScreenState extends State<SignupScreen>
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     // Custom Color Palette for Modern Look
-    final primaryColor = Color(0xFF2962FF);
-    final accentColor = Color(0xFF00E5FF);
+    final primaryColor = Color(0xFF2457F5);
+    final accentColor = Color(0xFF2457F5);
 
     return Scaffold(
       backgroundColor: Colors.white,
@@ -262,7 +263,7 @@ class _SignupScreenState extends State<SignupScreen>
           Container(
             decoration: BoxDecoration(
               gradient: LinearGradient(
-                colors: [Color(0xFFF5F7FA), Color(0xFFE3F2FD)],
+                colors: [Color(0xFFF7F9FD), Color(0xFFF7F9FD)],
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
               ),
@@ -327,7 +328,7 @@ class _SignupScreenState extends State<SignupScreen>
                                   _getHeaderTitle(),
                                   style: theme.textTheme.titleLarge?.copyWith(
                                     fontWeight: FontWeight.bold,
-                                    color: const Color(0xFF0D47A1),
+                                    color: const Color(0xFF2457F5),
                                   ),
                                 ),
                                 const SizedBox(height: 8),
@@ -378,7 +379,7 @@ class _SignupScreenState extends State<SignupScreen>
               blastDirectionality: BlastDirectionality.explosive,
               numberOfParticles: 30,
               gravity: 0.3,
-              colors: const [Colors.blue, Colors.yellow, Colors.pink],
+              colors: const [Colors.blue, AppColors.ogGold, AppColors.vibeBlue],
             ),
           ),
         ],
@@ -412,7 +413,7 @@ class _SignupScreenState extends State<SignupScreen>
             style: TextStyle(
               fontSize: 18,
               fontWeight: FontWeight.bold,
-              color: Color(0xFF0D47A1),
+              color: Color(0xFF2457F5),
             ),
           ),
           const SizedBox(height: 6),
@@ -464,7 +465,7 @@ class _SignupScreenState extends State<SignupScreen>
             style: TextStyle(
               fontSize: 18,
               fontWeight: FontWeight.bold,
-              color: Color(0xFF0D47A1),
+              color: Color(0xFF2457F5),
             ),
           ),
           const SizedBox(height: 6),
@@ -486,7 +487,7 @@ class _SignupScreenState extends State<SignupScreen>
               children: [
                 Checkbox(
                   value: _agreedToCode,
-                  activeColor: const Color(0xFF2962FF),
+                  activeColor: const Color(0xFF2457F5),
                   onChanged: (v) => setState(() => _agreedToCode = v ?? false),
                 ),
                 Expanded(
@@ -502,7 +503,7 @@ class _SignupScreenState extends State<SignupScreen>
                             child: const Text(
                               'Terms of Use',
                               style: TextStyle(
-                                color: Color(0xFF2962FF),
+                                color: Color(0xFF2457F5),
                                 fontWeight: FontWeight.bold,
                                 decoration: TextDecoration.underline,
                               ),
@@ -517,7 +518,7 @@ class _SignupScreenState extends State<SignupScreen>
                             child: const Text(
                               'Privacy Policy',
                               style: TextStyle(
-                                color: Color(0xFF2962FF),
+                                color: Color(0xFF2457F5),
                                 fontWeight: FontWeight.bold,
                                 decoration: TextDecoration.underline,
                               ),
@@ -563,7 +564,7 @@ class _SignupScreenState extends State<SignupScreen>
             style: TextStyle(
               fontSize: 18,
               fontWeight: FontWeight.bold,
-              color: Color(0xFF0D47A1),
+              color: Color(0xFF2457F5),
             ),
           ),
           const SizedBox(height: 6),
@@ -601,13 +602,13 @@ class _SignupScreenState extends State<SignupScreen>
             width: double.infinity,
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
             decoration: BoxDecoration(
-              color: const Color(0xFFEAF2FF),
+              color: const Color(0xFFF7F9FD),
               borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: const Color(0xFFBBD2FF)),
+              border: Border.all(color: const Color(0xFFE8F0FF)),
             ),
             child: const Row(
               children: [
-                Icon(Icons.school_outlined, color: Color(0xFF2962FF)),
+                Icon(Icons.school_outlined, color: Color(0xFF2457F5)),
                 SizedBox(width: 12),
                 Expanded(
                   child: Column(
@@ -617,13 +618,13 @@ class _SignupScreenState extends State<SignupScreen>
                         'NCV programme',
                         style: TextStyle(
                           fontWeight: FontWeight.w700,
-                          color: Color(0xFF0D2B59),
+                          color: Color(0xFF0D47A1),
                         ),
                       ),
                       SizedBox(height: 2),
                       Text(
                         'Choose your course and current level below.',
-                        style: TextStyle(color: Color(0xFF526581)),
+                        style: TextStyle(color: Color(0xFF2457F5)),
                       ),
                     ],
                   ),
@@ -682,11 +683,11 @@ class _SignupScreenState extends State<SignupScreen>
               decoration: BoxDecoration(
                 color: isSelected
                     // ignore: deprecated_member_use
-                    ? Color(0xFF2962FF).withOpacity(0.1)
+                    ? Color(0xFF2457F5).withOpacity(0.1)
                     : Colors.grey[100],
                 border: Border.all(
                   color: isSelected
-                      ? const Color(0xFF2962FF)
+                      ? const Color(0xFF2457F5)
                       : Colors.transparent,
                 ),
                 borderRadius: BorderRadius.circular(12),
@@ -697,7 +698,7 @@ class _SignupScreenState extends State<SignupScreen>
                 style: TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.w600,
-                  color: isSelected ? Color(0xFF2962FF) : Colors.black54,
+                  color: isSelected ? Color(0xFF2457F5) : Colors.black54,
                 ),
               ),
             ),
@@ -719,11 +720,11 @@ class _SignupScreenState extends State<SignupScreen>
       child: ElevatedButton(
         onPressed: isLoading ? null : onPressed,
         style: ElevatedButton.styleFrom(
-          backgroundColor: Color(0xFF2962FF),
+          backgroundColor: Color(0xFF2457F5),
           foregroundColor: Colors.white,
           elevation: 8,
           // ignore: deprecated_member_use
-          shadowColor: Color(0xFF2962FF).withOpacity(0.4),
+          shadowColor: Color(0xFF2457F5).withOpacity(0.4),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(16),
           ),
@@ -927,13 +928,13 @@ class _SignupScreenState extends State<SignupScreen>
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
               decoration: BoxDecoration(
-                color: const Color(0xFFE3F2FD),
+                color: const Color(0xFFF7F9FD),
                 borderRadius: BorderRadius.circular(8),
               ),
               child: const Text(
                 "Use @gmail.com",
                 style: TextStyle(
-                  color: Color(0xFF1565C0),
+                  color: Color(0xFF2457F5),
                   fontWeight: FontWeight.bold,
                 ),
               ),
@@ -1047,7 +1048,7 @@ class _SignupScreenState extends State<SignupScreen>
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(16),
-        borderSide: const BorderSide(color: Color(0xFF2962FF), width: 1.5),
+        borderSide: const BorderSide(color: Color(0xFF2457F5), width: 1.5),
       ),
     );
   }
@@ -1098,9 +1099,9 @@ class _SignupScreenState extends State<SignupScreen>
       width: double.infinity,
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: const Color(0xFFF7F9FC),
+        color: const Color(0xFFF7F9FD),
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: const Color(0xFFDCE5F2)),
+        border: Border.all(color: const Color(0xFFE8F0FF)),
       ),
       child: Row(
         children: [
@@ -1111,7 +1112,7 @@ class _SignupScreenState extends State<SignupScreen>
             image: hasPhoto,
             child: CircleAvatar(
               radius: 36,
-              backgroundColor: const Color(0xFFE7EEFF),
+              backgroundColor: const Color(0xFFF7F9FD),
               backgroundImage: hasPhoto
                   ? MemoryImage(_selectedImageBytes!)
                   : null,
@@ -1120,7 +1121,7 @@ class _SignupScreenState extends State<SignupScreen>
                   : const Icon(
                       Icons.person_outline_rounded,
                       size: 34,
-                      color: Color(0xFF2962FF),
+                      color: Color(0xFF2457F5),
                     ),
             ),
           ),
@@ -1270,13 +1271,13 @@ class _SignupScreenState extends State<SignupScreen>
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   const SizedBox(height: 16),
-                  const CircularProgressIndicator(color: Color(0xFF2962FF)),
+                  const CircularProgressIndicator(color: Color(0xFF2457F5)),
                   const SizedBox(height: 24),
                   Text(
                     _loadingStatus ?? '',
                     style: const TextStyle(
                       fontWeight: FontWeight.bold,
-                      color: Color(0xFF0D47A1),
+                      color: Color(0xFF2457F5),
                     ),
                   ),
                   const SizedBox(height: 16),
@@ -1356,14 +1357,14 @@ class _SignupScreenState extends State<SignupScreen>
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: const [
-                Icon(Icons.check_circle, size: 64, color: Color(0xFF2962FF)),
+                Icon(Icons.check_circle, size: 64, color: Color(0xFF2457F5)),
                 SizedBox(height: 12),
                 Text(
                   'Account ready!',
                   style: TextStyle(
                     fontWeight: FontWeight.bold,
                     fontSize: 18,
-                    color: Color(0xFF0D47A1),
+                    color: Color(0xFF2457F5),
                   ),
                 ),
                 SizedBox(height: 6),
@@ -1469,7 +1470,7 @@ class _SignupScreenState extends State<SignupScreen>
                         value.isEmpty ? '—' : value,
                         style: const TextStyle(
                           fontWeight: FontWeight.w600,
-                          color: Color(0xFF0D47A1),
+                          color: Color(0xFF2457F5),
                         ),
                       ),
                     ],
