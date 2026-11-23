@@ -224,7 +224,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
             .uploadBinary(
               fileName,
               _selectedImageBytes!,
-              fileOptions: OfflineFileOptions(upsert: true, contentType: mimeType),
+              fileOptions: OfflineFileOptions(
+                upsert: true,
+                contentType: mimeType,
+              ),
             );
 
         photoUrl = OfflineData.instance.client.storage
@@ -365,35 +368,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
         child: Form(
           key: _formKey,
           child: ListView(
-            padding: const EdgeInsets.fromLTRB(20, 20, 20, 36),
+            padding: const EdgeInsets.fromLTRB(18, 12, 18, 36),
             children: [
               _buildHeader(fullName, email, photoUrl, verified),
-              const SizedBox(height: 18),
-              Card(
-                child: ListTile(
-                  leading: const CircleAvatar(
-                    child: Icon(Icons.dynamic_feed_rounded),
-                  ),
-                  title: const Text(
-                    'My posts',
-                    style: TextStyle(fontWeight: FontWeight.w800),
-                  ),
-                  subtitle: const Text(
-                    'View, edit, delete and reply to comments on your posts.',
-                  ),
-                  trailing: const Icon(Icons.arrow_forward_rounded),
-                  onTap: () => Navigator.of(context).push(
-                    MaterialPageRoute<void>(
-                      builder: (_) => const MyPostsScreen(),
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 14),
+              const SizedBox(height: 16),
+              _buildPostsShortcut(),
+              const SizedBox(height: 24),
               _sectionCard(
                 title: 'About you',
-                subtitle: 'Choose what other students see on your profile',
-                icon: Icons.badge_outlined,
+                subtitle: 'The details students see on your profile',
+                icon: Icons.person_outline_rounded,
+                index: '01',
                 children: [
                   _buildEditableField(
                     _nameController,
@@ -421,11 +406,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   ),
                 ],
               ),
-              const SizedBox(height: 14),
+              const SizedBox(height: 16),
               _sectionCard(
                 title: 'Academic profile',
-                subtitle: 'Used to personalise modules and campus content',
+                subtitle: 'Your campus and study details',
                 icon: Icons.school_outlined,
+                index: '02',
                 children: [
                   _buildEditableField(
                     _studentNumberController,
@@ -453,33 +439,130 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   ),
                 ],
               ),
-              const SizedBox(height: 18),
+              const SizedBox(height: 16),
               _buildAccountCard(email, profile, verified),
               const SizedBox(height: 24),
-              ElevatedButton(
-                onPressed: _isSaving ? null : _saveProfile,
-                style: ElevatedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(16),
+              SizedBox(
+                height: 58,
+                child: ElevatedButton.icon(
+                  onPressed: _isSaving ? null : _saveProfile,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.primaryAction,
+                    foregroundColor: Colors.white,
+                    elevation: 2,
+                    shadowColor: AppColors.deepBlue.withValues(alpha: .22),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(18),
+                    ),
+                  ),
+                  icon: _isSaving
+                      ? const SizedBox(
+                          height: 20,
+                          width: 20,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2.2,
+                            color: Colors.white,
+                          ),
+                        )
+                      : const Icon(Icons.check_rounded),
+                  label: Text(
+                    _isSaving ? 'Saving profile…' : 'Save changes',
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w800,
+                    ),
                   ),
                 ),
-                child: _isSaving
-                    ? const SizedBox(
-                        height: 20,
-                        width: 20,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2.2,
-                          color: Colors.white,
-                        ),
-                      )
-                    : const Text(
-                        'Save changes',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w700,
-                        ),
+              ),
+              const SizedBox(height: 8),
+              const Text(
+                'Your profile details stay up to date across OG Vibes.',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: AppColors.textMuted,
+                  fontSize: 12,
+                  height: 1.4,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPostsShortcut() {
+    return Material(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(22),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(22),
+        onTap: () => Navigator.of(
+          context,
+        ).push(MaterialPageRoute<void>(builder: (_) => const MyPostsScreen())),
+        child: Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(22),
+            border: Border.all(color: AppColors.outline.withValues(alpha: .8)),
+            boxShadow: [
+              BoxShadow(
+                color: AppColors.deepBlue.withValues(alpha: .035),
+                blurRadius: 18,
+                offset: const Offset(0, 7),
+              ),
+            ],
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 48,
+                height: 48,
+                decoration: BoxDecoration(
+                  color: AppColors.surfaceBlue,
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: const Icon(
+                  Icons.dynamic_feed_rounded,
+                  color: AppColors.primaryAction,
+                ),
+              ),
+              const SizedBox(width: 14),
+              const Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'My posts',
+                      style: TextStyle(
+                        color: AppColors.midnightInk,
+                        fontSize: 15,
+                        fontWeight: FontWeight.w800,
                       ),
+                    ),
+                    SizedBox(height: 4),
+                    Text(
+                      'Manage posts and replies',
+                      style: TextStyle(
+                        color: AppColors.textMuted,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Container(
+                width: 34,
+                height: 34,
+                decoration: BoxDecoration(
+                  color: AppColors.surfaceSoft,
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.arrow_forward_rounded,
+                  size: 17,
+                  color: AppColors.deepBlue,
+                ),
               ),
             ],
           ),
@@ -495,89 +578,195 @@ class _ProfileScreenState extends State<ProfileScreen> {
     bool verified,
   ) {
     return Container(
-      padding: const EdgeInsets.all(20),
+      clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
         gradient: const LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [AppColors.primaryStrong, AppColors.primaryAction],
+          colors: [
+            AppColors.midnightInk,
+            AppColors.deepBlue,
+            AppColors.vibeBlue,
+          ],
         ),
-        borderRadius: BorderRadius.circular(24),
+        borderRadius: BorderRadius.circular(28),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.deepBlue.withValues(alpha: .18),
+            blurRadius: 26,
+            offset: const Offset(0, 12),
+          ),
+        ],
       ),
-      child: Column(
+      child: Stack(
         children: [
-          GestureDetector(
-            onTap: _pickProfileImage,
-            child: Stack(
-              alignment: Alignment.bottomRight,
-              children: [
-                CircleAvatar(
-                  radius: 54,
-                  backgroundColor: Colors.white.withOpacity(0.14),
-                  backgroundImage: _selectedImageBytes != null
-                      ? MemoryImage(_selectedImageBytes!) as ImageProvider
-                      : photoUrl != null && photoUrl.isNotEmpty
-                      ? NetworkImage(photoUrl)
-                      : null,
-                  child:
-                      _selectedImageBytes == null &&
-                          (photoUrl == null || photoUrl.isEmpty)
-                      ? const Icon(
-                          Icons.person_rounded,
-                          color: Colors.white,
-                          size: 46,
-                        )
-                      : null,
+          Positioned(
+            top: -62,
+            right: -40,
+            child: Container(
+              width: 176,
+              height: 176,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                border: Border.all(
+                  color: Colors.white.withValues(alpha: .08),
+                  width: 26,
                 ),
-                Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: const BoxDecoration(
-                    color: Colors.white,
-                    shape: BoxShape.circle,
-                  ),
-                  child: const Icon(
-                    Icons.camera_alt,
-                    size: 20,
-                    color: AppColors.primaryAction,
-                  ),
+              ),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 19, 20, 20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    const Expanded(
+                      child: Text(
+                        'YOUR PROFILE',
+                        style: TextStyle(
+                          color: Colors.white70,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 1.5,
+                        ),
+                      ),
+                    ),
+                    _pill(
+                      verified ? 'Verified' : 'Pending',
+                      verified ? AppColors.successLight : AppColors.warning,
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 22),
+                Row(
+                  children: [
+                    GestureDetector(
+                      onTap: _pickProfileImage,
+                      child: Stack(
+                        alignment: Alignment.bottomRight,
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(3),
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              border: Border.all(
+                                color: AppColors.ogGold,
+                                width: 2,
+                              ),
+                            ),
+                            child: CircleAvatar(
+                              radius: 39,
+                              backgroundColor: Colors.white.withValues(
+                                alpha: .15,
+                              ),
+                              backgroundImage: _selectedImageBytes != null
+                                  ? MemoryImage(_selectedImageBytes!)
+                                  : photoUrl != null && photoUrl.isNotEmpty
+                                  ? NetworkImage(photoUrl)
+                                  : null,
+                              child:
+                                  _selectedImageBytes == null &&
+                                      (photoUrl == null || photoUrl.isEmpty)
+                                  ? const Icon(
+                                      Icons.person_rounded,
+                                      color: Colors.white,
+                                      size: 38,
+                                    )
+                                  : null,
+                            ),
+                          ),
+                          Container(
+                            width: 28,
+                            height: 28,
+                            decoration: const BoxDecoration(
+                              color: AppColors.ogGold,
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(
+                              Icons.camera_alt_rounded,
+                              color: AppColors.midnightInk,
+                              size: 15,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            fullName,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 21,
+                              height: 1.12,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                          const SizedBox(height: 7),
+                          Text(
+                            email.isNotEmpty ? email : 'No email connected yet',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              color: Colors.white70,
+                              fontSize: 12,
+                            ),
+                          ),
+                          const SizedBox(height: 11),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 6,
+                            ),
+                            decoration: BoxDecoration(
+                              color: Colors.white.withValues(alpha: .10),
+                              borderRadius: BorderRadius.circular(99),
+                              border: Border.all(
+                                color: Colors.white.withValues(alpha: .16),
+                              ),
+                            ),
+                            child: const Text(
+                              'OG VIBES STUDENT',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 9,
+                                fontWeight: FontWeight.w800,
+                                letterSpacing: .8,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                Row(
+                  children: [
+                    Container(
+                      width: 22,
+                      height: 2,
+                      decoration: BoxDecoration(
+                        color: AppColors.ogGold,
+                        borderRadius: BorderRadius.circular(9),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    const Text(
+                      'Tap your photo to update it',
+                      style: TextStyle(color: Colors.white70, fontSize: 11),
+                    ),
+                  ],
                 ),
               ],
             ),
-          ),
-          const SizedBox(height: 16),
-          Text(
-            fullName,
-            textAlign: TextAlign.center,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 22,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-          const SizedBox(height: 10),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            alignment: WrapAlignment.center,
-            children: [
-              _pill(
-                verified ? 'Verified account' : 'Verification pending',
-                verified ? AppColors.successLight : AppColors.warning,
-              ),
-              _pill('OG Vibes student', AppColors.vibeBlue),
-            ],
-          ),
-          const SizedBox(height: 6),
-          Text(
-            email.isNotEmpty ? email : 'No email connected yet',
-            textAlign: TextAlign.center,
-            style: const TextStyle(color: Colors.white70, fontSize: 14),
-          ),
-          const SizedBox(height: 14),
-          const Text(
-            'Tap the image to upload a new profile picture.',
-            textAlign: TextAlign.center,
-            style: TextStyle(color: Colors.white70, fontSize: 12),
           ),
         ],
       ),
@@ -590,10 +779,25 @@ class _ProfileScreenState extends State<ProfileScreen> {
     String hint,
     bool required,
   ) {
+    final prefixIcon = switch (label) {
+      'First name' => Icons.person_outline_rounded,
+      'Surname' => Icons.badge_outlined,
+      'Nickname' => Icons.alternate_email_rounded,
+      'Phone number' => Icons.phone_outlined,
+      'Student number' => Icons.numbers_rounded,
+      'Course or department' => Icons.menu_book_outlined,
+      'Campus' => Icons.location_on_outlined,
+      'Academic level' => Icons.stairs_rounded,
+      _ => Icons.edit_outlined,
+    };
     return Padding(
-      padding: const EdgeInsets.only(top: 12),
+      padding: const EdgeInsets.only(top: 13),
       child: TextFormField(
         controller: controller,
+        textCapitalization: TextCapitalization.words,
+        keyboardType: label == 'Phone number'
+            ? TextInputType.phone
+            : TextInputType.text,
         validator: required
             ? (value) {
                 if (value == null || value.trim().isEmpty) {
@@ -602,7 +806,43 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 return null;
               }
             : null,
-        decoration: InputDecoration(labelText: label, hintText: hint),
+        decoration: InputDecoration(
+          labelText: label,
+          hintText: hint,
+          prefixIcon: Icon(prefixIcon, size: 20),
+          filled: true,
+          fillColor: AppColors.surfaceSoft,
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 16,
+            vertical: 17,
+          ),
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(16),
+            borderSide: BorderSide.none,
+          ),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(16),
+            borderSide: const BorderSide(color: Color(0xFFE7EDF7)),
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(16),
+            borderSide: const BorderSide(
+              color: AppColors.primaryAction,
+              width: 1.5,
+            ),
+          ),
+          errorBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(16),
+            borderSide: const BorderSide(color: AppColors.dangerLight),
+          ),
+          focusedErrorBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(16),
+            borderSide: const BorderSide(
+              color: AppColors.dangerLight,
+              width: 1.5,
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -611,45 +851,77 @@ class _ProfileScreenState extends State<ProfileScreen> {
     required String title,
     required String subtitle,
     required IconData icon,
+    required String index,
     required List<Widget> children,
   }) {
-    return Card(
-      elevation: 0,
-      child: Padding(
-        padding: const EdgeInsets.all(18),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                CircleAvatar(child: Icon(icon)),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        title,
-                        style: const TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w800,
-                        ),
-                      ),
-                      Text(
-                        subtitle,
-                        style: const TextStyle(
-                          fontSize: 12,
-                          color: Colors.grey,
-                        ),
-                      ),
-                    ],
-                  ),
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: AppColors.outline.withValues(alpha: .78)),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.deepBlue.withValues(alpha: .035),
+            blurRadius: 20,
+            offset: const Offset(0, 8),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 46,
+                height: 46,
+                decoration: BoxDecoration(
+                  color: AppColors.surfaceBlue,
+                  borderRadius: BorderRadius.circular(15),
                 ),
-              ],
-            ),
-            ...children,
-          ],
-        ),
+                child: Icon(icon, color: AppColors.primaryAction, size: 23),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: const TextStyle(
+                        color: AppColors.midnightInk,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      subtitle,
+                      style: const TextStyle(
+                        color: AppColors.textMuted,
+                        fontSize: 11,
+                        height: 1.35,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                index,
+                style: const TextStyle(
+                  color: AppColors.ogGold,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: .6,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 7),
+          ...children,
+        ],
       ),
     );
   }
@@ -663,21 +935,56 @@ class _ProfileScreenState extends State<ProfileScreen> {
     return Container(
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        color: AppColors.surfaceMuted,
-        borderRadius: BorderRadius.circular(20),
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: AppColors.outline.withValues(alpha: .78)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            'Account',
-            style: TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.w700,
-              color: AppColors.primaryStrong,
-            ),
+          Row(
+            children: [
+              Container(
+                width: 46,
+                height: 46,
+                decoration: BoxDecoration(
+                  color: AppColors.warningSurface,
+                  borderRadius: BorderRadius.circular(15),
+                ),
+                child: const Icon(
+                  Icons.shield_outlined,
+                  color: AppColors.warningText,
+                ),
+              ),
+              const SizedBox(width: 12),
+              const Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Account',
+                      style: TextStyle(
+                        color: AppColors.midnightInk,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    SizedBox(height: 3),
+                    Text(
+                      'Sign-in and membership details',
+                      style: TextStyle(
+                        color: AppColors.textMuted,
+                        fontSize: 11,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ),
-          const SizedBox(height: 10),
+          const SizedBox(height: 13),
+          const Divider(height: 1, color: Color(0xFFE9EEF7)),
+          const SizedBox(height: 14),
           _detailRow(
             Icons.alternate_email_rounded,
             'Email',
@@ -712,7 +1019,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Icon(icon, color: AppColors.primaryAction, size: 18),
+        Container(
+          width: 34,
+          height: 34,
+          decoration: BoxDecoration(
+            color: AppColors.surfaceSoft,
+            borderRadius: BorderRadius.circular(11),
+          ),
+          child: Icon(icon, color: AppColors.primaryAction, size: 17),
+        ),
         const SizedBox(width: 10),
         Expanded(
           child: Column(
@@ -721,8 +1036,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
               Text(
                 label,
                 style: const TextStyle(
-                  fontSize: 12,
-                  color: Colors.black54,
+                  fontSize: 11,
+                  color: AppColors.textMuted,
                   fontWeight: FontWeight.w700,
                 ),
               ),
@@ -730,9 +1045,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
               Text(
                 value,
                 style: const TextStyle(
-                  fontSize: 14,
-                  color: Colors.black87,
-                  fontWeight: FontWeight.w600,
+                  fontSize: 13,
+                  color: AppColors.midnightInk,
+                  fontWeight: FontWeight.w700,
                 ),
               ),
             ],
@@ -743,20 +1058,25 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Widget _pill(String label, Color color) {
+    final foreground = color == AppColors.successLight
+        ? const Color(0xFF0C6241)
+        : AppColors.warningText;
+    final background = color == AppColors.successLight
+        ? AppColors.successSurface
+        : AppColors.warningSurface;
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
-        color: color,
+        color: background,
         borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: color.withValues(alpha: .32)),
       ),
       child: Text(
         label,
         style: TextStyle(
-          color: color == const Color(0xFFE8F0FF)
-              ? AppColors.primaryStrong
-              : Colors.white,
-          fontSize: 12,
-          fontWeight: FontWeight.w600,
+          color: foreground,
+          fontSize: 10,
+          fontWeight: FontWeight.w800,
         ),
       ),
     );
