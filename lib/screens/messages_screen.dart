@@ -14,6 +14,7 @@ import '../utils/theme_constants.dart';
 import '../widgets/vibe_scaffold.dart';
 import '../widgets/notification_bell_button.dart';
 import '../widgets/glass_card.dart';
+import '../services/interaction_feedback_service.dart';
 import 'chat_detail_screen.dart';
 import 'friend_requests_screen.dart';
 import 'group_chats_screen.dart';
@@ -303,7 +304,6 @@ class _MessagesScreenState extends State<MessagesScreen> {
   Future<void> _setArchived(Map<String, dynamic> chat, bool archived) async {
     final user = _client.auth.currentUser;
     if (user == null) return;
-    HapticFeedback.mediumImpact();
     final peerId = chat['id'].toString();
     setState(() => chat['isArchived'] = archived);
     try {
@@ -315,6 +315,7 @@ class _MessagesScreenState extends State<MessagesScreen> {
       });
       await _saveCache(_conversations);
       if (!mounted) return;
+      InteractionFeedbackService.taskSucceeded();
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           behavior: SnackBarBehavior.floating,
@@ -323,6 +324,7 @@ class _MessagesScreenState extends State<MessagesScreen> {
       );
     } catch (_) {
       if (!mounted) return;
+      InteractionFeedbackService.taskFailed();
       setState(() => chat['isArchived'] = !archived);
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Could not update this chat.')),

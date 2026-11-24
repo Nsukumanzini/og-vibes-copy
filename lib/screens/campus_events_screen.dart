@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:shimmer/shimmer.dart';
 
 import 'package:og_vibes_student/widgets/vibe_scaffold.dart';
+import '../services/interaction_feedback_service.dart';
 
 class CampusEventsScreen extends StatefulWidget {
   const CampusEventsScreen({super.key});
@@ -152,6 +153,7 @@ class _CampusEventsScreenState extends State<CampusEventsScreen> {
                           _eventFuture = Future.value(newEvent);
                         });
 
+                        InteractionFeedbackService.taskSucceeded();
                         Navigator.of(ctx).pop();
                         ScaffoldMessenger.of(context).showSnackBar(
                           const SnackBar(content: Text('Event created')),
@@ -305,6 +307,7 @@ class _CampusEventsScreenState extends State<CampusEventsScreen> {
             width: double.infinity,
             child: ElevatedButton.icon(
               onPressed: () {
+                InteractionFeedbackService.taskSucceeded();
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(content: Text('RSVP noted for this event!')),
                 );

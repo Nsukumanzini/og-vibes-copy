@@ -1,5 +1,7 @@
 import 'dart:async';
 
+import 'interaction_feedback_service.dart';
+
 class CallNotificationAction {
   const CallNotificationAction({
     required this.callId,
@@ -17,7 +19,11 @@ class CallNotificationAction {
 }
 
 class StudentNotificationAction {
-  const StudentNotificationAction({required this.route, this.entityId, this.title});
+  const StudentNotificationAction({
+    required this.route,
+    this.entityId,
+    this.title,
+  });
   final String route;
   final String? entityId;
   final String? title;
@@ -37,7 +43,14 @@ class PushDeviceRegistration {
   final bool current;
 }
 
-enum PushEnrollmentStatus { signedOut, unsupported, needsPermission, blocked, enabled, error }
+enum PushEnrollmentStatus {
+  signedOut,
+  unsupported,
+  needsPermission,
+  blocked,
+  enabled,
+  error,
+}
 
 /// Push is disabled in the offline build. These no-op methods keep the
 /// existing settings and notification widgets available without a service.
@@ -48,7 +61,8 @@ class PushNotificationService {
       StreamController<CallNotificationAction>.broadcast();
   static final StreamController<String> _moduleInvitations =
       StreamController<String>.broadcast();
-  static final StreamController<StudentNotificationAction> _studentNotifications =
+  static final StreamController<StudentNotificationAction>
+  _studentNotifications =
       StreamController<StudentNotificationAction>.broadcast();
 
   static Stream<CallNotificationAction> get actions => _actions.stream;
@@ -68,7 +82,15 @@ class PushNotificationService {
   static Future<void> sendIncomingGroupCall(String callId) async {}
   static Future<void> cancelIncomingCallNotification(String callId) async {}
   static Future<void> showIncomingCall(Map<String, dynamic> data) async {}
-  static Future<void> showModuleInvitation(Map<String, dynamic> data) async {}
-  static Future<void> showStudentNotification(Map<String, dynamic> data) async {}
-  static Future<void> showSosAlert(Map<String, dynamic> data) async {}
+  static Future<void> showModuleInvitation(Map<String, dynamic> data) async {
+    await InteractionFeedbackService.notificationReceived();
+  }
+
+  static Future<void> showStudentNotification(Map<String, dynamic> data) async {
+    await InteractionFeedbackService.notificationReceived();
+  }
+
+  static Future<void> showSosAlert(Map<String, dynamic> data) async {
+    await InteractionFeedbackService.notificationReceived();
+  }
 }

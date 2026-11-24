@@ -12,6 +12,7 @@ import '../services/diagnostics_service.dart';
 import 'package:og_vibes_student/utils/theme_constants.dart';
 import 'package:og_vibes_student/widgets/vibe_scaffold.dart';
 import '../services/offline_cache_service.dart';
+import '../services/interaction_feedback_service.dart';
 import '../services/academic_file_service.dart';
 import 'pdf_viewer_screen.dart';
 
@@ -1357,7 +1358,6 @@ class _AssignmentSubmissionScreenState extends State<AssignmentSubmissionScreen>
         _uploadStage = replace ? 'Submission replaced' : 'Submission complete';
         _retryUpload = null;
       });
-      HapticFeedback.heavyImpact();
       await _loadDashboard(showLoader: false);
       _showMessage(
         replace
@@ -1384,7 +1384,7 @@ class _AssignmentSubmissionScreenState extends State<AssignmentSubmissionScreen>
         _uploadError = _friendlyUploadError(error);
         _uploadStage = 'Upload interrupted';
       });
-      HapticFeedback.vibrate();
+      InteractionFeedbackService.taskFailed();
     } finally {
       if (mounted) setState(() => _isUploading = false);
     }
@@ -1868,6 +1868,11 @@ class _AssignmentSubmissionScreenState extends State<AssignmentSubmissionScreen>
 
   void _showMessage(String text, {bool isError = false}) {
     if (!mounted) return;
+    if (isError) {
+      InteractionFeedbackService.taskFailed();
+    } else {
+      InteractionFeedbackService.taskSucceeded();
+    }
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
       ..showSnackBar(

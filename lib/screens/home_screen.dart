@@ -11,6 +11,7 @@ import 'package:og_vibes_student/screens/home/widgets/home_bottom_navigation_bar
 import 'package:shimmer/shimmer.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../services/offline_data_adapter.dart';
+import '../services/notification_badge_service.dart';
 import '../utils/theme_constants.dart';
 
 import '../../widgets/app_drawer.dart';
@@ -47,8 +48,10 @@ class HomeScreen extends StatefulWidget {
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> {
+class _HomeScreenState extends State<HomeScreen>
+    with SingleTickerProviderStateMixin {
   int _currentTab = 0;
+  late final AnimationController _tabTransitionController;
   String _nickname = 'OG Vibester';
   String? _profilePhotoUrl;
 
@@ -72,8 +75,15 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void initState() {
     super.initState();
+    _tabTransitionController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 220),
+      reverseDuration: const Duration(milliseconds: 120),
+      value: 1,
+    );
     _scrollController = ScrollController();
     _scrollController.addListener(_handleScroll);
+    unawaited(NotificationBadgeService.instance.start());
     _initialiseFeed();
   }
 
@@ -222,7 +232,21 @@ class _HomeScreenState extends State<HomeScreen> {
     _commentsSubscription?.cancel();
     _scrollController.removeListener(_handleScroll);
     _scrollController.dispose();
+    _tabTransitionController.dispose();
     super.dispose();
+  }
+
+  Future<void> _selectTab(int index) async {
+    if (index == _currentTab || _tabTransitionController.isAnimating) return;
+    if (MediaQuery.disableAnimationsOf(context)) {
+      setState(() => _currentTab = index);
+      return;
+    }
+
+    await _tabTransitionController.reverse();
+    if (!mounted) return;
+    setState(() => _currentTab = index);
+    await _tabTransitionController.forward();
   }
 
   Future<void> _refreshFeed() async {
@@ -287,9 +311,7 @@ class _HomeScreenState extends State<HomeScreen> {
       floatingActionButton: _currentTab == 0 ? _buildPostFab() : null,
       bottomNavigationBar: HomeBottomNavigationBar(
         currentIndex: _currentTab,
-        onTap: (index) {
-          setState(() => _currentTab = index);
-        },
+        onTap: _selectTab,
       ),
       body: LayoutBuilder(
         builder: (context, constraints) {
@@ -300,19 +322,30 @@ class _HomeScreenState extends State<HomeScreen> {
             child: SizedBox(
               width: contentWidth,
               height: constraints.maxHeight,
-              child: Stack(
-                children: [
-                  IndexedStack(
-                    index: _currentTab,
-                    children: [
-                      _buildFeedTab(),
-                      _buildStudyHubTab(),
-                      const AnnouncementsScreen(),
-                      _buildStudyTab(),
-                      const MessagesScreen(),
-                    ],
-                  ),
-                ],
+              child: AnimatedBuilder(
+                animation: _tabTransitionController,
+                builder: (context, child) {
+                  final progress = Curves.easeOutCubic.transform(
+                    _tabTransitionController.value,
+                  );
+                  return Opacity(
+                    opacity: .84 + (progress * .16),
+                    child: Transform.translate(
+                      offset: Offset(0, (1 - progress) * 8),
+                      child: child,
+                    ),
+                  );
+                },
+                child: IndexedStack(
+                  index: _currentTab,
+                  children: [
+                    _buildFeedTab(),
+                    _buildStudyHubTab(),
+                    const AnnouncementsScreen(),
+                    _buildStudyTab(),
+                    const MessagesScreen(),
+                  ],
+                ),
               ),
             ),
           );

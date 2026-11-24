@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
 
 import '../services/group_call_service.dart';
+import '../services/interaction_feedback_service.dart';
 import '../utils/theme_constants.dart';
 
 class GroupCallScreen extends StatefulWidget {
@@ -105,6 +106,7 @@ class _GroupCallScreenState extends State<GroupCallScreen> {
       if (choice == null) return;
       endForEveryone = choice == 'end';
     }
+    unawaited(InteractionFeedbackService.callEnded());
     await widget.session.leave(endForEveryone: endForEveryone);
     if (mounted) Navigator.of(context).pop();
   }

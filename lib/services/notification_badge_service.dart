@@ -23,13 +23,19 @@ class NotificationBadgeService {
 
   static final NotificationBadgeService instance = NotificationBadgeService._();
   final _controller = StreamController<NotificationBadgeCounts>.broadcast();
+  final _incomingNotifications = StreamController<void>.broadcast();
   final List<OfflineRealtimeChannel> _channels = [];
   NotificationBadgeCounts _current = const NotificationBadgeCounts();
+  bool _hasInitialSnapshot = false;
+  Set<String> _knownNotificationIds = <String>{};
+  Set<String> _knownAlertIds = <String>{};
 
   Stream<NotificationBadgeCounts> get stream async* {
     yield _current;
     yield* _controller.stream;
   }
+
+  Stream<void> get incomingNotifications => _incomingNotifications.stream;
 
   Future<void> start() async {
     final client = OfflineData.instance.client;
@@ -37,6 +43,7 @@ class NotificationBadgeService {
     if (userId == null) return;
     await stop();
     await refresh();
+    _hasInitialSnapshot = true;
     final notificationsChannel = client.channel('notification-badges:$userId')
       ..onPostgresChanges(
         event: OfflinePostgresChangeEvent.all,
@@ -82,7 +89,7 @@ class NotificationBadgeService {
       final results = await Future.wait<dynamic>([
         client
             .from('student_notifications')
-            .select('category,route,metadata')
+            .select('id,category,route,metadata')
             .isFilter('read_at', null)
             .limit(500),
         client
@@ -100,6 +107,16 @@ class NotificationBadgeService {
         results[2] as List<dynamic>,
       ).map((row) => row['alert_id']?.toString()).whereType<String>().toSet();
       final alerts = activeAlertIds.difference(readAlertIds).length;
+      final notificationIds = rows
+          .map((row) => row['id']?.toString())
+          .whereType<String>()
+          .toSet();
+      final receivedNotification =
+          (_hasInitialSnapshot &&
+              (notificationIds.difference(_knownNotificationIds).isNotEmpty ||
+                  rows.length > _current.notifications)) ||
+          (_hasInitialSnapshot &&
+              activeAlertIds.difference(_knownAlertIds).isNotEmpty);
       var messages = 0, groups = 0;
       for (final row in rows) {
         final route = row['route']?.toString() ?? '';
@@ -121,7 +138,10 @@ class NotificationBadgeService {
         messages: messages,
         groups: groups,
       );
+      _knownNotificationIds = notificationIds;
+      _knownAlertIds = activeAlertIds;
       _controller.add(_current);
+      if (receivedNotification) _incomingNotifications.add(null);
     } catch (error) {
       debugPrint('Unable to refresh notification badges: $error');
     }

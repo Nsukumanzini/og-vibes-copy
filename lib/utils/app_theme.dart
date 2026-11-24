@@ -48,6 +48,15 @@ class AppTheme {
       fontFamilyFallback: _fallbacks,
       visualDensity: VisualDensity.standard,
       materialTapTargetSize: MaterialTapTargetSize.padded,
+      pageTransitionsTheme: const PageTransitionsTheme(
+        builders: <TargetPlatform, PageTransitionsBuilder>{
+          TargetPlatform.android: _OgPageTransitionsBuilder(),
+          TargetPlatform.iOS: _OgPageTransitionsBuilder(),
+          TargetPlatform.macOS: _OgPageTransitionsBuilder(),
+          TargetPlatform.windows: _OgPageTransitionsBuilder(),
+          TargetPlatform.linux: _OgPageTransitionsBuilder(),
+        },
+      ),
     );
     final textTheme = base.textTheme.apply(
       bodyColor: foreground,
@@ -136,6 +145,8 @@ class AppTheme {
           padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 15),
           shape: controlShape,
           side: controlEdge,
+          animationDuration: const Duration(milliseconds: 190),
+          enableFeedback: true,
           elevation: 1,
           shadowColor: AppColors.deepBlue.withValues(alpha: .2),
           overlayColor: Colors.white.withValues(alpha: .12),
@@ -152,6 +163,8 @@ class AppTheme {
           shadowColor: AppColors.deepBlue.withValues(alpha: .2),
           side: controlEdge,
           shape: controlShape,
+          animationDuration: const Duration(milliseconds: 190),
+          enableFeedback: true,
           overlayColor: Colors.white.withValues(alpha: .12),
           textStyle: const TextStyle(fontWeight: FontWeight.w700),
         ),
@@ -163,6 +176,8 @@ class AppTheme {
           minimumSize: const Size(48, 52),
           side: BorderSide(color: border.withValues(alpha: .62)),
           shape: controlShape,
+          animationDuration: const Duration(milliseconds: 190),
+          enableFeedback: true,
           overlayColor: AppColors.vibeBlue.withValues(alpha: .08),
           textStyle: const TextStyle(fontWeight: FontWeight.w700),
         ),
@@ -175,6 +190,8 @@ class AppTheme {
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(14),
           ),
+          animationDuration: const Duration(milliseconds: 190),
+          enableFeedback: true,
           overlayColor: AppColors.vibeBlue.withValues(alpha: .08),
           textStyle: const TextStyle(fontWeight: FontWeight.w700),
         ),
@@ -192,6 +209,8 @@ class AppTheme {
           shape: WidgetStatePropertyAll(
             RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
           ),
+          animationDuration: const Duration(milliseconds: 190),
+          enableFeedback: true,
           overlayColor: WidgetStatePropertyAll(
             AppColors.vibeBlue.withValues(alpha: .09),
           ),
@@ -289,6 +308,49 @@ class AppTheme {
         color: AppColors.vibeBlue,
       ),
       dividerTheme: DividerThemeData(color: border, thickness: 1),
+    );
+  }
+}
+
+class _OgPageTransitionsBuilder extends PageTransitionsBuilder {
+  const _OgPageTransitionsBuilder();
+
+  @override
+  Widget buildTransitions<T>(
+    PageRoute<T> route,
+    BuildContext context,
+    Animation<double> animation,
+    Animation<double> secondaryAnimation,
+    Widget child,
+  ) {
+    if (MediaQuery.disableAnimationsOf(context)) return child;
+
+    final enterCurve = animation.drive(CurveTween(curve: Curves.easeOutCubic));
+    final leaveCurve = secondaryAnimation.drive(
+      CurveTween(curve: Curves.easeInCubic),
+    );
+    final incomingPosition = Tween<Offset>(
+      begin: const Offset(.035, 0),
+      end: Offset.zero,
+    ).animate(enterCurve);
+    final outgoingPosition = Tween<Offset>(
+      begin: Offset.zero,
+      end: const Offset(-.018, 0),
+    ).animate(leaveCurve);
+    final outgoingOpacity = Tween<double>(
+      begin: 1,
+      end: .94,
+    ).animate(leaveCurve);
+
+    return SlideTransition(
+      position: outgoingPosition,
+      child: FadeTransition(
+        opacity: outgoingOpacity,
+        child: SlideTransition(
+          position: incomingPosition,
+          child: FadeTransition(opacity: enterCurve, child: child),
+        ),
+      ),
     );
   }
 }

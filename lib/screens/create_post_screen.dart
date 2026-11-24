@@ -8,6 +8,7 @@ import 'package:image_picker/image_picker.dart';
 import '../services/offline_data_adapter.dart';
 
 import '../services/diagnostics_service.dart';
+import '../services/interaction_feedback_service.dart';
 
 import 'package:og_vibes_student/widgets/vibe_scaffold.dart';
 
@@ -59,6 +60,7 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
     final user = OfflineData.instance.client.auth.currentUser;
     if (user == null) {
       if (!mounted) return;
+      InteractionFeedbackService.taskFailed();
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Please sign in before posting.')),
       );
@@ -124,6 +126,7 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
       });
 
       if (!mounted) return;
+      InteractionFeedbackService.taskSucceeded();
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Your post is now live on the news feed.'),
@@ -138,6 +141,7 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
         ),
       );
       if (!mounted) return;
+      InteractionFeedbackService.taskFailed();
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text('Unable to publish post: $error')));

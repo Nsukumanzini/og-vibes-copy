@@ -5,6 +5,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../services/interaction_feedback_service.dart';
 import '../utils/theme_constants.dart';
 import '../widgets/adaptive_scroll_body.dart';
 
@@ -33,6 +34,7 @@ class _IncomingCallScreenState extends State<IncomingCallScreen> {
   @override
   void initState() {
     super.initState();
+    unawaited(InteractionFeedbackService.notificationReceived());
     SystemSound.play(SystemSoundType.alert);
     _ringTimer = Timer.periodic(const Duration(seconds: 2), (_) {
       SystemSound.play(SystemSoundType.alert);

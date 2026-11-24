@@ -8,6 +8,7 @@ import 'package:flutter_webrtc/flutter_webrtc.dart';
 
 import '../services/call_service.dart';
 import '../services/group_call_service.dart';
+import '../services/interaction_feedback_service.dart';
 import '../utils/theme_constants.dart';
 import 'group_call_screen.dart';
 
@@ -118,6 +119,7 @@ class _ActiveCallScreenState extends State<ActiveCallScreen> {
   }
 
   Future<void> _endCall() async {
+    unawaited(InteractionFeedbackService.callEnded());
     await widget.session.end();
     if (mounted) Navigator.of(context).maybePop();
   }

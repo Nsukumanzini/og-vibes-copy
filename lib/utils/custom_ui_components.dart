@@ -1,7 +1,6 @@
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
 import 'theme_constants.dart';
 import '../widgets/glass_card.dart';
@@ -101,11 +100,7 @@ class PrimaryHapticButton extends StatelessWidget {
         label,
         style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15.0),
       ),
-      onPressed: () {
-        // Fire a light haptic pulse first for a premium tactile feel.
-        HapticFeedback.lightImpact();
-        onPressed();
-      },
+      onPressed: onPressed,
     );
   }
 }

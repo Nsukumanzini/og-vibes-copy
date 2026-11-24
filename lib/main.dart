@@ -8,6 +8,7 @@ import 'services/safety_ui_state.dart';
 import 'services/theme_preferences.dart';
 import 'utils/app_theme.dart';
 import 'widgets/panic_button.dart';
+import 'widgets/foreground_notification_feedback.dart';
 
 final _rootNavigatorKey = GlobalKey<NavigatorState>();
 
@@ -52,12 +53,14 @@ class MyApp extends StatelessWidget {
                 disableAnimations:
                     platformMedia.disableAnimations || reduceMotion,
               ),
-              child: ValueListenableBuilder<bool>(
-                valueListenable: SafetyUiState.showFloatingAction,
-                builder: (context, showFloatingAction, _) => PanicButtonDock(
-                  visible: showFloatingAction,
-                  navigatorKey: _rootNavigatorKey,
-                  child: child ?? const SizedBox.shrink(),
+              child: ForegroundNotificationFeedback(
+                child: ValueListenableBuilder<bool>(
+                  valueListenable: SafetyUiState.showFloatingAction,
+                  builder: (context, showFloatingAction, _) => PanicButtonDock(
+                    visible: showFloatingAction,
+                    navigatorKey: _rootNavigatorKey,
+                    child: child ?? const SizedBox.shrink(),
+                  ),
                 ),
               ),
             );
