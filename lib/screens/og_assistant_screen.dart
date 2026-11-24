@@ -3,12 +3,9 @@ import '../widgets/glass_card.dart';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import '../services/offline_data_adapter.dart';
-
 import '../services/og_assistant_service.dart';
 import '../utils/theme_constants.dart';
 import '../widgets/vibe_scaffold.dart';
-import 'pdf_viewer_screen.dart';
 
 class OgAssistantScreen extends StatefulWidget {
   const OgAssistantScreen({super.key});
@@ -22,18 +19,21 @@ class _OgAssistantScreenState extends State<OgAssistantScreen> {
   final _questionController = TextEditingController();
   final _scrollController = ScrollController();
   final List<_AssistantTurn> _turns = [];
-  List<_StudentModule> _modules = const [];
+  List<_StudentModule> _modules = const [
+    _StudentModule(
+      id: 'module-bus101',
+      name: 'Introduction to Business Management',
+      code: 'BUS101',
+    ),
+    _StudentModule(
+      id: 'module-com101',
+      name: 'Communication Skills',
+      code: 'COM101',
+    ),
+  ];
   String? _selectedModuleId;
-  bool _loadingModules = true;
+  bool _loadingModules = false;
   bool _searching = false;
-
-  bool get _signedIn => OfflineData.instance.client.auth.currentUser != null;
-
-  @override
-  void initState() {
-    super.initState();
-    _loadModules();
-  }
 
   @override
   void dispose() {
@@ -42,39 +42,8 @@ class _OgAssistantScreenState extends State<OgAssistantScreen> {
     super.dispose();
   }
 
-  Future<void> _loadModules() async {
-    final user = OfflineData.instance.client.auth.currentUser;
-    if (user == null) {
-      if (mounted) setState(() => _loadingModules = false);
-      return;
-    }
-    try {
-      final raw =
-          await OfflineData.instance.client
-                  .from('student_module_registrations')
-                  .select(
-                    'module_id, modules!student_module_registrations_module_id_fkey(id,name,code)',
-                  )
-                  .eq('student_id', user.id)
-                  .eq('status', 'active')
-              as List<dynamic>;
-      final modules = raw
-          .whereType<Map>()
-          .map((row) => _StudentModule.fromRow(Map<String, dynamic>.from(row)))
-          .where((module) => module.id.isNotEmpty)
-          .toList(growable: false);
-      if (!mounted) return;
-      setState(() {
-        _modules = modules;
-        _loadingModules = false;
-      });
-    } catch (_) {
-      if (mounted) setState(() => _loadingModules = false);
-    }
-  }
-
   Future<void> _ask([String? suggestedQuestion]) async {
-    if (_searching || !_signedIn) return;
+    if (_searching) return;
     if (suggestedQuestion != null) {
       _questionController.text = suggestedQuestion;
     }
@@ -99,7 +68,10 @@ class _OgAssistantScreenState extends State<OgAssistantScreen> {
       if (!mounted) return;
       setState(
         () => _turns.add(
-          _AssistantTurn(question: question, error: _friendlyError(error)),
+          _AssistantTurn(
+            question: question,
+            error: 'The local study library could not be searched: $error',
+          ),
         ),
       );
     } finally {
@@ -119,41 +91,44 @@ class _OgAssistantScreenState extends State<OgAssistantScreen> {
     );
   }
 
-  Future<void> _openSource(OgAssistantSource source) async {
-    try {
-      final url = await _service.createSourceUrl(source);
-      if (!mounted) return;
-      await Navigator.of(context).push(
-        MaterialPageRoute<void>(
-          builder: (_) => PdfViewerScreen(url: url, title: source.title),
-        ),
-      );
-    } catch (error) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(_friendlyError(error))));
-    }
-  }
-
-  String _friendlyError(Object error) {
-    if (error is OfflineAuthException) return 'Sign in to use OG Assistant.';
-    if (error is FormatException) return error.message;
-    final text = error.toString().replaceFirst('Bad state: ', '');
-    if (text.contains('Failed host lookup') ||
-        text.contains('SocketException')) {
-      return 'Connect to the internet to search your approved material.';
-    }
-    return text.isEmpty ? 'OG Assistant is temporarily unavailable.' : text;
-  }
-
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final foreground = isDark ? Colors.white : AppColors.midnightInk;
     return VibeScaffold(
       appBar: AppBar(
-        title: const Text('OG Assistant'),
+        title: Row(
+          children: [
+            Container(
+              width: 36,
+              height: 36,
+              decoration: BoxDecoration(
+                color: AppColors.vibeBlue.withValues(alpha: .1),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: const Icon(
+                Icons.auto_awesome_rounded,
+                color: AppColors.vibeBlue,
+                size: 20,
+              ),
+            ),
+            const SizedBox(width: 10),
+            const Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text('OG Assistant'),
+                Text(
+                  'STUDY SPACE',
+                  style: TextStyle(
+                    fontSize: 9,
+                    letterSpacing: 1.1,
+                    fontWeight: FontWeight.w800,
+                    color: AppColors.textMuted,
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
         actions: [
           IconButton(
             tooltip: 'Clear conversation',
@@ -169,14 +144,14 @@ class _OgAssistantScreenState extends State<OgAssistantScreen> {
               controller: _scrollController,
               padding: const EdgeInsets.fromLTRB(16, 4, 16, 18),
               children: [
-                _buildHero(),
-                const SizedBox(height: 14),
+                if (_turns.isEmpty) ...[
+                  _buildHero(),
+                  const SizedBox(height: 16),
+                ],
                 _buildModuleFilter(),
-                const SizedBox(height: 14),
-                if (!_signedIn)
-                  _buildSignInCard()
-                else if (_turns.isEmpty)
-                  _buildWelcome(foreground)
+                SizedBox(height: _turns.isEmpty ? 20 : 14),
+                if (_turns.isEmpty)
+                  _buildWelcome()
                 else
                   ..._turns.map(_buildTurn),
                 if (_searching) _buildSearching(),
@@ -191,59 +166,67 @@ class _OgAssistantScreenState extends State<OgAssistantScreen> {
 
   Widget _buildHero() {
     return Container(
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.fromLTRB(22, 22, 22, 24),
       decoration: BoxDecoration(
-        gradient: AppStyles.brandGradient,
-        borderRadius: BorderRadius.circular(28),
+        gradient: const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [Color(0xFF102B58), Color(0xFF1557C0), Color(0xFF3978E9)],
+        ),
+        borderRadius: BorderRadius.circular(30),
         boxShadow: [
           BoxShadow(
-            color: AppColors.vibeBlue.withValues(alpha: 0.2),
-            blurRadius: 28,
-            offset: const Offset(0, 14),
+            color: AppColors.deepBlue.withValues(alpha: .2),
+            blurRadius: 24,
+            offset: const Offset(0, 12),
           ),
         ],
       ),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Container(
-            width: 58,
-            height: 58,
-            decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.14),
-              borderRadius: BorderRadius.circular(19),
-              border: Border.all(color: Colors.white24),
-            ),
-            child: const Icon(
-              Icons.auto_stories_rounded,
+          Row(
+            children: [
+              Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: .14),
+                  borderRadius: BorderRadius.circular(15),
+                  border: Border.all(color: Colors.white24),
+                ),
+                child: const Icon(
+                  Icons.auto_stories_rounded,
+                  color: Colors.white,
+                  size: 23,
+                ),
+              ),
+              const SizedBox(width: 10),
+              const _LocalDemoBadge(),
+              const Spacer(),
+              Icon(
+                Icons.school_rounded,
+                color: Colors.white.withValues(alpha: .38),
+                size: 27,
+              ),
+            ],
+          ),
+          const SizedBox(height: 22),
+          const Text(
+            'Study smarter,\none passage at a time.',
+            style: TextStyle(
               color: Colors.white,
-              size: 30,
+              fontSize: 25,
+              height: 1.12,
+              fontWeight: FontWeight.w900,
             ),
           ),
-          const SizedBox(width: 15),
-          const Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Text(
-                      'OG Assistant',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 21,
-                        fontWeight: FontWeight.w900,
-                      ),
-                    ),
-                    SizedBox(width: 7),
-                    _GroundedBadge(),
-                  ],
-                ),
-                SizedBox(height: 6),
-                Text(
-                  'Answers extracted only from approved academic material.',
-                  style: TextStyle(color: Colors.white70, height: 1.35),
-                ),
-              ],
+          const SizedBox(height: 9),
+          Text(
+            'Search local sample notes and find useful passages for your next study session.',
+            style: TextStyle(
+              color: Colors.white.withValues(alpha: .82),
+              height: 1.45,
             ),
           ),
         ],
@@ -252,119 +235,229 @@ class _OgAssistantScreenState extends State<OgAssistantScreen> {
   }
 
   Widget _buildModuleFilter() {
-    return _GlassPanel(
+    return Container(
+      padding: const EdgeInsets.fromLTRB(15, 12, 12, 12),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surface.withValues(alpha: .88),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: AppColors.glassBorder),
+        boxShadow: AppStyles.glassShadow,
+      ),
       child: Row(
         children: [
-          const Icon(Icons.school_rounded, color: AppColors.vibeBlue),
-          const SizedBox(width: 12),
+          Container(
+            width: 38,
+            height: 38,
+            decoration: BoxDecoration(
+              color: AppColors.vibeBlue.withValues(alpha: .09),
+              borderRadius: BorderRadius.circular(13),
+            ),
+            child: const Icon(
+              Icons.menu_book_rounded,
+              color: AppColors.vibeBlue,
+              size: 19,
+            ),
+          ),
+          const SizedBox(width: 11),
           Expanded(
-            child: _loadingModules
-                ? const LinearProgressIndicator(minHeight: 3)
-                : DropdownButtonHideUnderline(
-                    child: DropdownButton<String?>(
-                      value: _selectedModuleId,
-                      isExpanded: true,
-                      hint: const Text('Search all my modules'),
-                      items: [
-                        const DropdownMenuItem<String?>(
-                          value: null,
-                          child: Text('All my modules'),
-                        ),
-                        ..._modules.map(
-                          (module) => DropdownMenuItem<String?>(
-                            value: module.id,
-                            child: Text(
-                              module.label,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                        ),
-                      ],
-                      onChanged: (value) {
-                        setState(() => _selectedModuleId = value);
-                      },
-                    ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'SEARCH WITHIN',
+                  style: TextStyle(
+                    color: AppColors.textMuted,
+                    fontSize: 9,
+                    fontWeight: FontWeight.w900,
+                    letterSpacing: 1,
                   ),
+                ),
+                const SizedBox(height: 2),
+                _loadingModules
+                    ? const LinearProgressIndicator(minHeight: 3)
+                    : DropdownButtonHideUnderline(
+                        child: DropdownButton<String?>(
+                          value: _selectedModuleId,
+                          isExpanded: true,
+                          isDense: true,
+                          hint: const Text('All available modules'),
+                          items: [
+                            const DropdownMenuItem<String?>(
+                              value: null,
+                              child: Text('All available modules'),
+                            ),
+                            ..._modules.map(
+                              (module) => DropdownMenuItem<String?>(
+                                value: module.id,
+                                child: Text(
+                                  module.label,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            ),
+                          ],
+                          onChanged: (value) {
+                            setState(() => _selectedModuleId = value);
+                          },
+                        ),
+                      ),
+              ],
+            ),
           ),
+          const SizedBox(width: 6),
+          const Icon(Icons.tune_rounded, color: AppColors.textMuted, size: 18),
         ],
       ),
     );
   }
 
-  Widget _buildSignInCard() {
-    return const _GlassPanel(
-      padding: EdgeInsets.all(24),
-      child: Column(
-        children: [
-          Icon(Icons.lock_person_rounded, size: 44, color: AppColors.vibeBlue),
-          SizedBox(height: 12),
-          Text(
-            'Sign in required',
-            style: TextStyle(fontSize: 19, fontWeight: FontWeight.w900),
-          ),
-          SizedBox(height: 7),
-          Text(
-            'Your account determines which registered-module material OG Assistant may search.',
-            textAlign: TextAlign.center,
-            style: TextStyle(color: AppColors.textMuted, height: 1.45),
-          ),
-        ],
+  Widget _buildWelcome() {
+    const prompts = <({IconData icon, String title, String prompt})>[
+      (
+        icon: Icons.lightbulb_outline_rounded,
+        title: 'Explain a concept',
+        prompt: 'Define the main concept from the latest lecture',
       ),
-    );
-  }
-
-  Widget _buildWelcome(Color foreground) {
-    const prompts = <String>[
-      'Define the main concept from the latest lecture',
-      'Find the section that explains this topic',
-      'Show me relevant past-paper guidance',
+      (
+        icon: Icons.manage_search_rounded,
+        title: 'Find a topic',
+        prompt: 'Find the section that explains this topic',
+      ),
+      (
+        icon: Icons.assignment_outlined,
+        title: 'Past-paper help',
+        prompt: 'Show me relevant past-paper guidance',
+      ),
     ];
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const _ResultNotice(
-          icon: Icons.verified_user_rounded,
-          color: AppColors.success,
-          text:
-              'No web results and no invented answers. If the approved documents do not support an answer, I will tell you.',
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
+            Expanded(
+              child: Text(
+                'What are you\nworking on today?',
+                style: TextStyle(
+                  fontSize: 23,
+                  height: 1.14,
+                  fontWeight: FontWeight.w900,
+                  color: Theme.of(context).colorScheme.onSurface,
+                ),
+              ),
+            ),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
+              decoration: BoxDecoration(
+                color: AppColors.ogGold.withValues(alpha: .15),
+                borderRadius: AppStyles.pillRadius,
+              ),
+              child: const Row(
+                children: [
+                  Icon(
+                    Icons.offline_bolt_rounded,
+                    size: 13,
+                    color: AppColors.deepBlue,
+                  ),
+                  SizedBox(width: 4),
+                  Text(
+                    'OFFLINE',
+                    style: TextStyle(
+                      color: AppColors.deepBlue,
+                      fontSize: 9,
+                      fontWeight: FontWeight.w900,
+                      letterSpacing: .5,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
         ),
-        const SizedBox(height: 18),
-        Text(
-          'TRY ASKING',
-          style: TextStyle(
-            color: foreground,
-            fontSize: 11,
-            fontWeight: FontWeight.w900,
-            letterSpacing: 1.1,
-          ),
+        const SizedBox(height: 8),
+        const Text(
+          'Try one of these to get started',
+          style: TextStyle(color: AppColors.textMuted, height: 1.4),
         ),
-        const SizedBox(height: 9),
+        const SizedBox(height: 15),
         ...prompts.map(
-          (prompt) => Padding(
+          (item) => Padding(
             padding: const EdgeInsets.only(bottom: 9),
-            child: InkWell(
-              borderRadius: BorderRadius.circular(18),
-              onTap: () => _ask(prompt),
-              child: _GlassPanel(
-                child: Row(
-                  children: [
-                    const Icon(
-                      Icons.north_east_rounded,
-                      size: 19,
-                      color: AppColors.vibeBlue,
-                    ),
-                    const SizedBox(width: 11),
-                    Expanded(
-                      child: Text(
-                        prompt,
-                        style: const TextStyle(fontWeight: FontWeight.w700),
+            child: Material(
+              color: Theme.of(
+                context,
+              ).colorScheme.surface.withValues(alpha: .88),
+              borderRadius: BorderRadius.circular(19),
+              child: InkWell(
+                borderRadius: BorderRadius.circular(19),
+                onTap: () => _ask(item.prompt),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 13,
+                  ),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(19),
+                    border: Border.all(color: AppColors.glassBorder),
+                    boxShadow: AppStyles.glassShadow,
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 40,
+                        height: 40,
+                        decoration: BoxDecoration(
+                          color: AppColors.vibeBlue.withValues(alpha: .09),
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                        child: Icon(
+                          item.icon,
+                          color: AppColors.vibeBlue,
+                          size: 20,
+                        ),
                       ),
-                    ),
-                  ],
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              item.title,
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              item.prompt,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                color: AppColors.textMuted,
+                                fontSize: 11,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const Icon(
+                        Icons.arrow_forward_rounded,
+                        size: 18,
+                        color: AppColors.vibeBlue,
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),
           ),
+        ),
+        const SizedBox(height: 6),
+        const _ResultNotice(
+          icon: Icons.info_outline_rounded,
+          color: AppColors.deepBlue,
+          text:
+              'This offline version searches sample study notes stored in the app. No sign-in or internet is needed.',
         ),
       ],
     );
@@ -411,22 +504,19 @@ class _OgAssistantScreenState extends State<OgAssistantScreen> {
               icon: Icons.manage_search_rounded,
               color: AppColors.warning,
               text:
-                  'I could not find a supported answer in your approved academic material. Try different wording or ask your lecturer to upload more material.',
+                  'No matching sample passage found. Try different wording or another available module.',
             )
           else ...[
             _ResultNotice(
               icon: Icons.fact_check_rounded,
               color: AppColors.success,
               text:
-                  'I found ${turn.sources.length} supported ${turn.sources.length == 1 ? 'passage' : 'passages'}. The strongest match appears first.',
+                  'Found ${turn.sources.length} matching ${turn.sources.length == 1 ? 'passage' : 'passages'} in the sample study library.',
             ),
             const SizedBox(height: 9),
             ...turn.sources.asMap().entries.map(
-              (entry) => _SourceCard(
-                number: entry.key + 1,
-                source: entry.value,
-                onOpen: () => _openSource(entry.value),
-              ),
+              (entry) =>
+                  _SourceCard(number: entry.key + 1, source: entry.value),
             ),
           ],
         ],
@@ -448,7 +538,7 @@ class _OgAssistantScreenState extends State<OgAssistantScreen> {
             SizedBox(width: 12),
             Expanded(
               child: Text(
-                'Searching approved material…',
+                'Searching sample study passages…',
                 style: TextStyle(fontWeight: FontWeight.w700),
               ),
             ),
@@ -461,40 +551,96 @@ class _OgAssistantScreenState extends State<OgAssistantScreen> {
   Widget _buildComposer() {
     return ClipRect(
       child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+        filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
         child: Container(
-          padding: const EdgeInsets.fromLTRB(14, 12, 14, 16),
+          padding: const EdgeInsets.fromLTRB(14, 10, 14, 12),
           decoration: BoxDecoration(
-            color: Theme.of(
-              context,
-            ).colorScheme.surface.withValues(alpha: 0.88),
+            color: Theme.of(context).colorScheme.surface.withValues(alpha: .88),
             border: const Border(top: BorderSide(color: AppColors.glassBorder)),
           ),
           child: SafeArea(
             top: false,
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.end,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Expanded(
-                  child: TextField(
-                    controller: _questionController,
-                    enabled: _signedIn && !_searching,
-                    minLines: 1,
-                    maxLines: 4,
-                    textInputAction: TextInputAction.send,
-                    onSubmitted: (_) => _ask(),
-                    decoration: const InputDecoration(
-                      hintText: 'Ask from your academic material…',
-                      prefixIcon: Icon(Icons.search_rounded),
+                const Padding(
+                  padding: EdgeInsets.only(left: 3, bottom: 8),
+                  child: Text(
+                    'ASK YOUR STUDY LIBRARY',
+                    style: TextStyle(
+                      color: AppColors.textMuted,
+                      fontSize: 9,
+                      letterSpacing: 1,
+                      fontWeight: FontWeight.w900,
                     ),
                   ),
                 ),
-                const SizedBox(width: 9),
-                IconButton.filled(
-                  tooltip: 'Search approved material',
-                  onPressed: _signedIn && !_searching ? _ask : null,
-                  style: IconButton.styleFrom(minimumSize: const Size(52, 52)),
-                  icon: const Icon(Icons.arrow_upward_rounded),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: _questionController,
+                        enabled: !_searching,
+                        minLines: 1,
+                        maxLines: 4,
+                        textInputAction: TextInputAction.send,
+                        onSubmitted: (_) => _ask(),
+                        decoration: InputDecoration(
+                          hintText: 'Ask a question or search a topic…',
+                          prefixIcon: const Icon(Icons.search_rounded),
+                          filled: true,
+                          fillColor: AppColors.vibeBlue.withValues(alpha: .055),
+                          contentPadding: const EdgeInsets.symmetric(
+                            vertical: 15,
+                            horizontal: 16,
+                          ),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(20),
+                            borderSide: BorderSide.none,
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(20),
+                            borderSide: const BorderSide(
+                              color: AppColors.glassBorder,
+                            ),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(20),
+                            borderSide: const BorderSide(
+                              color: AppColors.vibeBlue,
+                              width: 1.4,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 9),
+                    SizedBox(
+                      width: 52,
+                      height: 52,
+                      child: IconButton.filled(
+                        tooltip: 'Search study library',
+                        onPressed: !_searching ? _ask : null,
+                        style: IconButton.styleFrom(
+                          backgroundColor: AppColors.vibeBlue,
+                          foregroundColor: Colors.white,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(18),
+                          ),
+                        ),
+                        icon: _searching
+                            ? const SizedBox.square(
+                                dimension: 20,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: Colors.white,
+                                ),
+                              )
+                            : const Icon(Icons.arrow_upward_rounded),
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),
@@ -517,17 +663,6 @@ class _StudentModule {
   final String code;
 
   String get label => code.isEmpty ? name : '$code • $name';
-
-  factory _StudentModule.fromRow(Map<String, dynamic> row) {
-    final module = row['modules'] is Map
-        ? Map<String, dynamic>.from(row['modules'] as Map)
-        : <String, dynamic>{};
-    return _StudentModule(
-      id: (module['id'] ?? row['module_id'])?.toString() ?? '',
-      name: module['name']?.toString() ?? 'Module',
-      code: module['code']?.toString() ?? '',
-    );
-  }
 }
 
 class _AssistantTurn {
@@ -542,21 +677,21 @@ class _AssistantTurn {
   final String? error;
 }
 
-class _GroundedBadge extends StatelessWidget {
-  const _GroundedBadge();
+class _LocalDemoBadge extends StatelessWidget {
+  const _LocalDemoBadge();
 
   @override
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
-        color: AppColors.success,
+        color: AppColors.ogGold,
         borderRadius: AppStyles.pillRadius,
       ),
       child: const Text(
-        'GROUNDED',
+        'LOCAL DEMO',
         style: TextStyle(
-          color: Colors.white,
+          color: AppColors.deepBlue,
           fontSize: 8,
           fontWeight: FontWeight.w900,
           letterSpacing: .6,
@@ -612,15 +747,10 @@ class _ResultNotice extends StatelessWidget {
 }
 
 class _SourceCard extends StatelessWidget {
-  const _SourceCard({
-    required this.number,
-    required this.source,
-    required this.onOpen,
-  });
+  const _SourceCard({required this.number, required this.source});
 
   final int number;
   final OgAssistantSource source;
-  final VoidCallback onOpen;
 
   @override
   Widget build(BuildContext context) {
@@ -630,45 +760,59 @@ class _SourceCard extends StatelessWidget {
         : '${source.moduleCode} • ${source.moduleName}';
     return Padding(
       padding: const EdgeInsets.only(bottom: 9),
-      child: _GlassPanel(
-        padding: const EdgeInsets.all(17),
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Theme.of(context).colorScheme.surface.withValues(alpha: .9),
+          borderRadius: BorderRadius.circular(22),
+          border: Border.all(color: AppColors.glassBorder),
+          boxShadow: AppStyles.glassShadow,
+        ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
               children: [
                 Container(
-                  width: 30,
-                  height: 30,
-                  alignment: Alignment.center,
-                  decoration: const BoxDecoration(
-                    color: AppColors.vibeBlue,
-                    shape: BoxShape.circle,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 9,
+                    vertical: 6,
+                  ),
+                  decoration: BoxDecoration(
+                    color: AppColors.vibeBlue.withValues(alpha: .09),
+                    borderRadius: AppStyles.pillRadius,
                   ),
                   child: Text(
-                    '$number',
+                    'PASSAGE $number',
                     style: const TextStyle(
-                      color: Colors.white,
+                      color: AppColors.vibeBlue,
+                      fontSize: 9,
+                      letterSpacing: .5,
                       fontWeight: FontWeight.w900,
                     ),
                   ),
                 ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Text(
-                    source.title,
-                    style: const TextStyle(fontWeight: FontWeight.w900),
-                  ),
+                const Spacer(),
+                const Icon(
+                  Icons.bolt_rounded,
+                  size: 15,
+                  color: AppColors.ogGold,
                 ),
+                const SizedBox(width: 3),
                 Text(
-                  '$confidence%',
+                  '$confidence% match',
                   style: const TextStyle(
-                    color: AppColors.success,
-                    fontSize: 11,
+                    color: AppColors.deepBlue,
+                    fontSize: 10,
                     fontWeight: FontWeight.w900,
                   ),
                 ),
               ],
+            ),
+            const SizedBox(height: 12),
+            Text(
+              source.title,
+              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w900),
             ),
             const SizedBox(height: 10),
             Wrap(
@@ -683,18 +827,38 @@ class _SourceCard extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 13),
-            SelectableText(
-              source.content,
-              style: const TextStyle(height: 1.55),
-            ),
-            const SizedBox(height: 12),
-            Align(
-              alignment: Alignment.centerRight,
-              child: TextButton.icon(
-                onPressed: onOpen,
-                icon: const Icon(Icons.open_in_new_rounded, size: 18),
-                label: Text('Open page ${source.pageNumber}'),
+            Container(
+              padding: const EdgeInsets.fromLTRB(13, 12, 13, 12),
+              decoration: BoxDecoration(
+                color: AppColors.vibeBlue.withValues(alpha: .045),
+                borderRadius: BorderRadius.circular(15),
+                border: const Border(
+                  left: BorderSide(color: AppColors.ogGold, width: 3),
+                ),
               ),
+              child: SelectableText(
+                source.content,
+                style: const TextStyle(height: 1.55),
+              ),
+            ),
+            const SizedBox(height: 9),
+            const Row(
+              children: [
+                Icon(
+                  Icons.offline_bolt_rounded,
+                  size: 13,
+                  color: AppColors.textMuted,
+                ),
+                SizedBox(width: 5),
+                Text(
+                  'Sample passage from the offline library',
+                  style: TextStyle(
+                    color: AppColors.textMuted,
+                    fontSize: 10,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
             ),
           ],
         ),

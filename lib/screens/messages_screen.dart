@@ -13,6 +13,7 @@ import '../services/offline_data_adapter.dart';
 import '../utils/theme_constants.dart';
 import '../widgets/vibe_scaffold.dart';
 import '../widgets/notification_bell_button.dart';
+import '../widgets/og_assistant_button.dart';
 import '../widgets/glass_card.dart';
 import '../services/interaction_feedback_service.dart';
 import 'chat_detail_screen.dart';
@@ -403,6 +404,7 @@ class _MessagesScreenState extends State<MessagesScreen> {
                         ],
                       ),
                     ),
+                    const OgAssistantButton(),
                     const NotificationBellButton(),
                   ],
                 ),

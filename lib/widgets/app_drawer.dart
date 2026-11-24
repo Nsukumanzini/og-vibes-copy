@@ -6,6 +6,7 @@ import '../screens/helpful_contacts_screen.dart';
 import '../screens/landing_screen.dart';
 import '../screens/my_modules_screen.dart';
 import '../screens/my_posts_screen.dart';
+import '../screens/og_assistant_screen.dart';
 import '../screens/profile_screen.dart';
 import '../screens/safety_screen.dart';
 import '../screens/settings_screen.dart';
@@ -57,6 +58,14 @@ class _AppDrawerState extends State<AppDrawer> {
                       subtitle: 'Modules and invitations',
                       onTap: () =>
                           _openScreen(context, const MyModulesScreen()),
+                    ),
+                  ]),
+                  _buildSection('LEARNING', [
+                    _buildItem(
+                      icon: Icons.auto_awesome_rounded,
+                      title: 'OG Assistant',
+                      subtitle: 'Search academic study material',
+                      onTap: () => _openScreen(context, const OgAssistantScreen()),
                     ),
                   ]),
                   _buildSection('CAMPUS SUPPORT', [

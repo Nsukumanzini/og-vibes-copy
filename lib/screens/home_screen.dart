@@ -18,6 +18,7 @@ import '../../widgets/app_drawer.dart';
 import '../../widgets/post_card.dart';
 import '../../widgets/vibe_scaffold.dart';
 import '../../widgets/notification_bell_button.dart';
+import '../../widgets/og_assistant_button.dart';
 import 'announcements_screen.dart';
 import 'create_post_screen.dart';
 import 'events_screen.dart';
@@ -468,6 +469,7 @@ class _HomeScreenState extends State<HomeScreen>
                 ),
               ),
             ),
+            const OgAssistantButton(),
             const NotificationBellButton(),
           ],
         ),
@@ -548,7 +550,11 @@ class _HomeScreenState extends State<HomeScreen>
           pinned: true,
           expandedHeight: 100.0,
           backgroundColor: Theme.of(context).scaffoldBackgroundColor,
-          actions: const [NotificationBellButton(), SizedBox(width: 12)],
+          actions: const [
+            OgAssistantButton(),
+            NotificationBellButton(),
+            SizedBox(width: 12),
+          ],
           flexibleSpace: FlexibleSpaceBar(
             titlePadding: const EdgeInsets.only(left: 20, bottom: 16),
             title: Text(
@@ -584,7 +590,11 @@ class _HomeScreenState extends State<HomeScreen>
           pinned: true,
           expandedHeight: 100.0,
           backgroundColor: Theme.of(context).scaffoldBackgroundColor,
-          actions: const [NotificationBellButton(), SizedBox(width: 12)],
+          actions: const [
+            OgAssistantButton(),
+            NotificationBellButton(),
+            SizedBox(width: 12),
+          ],
           flexibleSpace: FlexibleSpaceBar(
             titlePadding: const EdgeInsets.only(left: 20, bottom: 16),
             title: Text(

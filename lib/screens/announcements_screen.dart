@@ -13,6 +13,7 @@ import '../utils/theme_constants.dart';
 import '../widgets/glass_card.dart';
 import '../widgets/vibe_scaffold.dart';
 import '../widgets/notification_bell_button.dart';
+import '../widgets/og_assistant_button.dart';
 import '../services/notification_badge_service.dart';
 import 'assessments_calendar_screen.dart';
 import 'events_screen.dart';
@@ -478,6 +479,7 @@ class _AnnouncementsScreenState extends State<AnnouncementsScreen> {
       appBar: AppBar(
         title: const Text('Announcements'),
         actions: [
+          const OgAssistantButton(),
           const NotificationBellButton(),
           if (_refreshing)
             const Padding(

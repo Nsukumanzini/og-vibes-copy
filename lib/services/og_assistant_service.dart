@@ -98,6 +98,4 @@ class OgAssistantService {
           ..sort((a, b) => b.matches.compareTo(a.matches));
     return ranked.take(3).map((item) => item.source).toList();
   }
-
-  Future<String> createSourceUrl(OgAssistantSource source) async => '';
 }
