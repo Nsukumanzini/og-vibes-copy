@@ -41,6 +41,7 @@ import 'accredited_accommodation_screen.dart';
 import 'donation_screen.dart';
 import 'cafeteria_screen.dart';
 import 'src_voting_screen.dart';
+import 'study_group_finder_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -792,6 +793,13 @@ class _HomeScreenState extends State<HomeScreen>
 
   List<_HubCardInfo> _getStudyHubCards() {
     return [
+      _HubCardInfo(
+        title: 'Study groups',
+        icon: Icons.groups_rounded,
+        onTap: (context) => Navigator.of(context).push(
+          MaterialPageRoute(builder: (_) => const StudyGroupFinderScreen()),
+        ),
+      ),
       _HubCardInfo(
         title: 'Past question papers',
         icon: Icons.history_edu_rounded,
