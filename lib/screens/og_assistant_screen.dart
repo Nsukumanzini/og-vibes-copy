@@ -576,11 +576,8 @@ class _GlassPanel extends StatelessWidget {
   final EdgeInsets padding;
 
   @override
-  Widget build(BuildContext context) {
-    return GlassCard(
-      child: Padding(padding: padding, child: child),
-    );
-  }
+  Widget build(BuildContext context) =>
+      GlassPanel(padding: padding, child: child);
 }
 
 class _ResultNotice extends StatelessWidget {

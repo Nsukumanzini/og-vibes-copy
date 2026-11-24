@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import 'theme_constants.dart';
+import '../widgets/glass_card.dart';
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // BentoCard
@@ -36,13 +37,9 @@ class BentoCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: padding ?? const EdgeInsets.all(20.0),
-      decoration: BoxDecoration(
-        color: color ?? AppColors.crispWhite,
-        borderRadius: AppStyles.bentoRadius,
-        boxShadow: AppStyles.softShadow,
-      ),
+    return GlassPanel(
+      padding: padding ?? const EdgeInsets.all(20),
+      color: color,
       child: child,
     );
   }
@@ -88,11 +85,16 @@ class PrimaryHapticButton extends StatelessWidget {
   Widget build(BuildContext context) {
     return ElevatedButton.icon(
       style: ElevatedButton.styleFrom(
-        backgroundColor: color ?? AppColors.deepBlue,
+        backgroundColor: (color ?? AppColors.deepBlue).withValues(alpha: .88),
         foregroundColor: AppColors.crispWhite,
         padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 14.0),
-        shape: RoundedRectangleBorder(borderRadius: AppStyles.bentoRadius),
-        elevation: 0,
+        shape: RoundedRectangleBorder(
+          borderRadius: AppStyles.controlRadius,
+          side: BorderSide(color: Colors.white.withValues(alpha: .8)),
+        ),
+        overlayColor: Colors.white.withValues(alpha: .14),
+        elevation: 2,
+        shadowColor: AppColors.deepBlue.withValues(alpha: .2),
       ),
       icon: Icon(icon),
       label: Text(
@@ -139,6 +141,7 @@ class GlassOverlay extends StatelessWidget {
   Widget build(BuildContext context) {
     final reduceEffects =
         MediaQuery.maybeOf(context)?.disableAnimations ?? false;
+    final dark = Theme.of(context).brightness == Brightness.dark;
     final effectiveBlur = reduceEffects
         ? 0.0
         : blur.clamp(0, AppStyles.heroBlur).toDouble();
@@ -150,11 +153,13 @@ class GlassOverlay extends StatelessWidget {
           padding: const EdgeInsets.all(20.0),
           decoration: BoxDecoration(
             // Semi-transparent white tint creates the "frosted" look.
-            color: Colors.white.withValues(alpha: 0.1),
+            color: (dark ? AppColors.surfaceDark : Colors.white).withValues(
+              alpha: dark ? .56 : .48,
+            ),
             borderRadius: AppStyles.bentoRadius,
             border: Border.all(
               // Subtle white border reinforces the glass edge.
-              color: Colors.white.withValues(alpha: 0.2),
+              color: Colors.white.withValues(alpha: dark ? .22 : .76),
               width: 1.5,
             ),
           ),

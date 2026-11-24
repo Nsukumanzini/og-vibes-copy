@@ -10,6 +10,7 @@ import '../services/offline_data_adapter.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../utils/theme_constants.dart';
+import '../widgets/glass_card.dart';
 import '../widgets/vibe_scaffold.dart';
 import '../widgets/notification_bell_button.dart';
 import '../services/notification_badge_service.dart';
@@ -374,21 +375,28 @@ class _AnnouncementsScreenState extends State<AnnouncementsScreen> {
       return;
     }
     final previous = _contentReadIds;
-    setState(() => _contentReadIds = {..._contentReadIds, ...unreadAlerts.map((alert) => alert.id)});
+    setState(
+      () => _contentReadIds = {
+        ..._contentReadIds,
+        ...unreadAlerts.map((alert) => alert.id),
+      },
+    );
     try {
       final readAt = DateTime.now().toUtc().toIso8601String();
-      await _db.from('alert_reads').upsert(
-        unreadAlerts
-            .map(
-              (alert) => <String, dynamic>{
-                'user_id': userId,
-                'alert_id': alert.id,
-                'read_at': readAt,
-              },
-            )
-            .toList(),
-        onConflict: 'user_id,alert_id',
-      );
+      await _db
+          .from('alert_reads')
+          .upsert(
+            unreadAlerts
+                .map(
+                  (alert) => <String, dynamic>{
+                    'user_id': userId,
+                    'alert_id': alert.id,
+                    'read_at': readAt,
+                  },
+                )
+                .toList(),
+            onConflict: 'user_id,alert_id',
+          );
       await NotificationBadgeService.instance.refresh();
       _showSnack('All announcements are marked as read.');
     } catch (_) {
@@ -452,11 +460,13 @@ class _AnnouncementsScreenState extends State<AnnouncementsScreen> {
         .where((alert) => !_readIds.contains(alert.id))
         .length;
     final critical = _alerts.where((alert) => alert.isCritical).length;
-    final criticalAlerts = _alerts
-        .where((alert) => alert.isCritical && !_readIds.contains(alert.id))
-        .toList()
-      ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
-    final emergency = (_filter == 'All' || _filter == 'Important') &&
+    final criticalAlerts =
+        _alerts
+            .where((alert) => alert.isCritical && !_readIds.contains(alert.id))
+            .toList()
+          ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+    final emergency =
+        (_filter == 'All' || _filter == 'Important') &&
             criticalAlerts.isNotEmpty
         ? criticalAlerts.first
         : null;
@@ -1646,20 +1656,8 @@ class _GlassSurface extends StatelessWidget {
   final double radius;
 
   @override
-  Widget build(BuildContext context) {
-    final dark = Theme.of(context).brightness == Brightness.dark;
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: dark ? AppColors.surfaceDark : AppColors.surfaceElevated,
-        borderRadius: BorderRadius.circular(radius),
-        border: Border.all(
-          color: dark ? AppColors.borderDark : AppColors.outline,
-        ),
-        boxShadow: AppStyles.softShadow,
-      ),
-      child: Padding(padding: padding, child: child),
-    );
-  }
+  Widget build(BuildContext context) =>
+      GlassPanel(padding: padding, radius: radius, child: child);
 }
 
 class _DetailMeta extends StatelessWidget {
@@ -1805,6 +1803,7 @@ class _CampusAlert {
         .toLowerCase();
     return const ['.jpg', '.jpeg', '.png', '.webp', '.gif'].any(value.contains);
   }
+
   bool get attachmentIsPdf {
     final value = '${attachmentName ?? ''} ${attachmentUrl ?? ''}'
         .toLowerCase();

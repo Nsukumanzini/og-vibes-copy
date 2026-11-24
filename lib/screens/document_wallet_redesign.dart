@@ -18,6 +18,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../utils/theme_constants.dart';
 import '../widgets/vibe_scaffold.dart';
+import '../widgets/glass_card.dart' as shared_glass;
 import '../services/download_history_service.dart';
 
 class DocumentWalletScreen extends StatefulWidget {
@@ -1599,18 +1600,8 @@ class GlassCard extends StatelessWidget {
   final EdgeInsetsGeometry padding;
 
   @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: padding,
-      decoration: BoxDecoration(
-        color: AppColors.surfaceElevated,
-        borderRadius: AppStyles.bentoRadius,
-        border: Border.all(color: AppColors.outline),
-        boxShadow: AppStyles.softShadow,
-      ),
-      child: child,
-    );
-  }
+  Widget build(BuildContext context) =>
+      shared_glass.GlassPanel(padding: padding, child: child);
 }
 
 class PreviewUnavailable extends StatelessWidget {

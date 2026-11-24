@@ -1,6 +1,4 @@
 import 'dart:async';
-import 'dart:ui';
-
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
@@ -8,6 +6,7 @@ import '../services/offline_data_adapter.dart';
 
 import '../utils/theme_constants.dart';
 import '../widgets/vibe_scaffold.dart';
+import '../widgets/glass_card.dart';
 import '../services/offline_cache_service.dart';
 
 class IcassCheckerScreen extends StatefulWidget {
@@ -705,25 +704,8 @@ class _GlassCard extends StatelessWidget {
   final EdgeInsets padding;
 
   @override
-  Widget build(BuildContext context) {
-    return ClipRRect(
-      borderRadius: AppStyles.bentoRadius,
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
-        child: Container(
-          width: double.infinity,
-          padding: padding,
-          decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: .78),
-            borderRadius: AppStyles.bentoRadius,
-            border: Border.all(color: Colors.white.withValues(alpha: .88)),
-            boxShadow: AppStyles.softShadow,
-          ),
-          child: child,
-        ),
-      ),
-    );
-  }
+  Widget build(BuildContext context) =>
+      GlassPanel(padding: padding, width: double.infinity, child: child);
 }
 
 class _ModuleCard extends StatelessWidget {

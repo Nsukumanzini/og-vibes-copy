@@ -1,5 +1,3 @@
-import 'dart:ui';
-
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../widgets/academic_attachment_actions.dart';
@@ -8,6 +6,7 @@ import 'package:og_vibes_student/screens/quiz_screen.dart'
     show QuizRunnerScreen;
 import 'package:og_vibes_student/utils/theme_constants.dart';
 import 'package:og_vibes_student/widgets/vibe_scaffold.dart';
+import 'package:og_vibes_student/widgets/glass_card.dart';
 
 class LmsQuizLockdownScreen extends StatefulWidget {
   const LmsQuizLockdownScreen({super.key, this.quiz});
@@ -251,7 +250,10 @@ class _LmsQuizLockdownScreenState extends State<LmsQuizLockdownScreen> {
             detail: 'Check any attached material before starting.',
             enabled: true,
           ),
-          AcademicAttachmentActions(table: 'quizzes', recordId: _quiz['id']?.toString() ?? ''),
+          AcademicAttachmentActions(
+            table: 'quizzes',
+            recordId: _quiz['id']?.toString() ?? '',
+          ),
           _RuleRow(
             icon: Icons.cloud_done_outlined,
             title: 'Automatic answer saving',
@@ -357,25 +359,11 @@ class _GlassCard extends StatelessWidget {
   final Widget child;
 
   @override
-  Widget build(BuildContext context) {
-    return ClipRRect(
-      borderRadius: AppStyles.bentoRadius,
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
-        child: Container(
-          width: double.infinity,
-          padding: const EdgeInsets.all(22),
-          decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: .78),
-            borderRadius: AppStyles.bentoRadius,
-            border: Border.all(color: Colors.white.withValues(alpha: .85)),
-            boxShadow: AppStyles.softShadow,
-          ),
-          child: child,
-        ),
-      ),
-    );
-  }
+  Widget build(BuildContext context) => GlassPanel(
+    padding: const EdgeInsets.all(22),
+    width: double.infinity,
+    child: child,
+  );
 }
 
 class _HeroMetric extends StatelessWidget {

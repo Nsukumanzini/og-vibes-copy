@@ -13,6 +13,7 @@ import '../services/offline_data_adapter.dart';
 import '../utils/theme_constants.dart';
 import '../widgets/vibe_scaffold.dart';
 import '../widgets/notification_bell_button.dart';
+import '../widgets/glass_card.dart';
 import 'chat_detail_screen.dart';
 import 'friend_requests_screen.dart';
 import 'group_chats_screen.dart';
@@ -1521,18 +1522,8 @@ class _GlassSurface extends StatelessWidget {
   final double radius;
 
   @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: padding,
-      decoration: BoxDecoration(
-        color: AppColors.surfaceElevated,
-        borderRadius: BorderRadius.circular(radius),
-        border: Border.all(color: AppColors.outline, width: 1.2),
-        boxShadow: AppStyles.softShadow,
-      ),
-      child: child,
-    );
-  }
+  Widget build(BuildContext context) =>
+      GlassPanel(padding: padding, radius: radius, child: child);
 }
 
 List<Map<String, dynamic>> buildChatInboxRows({

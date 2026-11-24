@@ -10,6 +10,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../utils/theme_constants.dart';
 import '../screens/student_profile_screen.dart';
 import 'comment_sheet.dart';
+import 'glass_card.dart';
 
 class PostCard extends StatefulWidget {
   const PostCard({super.key, required this.data});
@@ -734,19 +735,7 @@ class _GlassSurface extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final dark = Theme.of(context).brightness == Brightness.dark;
-    return Container(
-      padding: const EdgeInsets.all(17),
-      decoration: BoxDecoration(
-        color: dark ? AppColors.surfaceDark : AppColors.surfaceElevated,
-        borderRadius: AppStyles.bentoRadius,
-        border: Border.all(
-          color: dark ? AppColors.borderDark : AppColors.outline,
-        ),
-        boxShadow: AppStyles.softShadow,
-      ),
-      child: child,
-    );
+    return GlassPanel(padding: const EdgeInsets.all(17), child: child);
   }
 }
 

@@ -21,6 +21,7 @@ import '../services/group_call_service.dart';
 import '../services/offline_cache_service.dart';
 import '../widgets/vibe_scaffold.dart';
 import '../widgets/standard_ui.dart';
+import '../widgets/glass_card.dart';
 import 'group_call_screen.dart';
 import 'student_profile_screen.dart';
 
@@ -222,7 +223,10 @@ class _GroupChatsScreenState extends State<GroupChatsScreen>
         .toList();
     if (ids.isEmpty) return;
     final rows = List<Map<String, dynamic>>.from(
-      await _offlineData.from('modules').select('id,name,code').inFilter('id', ids)
+      await _offlineData
+              .from('modules')
+              .select('id,name,code')
+              .inFilter('id', ids)
           as List<dynamic>,
     );
     final byId = {for (final row in rows) row['id'].toString(): row};
@@ -2971,27 +2975,8 @@ class _GlassPanel extends StatelessWidget {
   final EdgeInsets margin;
 
   @override
-  Widget build(BuildContext context) {
-    return Container(
-      margin: margin,
-      decoration: BoxDecoration(
-        borderRadius: AppStyles.bentoRadius,
-        boxShadow: AppStyles.softShadow,
-      ),
-      child: ClipRRect(
-        borderRadius: AppStyles.bentoRadius,
-        child: Container(
-          padding: padding,
-          decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: .94),
-            borderRadius: AppStyles.bentoRadius,
-            border: Border.all(color: AppColors.glassBorder),
-          ),
-          child: child,
-        ),
-      ),
-    );
-  }
+  Widget build(BuildContext context) =>
+      GlassPanel(margin: margin, padding: padding, child: child);
 }
 
 class _GroupCard extends StatelessWidget {
@@ -3281,11 +3266,19 @@ class _MessageBubble extends StatelessWidget {
                               onVote: onVote,
                               onOpenAttachment: onOpenAttachment,
                             ),
-                            if (message.messageType == 'document' && message.text.trim().isNotEmpty)
-                              Padding(padding: const EdgeInsets.only(top: 8), child: SelectableText(
-                                message.text,
-                                style: TextStyle(color: mine ? Colors.white : AppColors.midnightInk),
-                              )),
+                            if (message.messageType == 'document' &&
+                                message.text.trim().isNotEmpty)
+                              Padding(
+                                padding: const EdgeInsets.only(top: 8),
+                                child: SelectableText(
+                                  message.text,
+                                  style: TextStyle(
+                                    color: mine
+                                        ? Colors.white
+                                        : AppColors.midnightInk,
+                                  ),
+                                ),
+                              ),
                             const SizedBox(height: 6),
                             Text(
                               _relativeTime(message.createdAt) +

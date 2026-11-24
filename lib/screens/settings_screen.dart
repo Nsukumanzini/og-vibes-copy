@@ -9,6 +9,7 @@ import '../services/accessibility_preferences.dart';
 import '../services/push_notification_service.dart';
 import '../services/theme_preferences.dart';
 import '../utils/theme_constants.dart';
+import '../widgets/glass_card.dart';
 import '../widgets/vibe_scaffold.dart';
 import 'blocked_users_screen.dart';
 import 'login_screen.dart';
@@ -1228,20 +1229,8 @@ class _GlassSurface extends StatelessWidget {
   final double radius;
 
   @override
-  Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: isDark ? AppColors.surfaceDark : AppColors.surfaceElevated,
-        borderRadius: BorderRadius.circular(radius),
-        border: Border.all(
-          color: isDark ? AppColors.borderDark : AppColors.outline,
-        ),
-        boxShadow: AppStyles.softShadow,
-      ),
-      child: Padding(padding: padding, child: child),
-    );
-  }
+  Widget build(BuildContext context) =>
+      GlassPanel(padding: padding, radius: radius, child: child);
 }
 
 class _IconBadge extends StatelessWidget {

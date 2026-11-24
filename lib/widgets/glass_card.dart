@@ -42,7 +42,7 @@ class GlassCard extends StatelessWidget {
     final resolvedMargin =
         margin ?? themeCard.margin ?? const EdgeInsets.all(4);
     final tint = color ?? themeCard.color ?? theme.colorScheme.surface;
-    final glassColor = tint.withValues(alpha: tint.a * .84);
+    final glassColor = tint.withValues(alpha: tint.a * .82);
     final resolvedElevation = elevation ?? themeCard.elevation ?? 1;
     final resolvedShadow =
         shadowColor ?? themeCard.shadowColor ?? AppColors.deepBlue;
@@ -61,7 +61,7 @@ class GlassCard extends StatelessWidget {
         clipper: shapeClipper,
         clipBehavior: resolvedClip,
         child: BackdropFilter(
-          filter: ui.ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+          filter: ui.ImageFilter.blur(sigmaX: 16, sigmaY: 16),
           child: Material(
             type: MaterialType.card,
             color: glassColor,
@@ -71,9 +71,74 @@ class GlassCard extends StatelessWidget {
             shape: resolvedShape,
             borderOnForeground: borderOnForeground,
             clipBehavior: resolvedClip,
-            child: Semantics(container: semanticContainer, child: child),
+            child: Semantics(
+              container: semanticContainer,
+              child: Stack(
+                children: [
+                  if (child != null) child!,
+                  Positioned.fill(
+                    child: IgnorePointer(
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            begin: Alignment.topCenter,
+                            end: Alignment.center,
+                            colors: [
+                              Colors.white.withValues(alpha: .1),
+                              Colors.white.withValues(alpha: 0),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// Glass card content with a consistent, adjustable inset and corner radius.
+class GlassPanel extends StatelessWidget {
+  const GlassPanel({
+    super.key,
+    required this.child,
+    this.padding = const EdgeInsets.all(18),
+    this.radius = 24,
+    this.margin = EdgeInsets.zero,
+    this.color,
+    this.width,
+    this.elevation = 1.5,
+  });
+
+  final Widget child;
+  final EdgeInsetsGeometry padding;
+  final double radius;
+  final EdgeInsetsGeometry margin;
+  final Color? color;
+  final double? width;
+  final double elevation;
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return GlassCard(
+      margin: margin,
+      color: color,
+      elevation: elevation,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(radius),
+        side: BorderSide(
+          color: Colors.white.withValues(alpha: isDark ? .2 : .78),
+        ),
+      ),
+      child: SizedBox(
+        width: width,
+        child: Padding(padding: padding, child: child),
       ),
     );
   }

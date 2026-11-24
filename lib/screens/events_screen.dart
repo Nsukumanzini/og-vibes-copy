@@ -6,6 +6,7 @@ import '../services/offline_data_adapter.dart';
 
 import '../utils/theme_constants.dart';
 import '../widgets/vibe_scaffold.dart';
+import '../widgets/glass_card.dart';
 
 class EventsScreen extends StatefulWidget {
   const EventsScreen({super.key});
@@ -1024,18 +1025,8 @@ class _GlassCard extends StatelessWidget {
   final EdgeInsets padding;
 
   @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: padding,
-      decoration: BoxDecoration(
-        color: AppColors.surfaceElevated,
-        borderRadius: AppStyles.bentoRadius,
-        border: Border.all(color: AppColors.outline),
-        boxShadow: AppStyles.softShadow,
-      ),
-      child: child,
-    );
-  }
+  Widget build(BuildContext context) =>
+      GlassPanel(padding: padding, child: child);
 }
 
 class _EventCard extends StatelessWidget {

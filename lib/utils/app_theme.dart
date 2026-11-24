@@ -22,6 +22,13 @@ class AppTheme {
     final surface = dark ? AppColors.surfaceDark : AppColors.surface;
     final canvas = dark ? AppColors.canvasDark : AppColors.auroraCanvas;
     final border = dark ? AppColors.borderDark : AppColors.glassBorder;
+    final glassFill = surface.withValues(alpha: dark ? .74 : .76);
+    final glassEdge = Colors.white.withValues(alpha: dark ? .16 : .82);
+    final controlEdge = BorderSide(color: glassEdge, width: 1);
+    final controlShape = RoundedRectangleBorder(
+      borderRadius: AppStyles.controlRadius,
+      side: controlEdge,
+    );
     final scheme = ColorScheme.fromSeed(
       seedColor: AppColors.vibeBlue,
       brightness: brightness,
@@ -90,16 +97,19 @@ class AppTheme {
         color: surface,
         surfaceTintColor: Colors.transparent,
         elevation: 0,
-        shadowColor: AppColors.deepBlue.withValues(alpha: 0.08),
+        shadowColor: AppColors.deepBlue.withValues(alpha: dark ? .2 : .1),
         shape: RoundedRectangleBorder(
           borderRadius: AppStyles.bentoRadius,
-          side: BorderSide(color: border),
+          side: BorderSide(color: glassEdge, width: 1.2),
         ),
       ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
-        fillColor: surface,
-        contentPadding: const EdgeInsets.symmetric(horizontal: 18, vertical: 17),
+        fillColor: glassFill,
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 18,
+          vertical: 17,
+        ),
         labelStyle: TextStyle(color: muted, fontWeight: FontWeight.w600),
         hintStyle: TextStyle(
           color: muted.withValues(alpha: 0.8),
@@ -109,7 +119,7 @@ class AppTheme {
         border: fieldBorder,
         enabledBorder: fieldBorder,
         focusedBorder: fieldBorder.copyWith(
-          borderSide: const BorderSide(color: AppColors.vibeBlue, width: 1.6),
+          borderSide: const BorderSide(color: AppColors.ogGold, width: 1.6),
         ),
         errorBorder: fieldBorder.copyWith(
           borderSide: const BorderSide(color: AppColors.danger),
@@ -120,41 +130,150 @@ class AppTheme {
       ),
       filledButtonTheme: FilledButtonThemeData(
         style: FilledButton.styleFrom(
+          backgroundColor: AppColors.vibeBlue.withValues(alpha: .88),
+          foregroundColor: AppColors.textOnBrand,
           minimumSize: const Size(48, 52),
           padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 15),
-          shape: RoundedRectangleBorder(borderRadius: AppStyles.controlRadius),
+          shape: controlShape,
+          side: controlEdge,
+          elevation: 1,
+          shadowColor: AppColors.deepBlue.withValues(alpha: .2),
+          overlayColor: Colors.white.withValues(alpha: .12),
           textStyle: const TextStyle(fontWeight: FontWeight.w700),
         ),
       ),
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
-          backgroundColor: AppColors.vibeBlue,
+          backgroundColor: AppColors.vibeBlue.withValues(alpha: .88),
           foregroundColor: AppColors.textOnBrand,
           minimumSize: const Size(48, 52),
           padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 15),
-          elevation: 0,
-          shape: RoundedRectangleBorder(borderRadius: AppStyles.controlRadius),
+          elevation: 2,
+          shadowColor: AppColors.deepBlue.withValues(alpha: .2),
+          side: controlEdge,
+          shape: controlShape,
+          overlayColor: Colors.white.withValues(alpha: .12),
           textStyle: const TextStyle(fontWeight: FontWeight.w700),
         ),
       ),
       outlinedButtonTheme: OutlinedButtonThemeData(
         style: OutlinedButton.styleFrom(
           foregroundColor: AppColors.vibeBlue,
+          backgroundColor: glassFill.withValues(alpha: .74),
           minimumSize: const Size(48, 52),
-          side: BorderSide(color: border),
-          shape: RoundedRectangleBorder(borderRadius: AppStyles.controlRadius),
+          side: BorderSide(color: border.withValues(alpha: .62)),
+          shape: controlShape,
+          overlayColor: AppColors.vibeBlue.withValues(alpha: .08),
+          textStyle: const TextStyle(fontWeight: FontWeight.w700),
+        ),
+      ),
+      textButtonTheme: TextButtonThemeData(
+        style: TextButton.styleFrom(
+          foregroundColor: dark ? AppColors.blueLight : AppColors.deepBlue,
+          backgroundColor: glassFill.withValues(alpha: .28),
+          side: BorderSide(color: glassEdge.withValues(alpha: .6)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14),
+          ),
+          overlayColor: AppColors.vibeBlue.withValues(alpha: .08),
           textStyle: const TextStyle(fontWeight: FontWeight.w700),
         ),
       ),
       iconButtonTheme: IconButtonThemeData(
-        style: IconButton.styleFrom(minimumSize: const Size.square(48)),
+        style: ButtonStyle(
+          minimumSize: const WidgetStatePropertyAll(Size.square(48)),
+          foregroundColor: WidgetStatePropertyAll(foreground),
+          backgroundColor: WidgetStatePropertyAll(
+            glassFill.withValues(alpha: .62),
+          ),
+          side: WidgetStatePropertyAll(
+            BorderSide(color: glassEdge.withValues(alpha: .7)),
+          ),
+          shape: WidgetStatePropertyAll(
+            RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+          ),
+          overlayColor: WidgetStatePropertyAll(
+            AppColors.vibeBlue.withValues(alpha: .09),
+          ),
+        ),
       ),
       chipTheme: ChipThemeData(
-        side: BorderSide(color: border),
-        backgroundColor: surface,
-        selectedColor: AppColors.blueTint,
+        side: BorderSide(color: glassEdge.withValues(alpha: .74)),
+        backgroundColor: glassFill,
+        selectedColor: AppColors.blueTint.withValues(alpha: .78),
         shape: RoundedRectangleBorder(borderRadius: AppStyles.pillRadius),
         labelStyle: const TextStyle(fontWeight: FontWeight.w600),
+      ),
+      dialogTheme: DialogThemeData(
+        backgroundColor: glassFill.withValues(alpha: .9),
+        surfaceTintColor: Colors.transparent,
+        elevation: 18,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(26),
+          side: BorderSide(color: glassEdge),
+        ),
+      ),
+      bottomSheetTheme: BottomSheetThemeData(
+        backgroundColor: glassFill.withValues(alpha: .94),
+        modalBackgroundColor: glassFill.withValues(alpha: .94),
+        surfaceTintColor: Colors.transparent,
+        elevation: 14,
+        modalElevation: 18,
+        showDragHandle: true,
+        clipBehavior: Clip.antiAlias,
+        shape: RoundedRectangleBorder(
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+          side: BorderSide(color: glassEdge),
+        ),
+      ),
+      popupMenuTheme: PopupMenuThemeData(
+        color: glassFill.withValues(alpha: .94),
+        surfaceTintColor: Colors.transparent,
+        elevation: 14,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+          side: BorderSide(color: glassEdge),
+        ),
+      ),
+      floatingActionButtonTheme: FloatingActionButtonThemeData(
+        backgroundColor: AppColors.vibeBlue.withValues(alpha: .9),
+        foregroundColor: Colors.white,
+        elevation: 4,
+        focusElevation: 6,
+        hoverElevation: 6,
+        highlightElevation: 2,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+          side: BorderSide(color: glassEdge, width: 1.2),
+        ),
+      ),
+      bottomNavigationBarTheme: BottomNavigationBarThemeData(
+        backgroundColor: glassFill.withValues(alpha: .88),
+        elevation: 0,
+        selectedItemColor: AppColors.vibeBlue,
+        unselectedItemColor: muted,
+        selectedIconTheme: const IconThemeData(size: 26),
+        unselectedIconTheme: const IconThemeData(size: 23),
+      ),
+      expansionTileTheme: ExpansionTileThemeData(
+        backgroundColor: glassFill.withValues(alpha: .52),
+        collapsedBackgroundColor: glassFill.withValues(alpha: .32),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(18),
+          side: BorderSide(color: glassEdge.withValues(alpha: .72)),
+        ),
+        collapsedShape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(18),
+          side: BorderSide(color: glassEdge.withValues(alpha: .72)),
+        ),
+      ),
+      tooltipTheme: TooltipThemeData(
+        decoration: BoxDecoration(
+          color: AppColors.midnightInk.withValues(alpha: .9),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: glassEdge.withValues(alpha: .5)),
+        ),
+        textStyle: const TextStyle(color: Colors.white),
       ),
       snackBarTheme: SnackBarThemeData(
         behavior: SnackBarBehavior.floating,

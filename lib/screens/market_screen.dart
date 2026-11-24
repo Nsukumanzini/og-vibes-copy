@@ -14,6 +14,7 @@ import '../utils/theme_constants.dart';
 import '../services/feature_flag_service.dart';
 import '../services/diagnostics_service.dart';
 import '../widgets/vibe_scaffold.dart';
+import '../widgets/glass_card.dart';
 
 class MarketScreen extends StatefulWidget {
   const MarketScreen({super.key});
@@ -1028,7 +1029,9 @@ class _ListingWizardState extends State<_ListingWizard> {
         uploadedPaths.add(path);
       }
       final urls = uploadedPaths
-          .map((path) => _offlineData.storage.from('products').getPublicUrl(path))
+          .map(
+            (path) => _offlineData.storage.from('products').getPublicUrl(path),
+          )
           .toList();
       await _offlineData.from('products').insert(<String, dynamic>{
         'seller_id': user.id,
@@ -2547,18 +2550,8 @@ class _GlassCard extends StatelessWidget {
   final EdgeInsetsGeometry padding;
 
   @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: padding,
-      decoration: BoxDecoration(
-        color: AppColors.surfaceElevated,
-        borderRadius: AppStyles.bentoRadius,
-        border: Border.all(color: AppColors.outline),
-        boxShadow: AppStyles.softShadow,
-      ),
-      child: child,
-    );
-  }
+  Widget build(BuildContext context) =>
+      GlassPanel(padding: padding, child: child);
 }
 
 class _ImageFallback extends StatelessWidget {
