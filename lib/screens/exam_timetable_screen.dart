@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../widgets/glass_card.dart';
 import 'package:og_vibes_student/widgets/vibe_scaffold.dart';
 
 class ExamTimetableSeatPlanScreen extends StatelessWidget {
@@ -70,7 +71,7 @@ class _ScheduleTab extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(20, 20, 20, 120),
       itemBuilder: (context, index) {
         final exam = exams[index];
-        return Card(
+        return GlassCard(
           child: Padding(
             padding: const EdgeInsets.all(16),
             child: Column(
@@ -136,7 +137,7 @@ class _SeatPlanTab extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Card(
+          GlassCard(
             child: Padding(
               padding: const EdgeInsets.all(16),
               child: Column(
@@ -211,7 +212,7 @@ class _SeatPlanTab extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 20),
-          Card(
+          GlassCard(
             child: ListTile(
               leading: const Icon(Icons.info_outline),
               title: const Text('Seat plan tips'),

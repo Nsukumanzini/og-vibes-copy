@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'glass_card.dart';
 
 import '../utils/theme_constants.dart';
 
@@ -42,7 +43,10 @@ class OgPageHeader extends StatelessWidget {
               const SizedBox(height: 3),
               Text(
                 subtitle,
-                style: const TextStyle(color: AppColors.textMuted, height: 1.35),
+                style: const TextStyle(
+                  color: AppColors.textMuted,
+                  height: 1.35,
+                ),
               ),
             ],
           ),
@@ -122,11 +126,7 @@ class OgEmptyState extends StatelessWidget {
 }
 
 class OgErrorCard extends StatelessWidget {
-  const OgErrorCard({
-    super.key,
-    required this.message,
-    required this.onRetry,
-  });
+  const OgErrorCard({super.key, required this.message, required this.onRetry});
 
   final String message;
   final VoidCallback onRetry;
@@ -135,7 +135,7 @@ class OgErrorCard extends StatelessWidget {
   Widget build(BuildContext context) => Semantics(
     liveRegion: true,
     label: 'Unable to load. $message',
-    child: Card(
+    child: GlassCard(
       child: Padding(
         padding: const EdgeInsets.all(18),
         child: Row(

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../widgets/glass_card.dart';
 import 'package:og_vibes_student/screens/home_screen.dart';
 
 import 'signup_screen.dart';
@@ -218,7 +219,7 @@ class _LoginScreenState extends State<LoginScreen>
                       opacity: _cardFade,
                       child: SlideTransition(
                         position: _cardSlide,
-                        child: Card(
+                        child: GlassCard(
                           elevation: 16,
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(28),

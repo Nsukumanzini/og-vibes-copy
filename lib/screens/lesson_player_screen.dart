@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../widgets/glass_card.dart';
 
 class LessonPlayerScreen extends StatefulWidget {
   const LessonPlayerScreen({
@@ -283,7 +284,7 @@ class _ResourceCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Card(
+    return GlassCard(
       elevation: 0,
       color: Colors.white,
       shape: RoundedRectangleBorder(

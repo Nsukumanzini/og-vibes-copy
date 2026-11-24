@@ -1,6 +1,7 @@
 // ignore_for_file: unused_field
 
 import 'package:flutter/material.dart';
+import '../widgets/glass_card.dart';
 import 'package:og_vibes_student/services/offline_data_adapter.dart';
 
 class LiveBroadcastScreen extends StatefulWidget {
@@ -667,7 +668,7 @@ class _ResourcesTab extends StatelessWidget {
         borderRadius: BorderRadius.circular(18),
         border: Border.all(color: const Color(0xFFE8F0FF)),
       ),
-      child: Card(
+      child: GlassCard(
         margin: EdgeInsets.zero,
         elevation: 0,
         color: const Color(0xFFF7F9FD),

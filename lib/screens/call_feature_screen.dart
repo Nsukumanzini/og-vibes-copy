@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../widgets/glass_card.dart';
 
 import 'call_history_screen.dart';
 import 'incoming_call_screen.dart';
@@ -81,7 +82,7 @@ class _CallActionCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Card(
+    return GlassCard(
       child: ListTile(
         leading: CircleAvatar(child: Icon(icon)),
         title: Text(title),

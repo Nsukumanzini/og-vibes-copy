@@ -1,4 +1,5 @@
 import 'dart:async';
+import '../widgets/glass_card.dart';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -122,7 +123,8 @@ class _DownloadHistoryScreenState extends State<DownloadHistoryScreen> {
         'My documents' => type == 'document_wallet',
         _ => true,
       };
-      final matchesQuery = query.isEmpty ||
+      final matchesQuery =
+          query.isEmpty ||
           (entry['title']?.toString().toLowerCase().contains(query) ?? false);
       return matchesFilter && matchesQuery;
     }).toList();
@@ -142,16 +144,13 @@ class _DownloadHistoryScreenState extends State<DownloadHistoryScreen> {
       if (uri == null || !uri.hasScheme) {
         throw StateError('This file no longer has a valid download link.');
       }
-      final opened = await launchUrl(
-        uri,
-        mode: LaunchMode.externalApplication,
-      );
+      final opened = await launchUrl(uri, mode: LaunchMode.externalApplication);
       if (!opened) throw StateError('Your device could not open this file.');
     } catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(_friendlyError(error))),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(_friendlyError(error))));
     }
   }
 
@@ -295,7 +294,10 @@ class _DownloadHistoryScreenState extends State<DownloadHistoryScreen> {
                       content: Text(_error!),
                       leading: const Icon(Icons.cloud_off_rounded),
                       actions: [
-                        TextButton(onPressed: _load, child: const Text('Retry')),
+                        TextButton(
+                          onPressed: _load,
+                          child: const Text('Retry'),
+                        ),
                       ],
                     ),
                   ],
@@ -352,13 +354,18 @@ class _DownloadHistoryScreenState extends State<DownloadHistoryScreen> {
                     final date = DateTime.tryParse(
                       entry['downloaded_at']?.toString() ?? '',
                     )?.toLocal();
-                    return Card(
+                    return GlassCard(
                       margin: EdgeInsets.zero,
                       child: ListTile(
                         onTap: () => _open(entry),
                         leading: CircleAvatar(
-                          backgroundColor: AppColors.vibeBlue.withValues(alpha: .1),
-                          child: Icon(_iconFor(type), color: AppColors.vibeBlue),
+                          backgroundColor: AppColors.vibeBlue.withValues(
+                            alpha: .1,
+                          ),
+                          child: Icon(
+                            _iconFor(type),
+                            color: AppColors.vibeBlue,
+                          ),
                         ),
                         title: Text(
                           entry['title']?.toString() ?? 'Downloaded file',
@@ -407,7 +414,8 @@ class _DownloadHistoryScreenState extends State<DownloadHistoryScreen> {
   String _friendlyError(Object error) {
     final text = error.toString();
     if (text.contains('no longer')) return 'This file is no longer available.';
-    if (text.contains('could not open')) return 'Your device could not open this file.';
+    if (text.contains('could not open'))
+      return 'Your device could not open this file.';
     return 'This file could not be opened. Check your connection and try again.';
   }
 
@@ -418,20 +426,20 @@ class _DownloadHistoryScreenState extends State<DownloadHistoryScreen> {
   }
 
   String _labelFor(String type) => switch (type) {
-        'past_paper' => 'Past paper',
-        'lecture_slide' => 'Lecture slide',
-        'timetable' => 'Timetable',
-        'document_wallet' => 'Document Wallet',
-        _ => 'File',
-      };
+    'past_paper' => 'Past paper',
+    'lecture_slide' => 'Lecture slide',
+    'timetable' => 'Timetable',
+    'document_wallet' => 'Document Wallet',
+    _ => 'File',
+  };
 
   IconData _iconFor(String type) => switch (type) {
-        'past_paper' => Icons.history_edu_rounded,
-        'lecture_slide' => Icons.co_present_rounded,
-        'timetable' => Icons.calendar_month_rounded,
-        'document_wallet' => Icons.folder_special_rounded,
-        _ => Icons.insert_drive_file_rounded,
-      };
+    'past_paper' => Icons.history_edu_rounded,
+    'lecture_slide' => Icons.co_present_rounded,
+    'timetable' => Icons.calendar_month_rounded,
+    'document_wallet' => Icons.folder_special_rounded,
+    _ => Icons.insert_drive_file_rounded,
+  };
 }
 
 class _EmptyDownloads extends StatelessWidget {
@@ -455,9 +463,9 @@ class _EmptyDownloads extends StatelessWidget {
             const SizedBox(height: 14),
             Text(
               searching ? 'No matching downloads' : 'No downloads yet',
-              style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                    fontWeight: FontWeight.w900,
-                  ),
+              style: Theme.of(
+                context,
+              ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w900),
             ),
             const SizedBox(height: 6),
             Text(

@@ -1,4 +1,5 @@
 import 'dart:async';
+import '../widgets/glass_card.dart';
 import 'dart:typed_data';
 
 import 'package:file_picker/file_picker.dart';
@@ -88,14 +89,16 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
         final fileName =
             '${user.id}/${DateTime.now().millisecondsSinceEpoch}_$safeName';
 
-        await OfflineData.instance.client.storage.from('posts').uploadBinary(
-          fileName,
-          attachment.bytes!,
-          fileOptions: OfflineFileOptions(
-            contentType: _mimeTypeFor(attachment.name, attachment.type),
-            upsert: false,
-          ),
-        );
+        await OfflineData.instance.client.storage
+            .from('posts')
+            .uploadBinary(
+              fileName,
+              attachment.bytes!,
+              fileOptions: OfflineFileOptions(
+                contentType: _mimeTypeFor(attachment.name, attachment.type),
+                upsert: false,
+              ),
+            );
 
         if (attachment.type == _AttachmentType.image) {
           // Store the durable object path. The feed signs it when displaying
@@ -311,9 +314,13 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
 
   bool _isVideoFile(String? extension) {
     if (extension == null) return false;
-    return const ['mp4', 'mov', 'm4v', 'webm', 'avi'].contains(
-      extension.toLowerCase(),
-    );
+    return const [
+      'mp4',
+      'mov',
+      'm4v',
+      'webm',
+      'avi',
+    ].contains(extension.toLowerCase());
   }
 
   String _mimeTypeFor(String name, _AttachmentType type) {
@@ -381,7 +388,7 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
           const SizedBox(height: 20),
 
           // Tagging section
-          Card(
+          GlassCard(
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(16),
             ),
@@ -453,7 +460,7 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
           const SizedBox(height: 20),
 
           // Media upload section
-          Card(
+          GlassCard(
             elevation: 2,
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(16),
@@ -521,9 +528,11 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
                                           MainAxisAlignment.center,
                                       children: [
                                         Icon(
-                                          attachment.type == _AttachmentType.image
+                                          attachment.type ==
+                                                  _AttachmentType.image
                                               ? Icons.image_rounded
-                                              : attachment.type == _AttachmentType.video
+                                              : attachment.type ==
+                                                    _AttachmentType.video
                                               ? Icons.play_circle_fill_rounded
                                               : Icons.insert_drive_file_rounded,
                                           size: 34,

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../widgets/glass_card.dart';
 
 import 'grade_appeal_screen.dart';
 import 'lesson_player_screen.dart';
@@ -192,7 +193,7 @@ class _AssessmentCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Card(
+    return GlassCard(
       elevation: 0,
       color: Colors.white,
       shape: RoundedRectangleBorder(
@@ -324,7 +325,7 @@ class _ModuleCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Card(
+    return GlassCard(
       elevation: 0,
       color: Colors.white,
       shape: RoundedRectangleBorder(
@@ -459,7 +460,7 @@ class _AnnouncementCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Card(
+    return GlassCard(
       elevation: 0,
       color: Colors.white,
       shape: RoundedRectangleBorder(

@@ -1,4 +1,5 @@
 import 'dart:async';
+import '../widgets/glass_card.dart';
 
 import 'package:flutter/material.dart';
 import 'package:og_vibes_student/widgets/vibe_scaffold.dart';
@@ -351,7 +352,7 @@ class _SrcVotingScreenState extends State<SrcVotingScreen> {
     final hours = safeRemaining.inHours.remainder(24);
     final minutes = safeRemaining.inMinutes.remainder(60);
 
-    return Card(
+    return GlassCard(
       elevation: 0,
       color: Colors.white,
       shape: RoundedRectangleBorder(
@@ -488,7 +489,7 @@ class _SrcVotingScreenState extends State<SrcVotingScreen> {
     ],
   );
 
-  Widget _buildEmptySearchState(BuildContext context) => Card(
+  Widget _buildEmptySearchState(BuildContext context) => GlassCard(
     color: Colors.white,
     child: Padding(
       padding: const EdgeInsets.all(24),
@@ -513,7 +514,7 @@ class _SrcVotingScreenState extends State<SrcVotingScreen> {
     ),
   );
 
-  Widget _buildGuidanceCard(BuildContext context) => Card(
+  Widget _buildGuidanceCard(BuildContext context) => GlassCard(
     color: Colors.white,
     elevation: 0,
     shape: RoundedRectangleBorder(
@@ -542,7 +543,7 @@ class _SrcVotingScreenState extends State<SrcVotingScreen> {
     ),
   );
 
-  Widget _buildPrivacyCard(BuildContext context) => Card(
+  Widget _buildPrivacyCard(BuildContext context) => GlassCard(
     color: const Color(0xFFF7F9FD),
     elevation: 0,
     child: const Padding(
@@ -759,7 +760,7 @@ class _SrcVotingScreenState extends State<SrcVotingScreen> {
   ) {
     final ranked = [...position.candidates]
       ..sort((left, right) => right.sampleResult.compareTo(left.sampleResult));
-    return Card(
+    return GlassCard(
       margin: const EdgeInsets.only(bottom: 12),
       color: Colors.white,
       elevation: 0,
@@ -1035,7 +1036,7 @@ class _CandidateCard extends StatelessWidget {
   final VoidCallback onOpenProfile;
 
   @override
-  Widget build(BuildContext context) => Card(
+  Widget build(BuildContext context) => GlassCard(
     margin: EdgeInsets.zero,
     elevation: 0,
     color: Colors.white,
@@ -1182,7 +1183,7 @@ class _BallotChoiceTile extends StatelessWidget {
   final VoidCallback onTap;
 
   @override
-  Widget build(BuildContext context) => Card(
+  Widget build(BuildContext context) => GlassCard(
     margin: EdgeInsets.zero,
     color: Colors.white,
     elevation: 0,
@@ -1379,7 +1380,7 @@ class _ResultSummaryCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) => SizedBox(
     width: 155,
-    child: Card(
+    child: GlassCard(
       color: Colors.white,
       elevation: 0,
       shape: RoundedRectangleBorder(

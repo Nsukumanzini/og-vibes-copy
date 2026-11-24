@@ -74,6 +74,7 @@ class HomeBottomNavigationBar extends StatelessWidget {
                     final selected = index == currentIndex;
                     final alerts = index == 2;
                     final hasUnreadAlerts = alerts && counts.alerts > 0;
+                    final iconSize = alerts ? 28.0 : 23.0;
                     return Expanded(
                       child: Semantics(
                         selected: selected,
@@ -95,7 +96,7 @@ class HomeBottomNavigationBar extends StatelessWidget {
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
                                 AnimatedScale(
-                                  scale: selected ? 1.08 : 1,
+                                  scale: selected ? (alerts ? 1.12 : 1.08) : 1,
                                   duration: const Duration(milliseconds: 220),
                                   child: Badge(
                                     isLabelVisible:
@@ -113,7 +114,7 @@ class HomeBottomNavigationBar extends StatelessWidget {
                                         : const Color(0xFF00A67E),
                                     child: Icon(
                                       selected ? item.active : item.icon,
-                                      size: 23,
+                                      size: iconSize,
                                       color: alerts
                                           ? hasUnreadAlerts
                                                 ? AppColors.danger

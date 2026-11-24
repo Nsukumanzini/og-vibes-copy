@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../widgets/glass_card.dart';
 
 import 'academic_escalation_screen.dart';
 import 'bursary_screen.dart';
@@ -143,7 +144,7 @@ class AllToolsScreen extends StatelessWidget {
       itemCount: _tools.length,
       itemBuilder: (context, index) {
         final tool = _tools[index];
-        return Card(
+        return GlassCard(
           clipBehavior: Clip.antiAlias,
           child: InkWell(
             onTap: () => Navigator.of(

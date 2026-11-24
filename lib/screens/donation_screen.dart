@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../widgets/glass_card.dart';
 import '../services/offline_data_adapter.dart';
 
 import '../utils/theme_constants.dart';
@@ -248,7 +249,7 @@ class _DonationScreenState extends State<DonationScreen> {
               )
             else
               ..._offers.map(
-                (offer) => Card(
+                (offer) => GlassCard(
                   child: ListTile(
                     leading: const Icon(Icons.volunteer_activism_rounded),
                     title: Text('${offer['item']}'),

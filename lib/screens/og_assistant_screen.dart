@@ -1,4 +1,5 @@
 import 'dart:ui';
+import '../widgets/glass_card.dart';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -576,7 +577,7 @@ class _GlassPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Card(
+    return GlassCard(
       child: Padding(padding: padding, child: child),
     );
   }

@@ -1,4 +1,5 @@
 import 'dart:async';
+import '../widgets/glass_card.dart';
 
 import 'package:flutter/material.dart';
 import 'package:shimmer/shimmer.dart';
@@ -912,7 +913,7 @@ class _RecommendedCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) => SizedBox(
     width: 205,
-    child: Card(
+    child: GlassCard(
       margin: EdgeInsets.zero,
       color: Colors.white,
       clipBehavior: Clip.antiAlias,
@@ -1039,7 +1040,7 @@ class _MealCard extends StatelessWidget {
   final VoidCallback onRemove;
 
   @override
-  Widget build(BuildContext context) => Card(
+  Widget build(BuildContext context) => GlassCard(
     margin: EdgeInsets.zero,
     color: Colors.white,
     elevation: 1,

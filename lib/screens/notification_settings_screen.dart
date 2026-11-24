@@ -1,4 +1,5 @@
 import 'package:og_vibes_student/utils/theme_constants.dart';
+import '../widgets/glass_card.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -64,7 +65,11 @@ class _NotificationSettingsScreenState
           gradient: LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
-            colors: [AppColors.surface, AppColors.auroraCanvas, AppColors.blueTint],
+            colors: [
+              AppColors.surface,
+              AppColors.auroraCanvas,
+              AppColors.blueTint,
+            ],
           ),
         ),
         child: _isLoading
@@ -111,7 +116,7 @@ class _NotificationSettingsScreenState
     required bool value,
     required ValueChanged<bool> onChanged,
   }) {
-    return Card(
+    return GlassCard(
       color: AppColors.surface,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       margin: const EdgeInsets.only(bottom: 16),
@@ -125,7 +130,10 @@ class _NotificationSettingsScreenState
             fontWeight: FontWeight.bold,
           ),
         ),
-        subtitle: Text(subtitle, style: const TextStyle(color: AppColors.textMuted)),
+        subtitle: Text(
+          subtitle,
+          style: const TextStyle(color: AppColors.textMuted),
+        ),
         activeThumbColor: AppColors.ogGold,
         inactiveThumbColor: AppColors.textMuted,
         inactiveTrackColor: AppColors.glassBorder,

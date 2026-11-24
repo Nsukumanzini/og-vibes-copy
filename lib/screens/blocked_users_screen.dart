@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../widgets/glass_card.dart';
 import '../services/offline_data_adapter.dart';
 import 'package:og_vibes_student/widgets/vibe_scaffold.dart';
 
@@ -79,7 +80,9 @@ class _BlockedUsersScreenState extends State<BlockedUsersScreen> {
 
   void _showMessage(String message) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
   }
 
   @override
@@ -99,7 +102,9 @@ class _BlockedUsersScreenState extends State<BlockedUsersScreen> {
         builder: (context, snapshot) {
           if (snapshot.hasError) {
             return const Center(
-              child: Text('Blocked accounts could not be loaded. Please try again.'),
+              child: Text(
+                'Blocked accounts could not be loaded. Please try again.',
+              ),
             );
           }
           final docs = snapshot.data ?? [];
@@ -110,11 +115,18 @@ class _BlockedUsersScreenState extends State<BlockedUsersScreen> {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: <Widget>[
-                    Icon(Icons.shield_outlined, size: 64, color: Colors.white70),
+                    Icon(
+                      Icons.shield_outlined,
+                      size: 64,
+                      color: Colors.white70,
+                    ),
                     SizedBox(height: 14),
                     Text(
                       'No blocked accounts',
-                      style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800),
+                      style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.w800,
+                      ),
                     ),
                     SizedBox(height: 8),
                     Text(
@@ -135,11 +147,13 @@ class _BlockedUsersScreenState extends State<BlockedUsersScreen> {
               final row = docs[index];
               final profile = row['profiles'] as Map<String, dynamic>?;
               final nickname = (profile?['nickname'] as String?)?.trim();
-              final name = nickname?.isNotEmpty == true ? nickname! : 'OG Vibester';
+              final name = nickname?.isNotEmpty == true
+                  ? nickname!
+                  : 'OG Vibester';
               final avatarUrl = (profile?['photo_url'] as String?) ?? '';
               final reason = (row['reason'] as String?)?.trim();
 
-              return Card(
+              return GlassCard(
                 color: Colors.white.withOpacity(0.08),
                 child: ListTile(
                   leading: CircleAvatar(
