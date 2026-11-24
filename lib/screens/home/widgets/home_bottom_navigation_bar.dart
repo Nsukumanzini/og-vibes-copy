@@ -74,7 +74,6 @@ class HomeBottomNavigationBar extends StatelessWidget {
                     final selected = index == currentIndex;
                     final alerts = index == 2;
                     final hasUnreadAlerts = alerts && counts.alerts > 0;
-                    final iconSize = alerts ? 28.0 : 23.0;
                     return Expanded(
                       child: Semantics(
                         selected: selected,
@@ -112,19 +111,19 @@ class HomeBottomNavigationBar extends StatelessWidget {
                                     backgroundColor: index == 2
                                         ? AppColors.danger
                                         : const Color(0xFF00A67E),
-                                    child: Icon(
-                                      selected ? item.active : item.icon,
-                                      size: iconSize,
-                                      color: alerts
-                                          ? hasUnreadAlerts
-                                                ? AppColors.danger
-                                                : selected
+                                    child: alerts
+                                        ? _AlertGlassIcon(
+                                            selected: selected,
+                                            hasUnreadAlerts: hasUnreadAlerts,
+                                            dark: dark,
+                                          )
+                                        : Icon(
+                                            selected ? item.active : item.icon,
+                                            size: 23,
+                                            color: selected
                                                 ? AppColors.vibeBlue
-                                                : AppColors.textMuted
-                                          : selected
-                                          ? AppColors.vibeBlue
-                                          : AppColors.textMuted,
-                                    ),
+                                                : AppColors.textMuted,
+                                          ),
                                   ),
                                 ),
                                 const SizedBox(height: 3),
@@ -154,6 +153,78 @@ class HomeBottomNavigationBar extends StatelessWidget {
           ),
         );
       },
+    );
+  }
+}
+
+class _AlertGlassIcon extends StatelessWidget {
+  const _AlertGlassIcon({
+    required this.selected,
+    required this.hasUnreadAlerts,
+    required this.dark,
+  });
+
+  final bool selected;
+  final bool hasUnreadAlerts;
+  final bool dark;
+
+  @override
+  Widget build(BuildContext context) {
+    final edge = Colors.white.withValues(alpha: dark ? .28 : .82);
+    final iconColor = hasUnreadAlerts
+        ? AppColors.danger
+        : selected
+        ? AppColors.vibeBlue
+        : AppColors.deepBlue;
+
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(15),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 14, sigmaY: 14),
+        child: Container(
+          width: 40,
+          height: 40,
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: dark
+                  ? [
+                      AppColors.blueLight.withValues(alpha: .28),
+                      AppColors.vibeBlue.withValues(alpha: .12),
+                    ]
+                  : [
+                      Colors.white.withValues(alpha: .88),
+                      AppColors.blueTint.withValues(alpha: .62),
+                    ],
+            ),
+            borderRadius: BorderRadius.circular(15),
+            border: Border.all(color: edge, width: 1.1),
+            boxShadow: [
+              BoxShadow(
+                color: AppColors.vibeBlue.withValues(alpha: selected ? .2 : .1),
+                blurRadius: selected ? 13 : 8,
+                offset: const Offset(0, 3),
+              ),
+              if (selected)
+                BoxShadow(
+                  color: AppColors.ogGold.withValues(alpha: .16),
+                  blurRadius: 8,
+                  offset: const Offset(2, -2),
+                ),
+            ],
+          ),
+          child: Center(
+            child: Icon(
+              selected
+                  ? Icons.notifications_active_rounded
+                  : Icons.notifications_rounded,
+              size: 27,
+              color: iconColor,
+            ),
+          ),
+        ),
+      ),
     );
   }
 }
